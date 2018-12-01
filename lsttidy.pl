@@ -25,7 +25,13 @@ use Data::Dumper        ();
 use File::Find  ();
 use File::Basename ();
 use Text::Balanced ();
-use lib '.';
+
+# expand library path so we can find LstTidy modules
+use File::Basename qw(dirname);
+use Cwd  qw(abs_path);
+use lib dirname(abs_path $0) . '/lib';
+
+use LstTidy::Parse;
 
 # Subroutines
 sub FILETYPE_parse;
@@ -4712,6 +4718,8 @@ INIT {
    
    # At this point everything is compiled, so we can pass a sub ref to
    # a helper module.
+   
+
 
    LstTidy::Parse::setParseRoutine(\&FILETYPE_parse);
 
