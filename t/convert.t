@@ -40,5 +40,5 @@ for my $conv ( keys %conversions ) {
 
    my $got = LstTidy::Convert::convertEntities($orig);
 
-   is($got, $expect, "Convert $orig");
+   is($got, $expect, "Converted $expect");
 }
