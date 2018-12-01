@@ -333,6 +333,33 @@ sub isConversionActive {
 };
 
 
+
+=head2 checkInputPath
+
+   Check to see if the input path is needed and if so, make sure it is set.
+   If it is not fill out the error string and set the option that will make
+   sure it is printed.
+
+=cut
+
+sub checkInputPath {
+
+   my $return = qq{};
+
+   # If there is no input pat or file type and we're not just doing help
+   if ( !getOption('inputpath') && 
+        !getOption('filetype') && 
+        !( getOption('man') || getOption('htmlhelp') ) )
+   {
+      $return = "inputpath parameter is missing\n";
+      setOption('help', 1);
+   }
+
+   return $return;
+}
+
+
+
 =head2 fixWarningLevel
 
    convert warning level into a numeric value.
@@ -400,34 +427,11 @@ sub _processOptions {
       setOption('basepath', getOption('inputpath'));
    }
 
-   _fixPath(getOption('basepath'));
-   _fixPath(getOption('inputpath'));
-   _fixPath(getOption('outputpath'));
+   _fixPath('basepath');
+   _fixPath('inputpath');
+   _fixPath('outputpath');
 };
 
-=head2 checkInputPath
-
-   Check to see if the input path is needed and if so, make sure it is set.
-   If it is not fill out the error string and set the option that will make
-   sure it is printed.
-
-=cut
-
-sub checkInputPath {
-
-   my $return = qq{};
-
-   # If there is no input pat or file type and we're not just doing help
-   if ( !getOption('inputpath') && 
-        !getOption('filetype') && 
-        !( getOption('man') || getOption('htmlhelp') ) )
-   {
-      $return = "inputpath parameter is missing\n";
-      setOption('help', 1);
-   }
-
-   return $return;
-}
 
 
 =head2 _enableRequestedConversion
@@ -462,8 +466,8 @@ sub _enableRequestedConversion {
 sub _fixPath {
    my ($name) = @_;
 
-   if (defined $clOptions{name} ) {
-      $clOptions{name} =~ tr{\\}{/};
+   if (defined $clOptions{$name} ) {
+      $clOptions{$name} =~ tr{\\}{/};
    }
 }
 
