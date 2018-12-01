@@ -32,6 +32,8 @@ use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
 use LstTidy::Parse;
+use LstTidy::Log;
+use LstTidy::LogHeader;
 
 # Subroutines
 sub FILETYPE_parse;
