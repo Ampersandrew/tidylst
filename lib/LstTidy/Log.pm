@@ -1,4 +1,4 @@
-package LstTidy::Logger;
+package LstTidy::Log;
 
 use Mouse;
 
@@ -60,7 +60,7 @@ sub setPrefix {
 
 =head1 NAME
 
-   LstTidy::Logger - a logging package for Lst file processing
+   LstTidy::Log - a logging package for Lst file processing
 
 =head1 VERSION
 
