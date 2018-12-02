@@ -3,26 +3,26 @@
 use strict;
 use warnings;
 
-# expand library path so we can find Pretty modules
+# expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
-use Pretty::Options ('getOption');
+use LstTidy::Options ('getOption');
 
 use Pod::Html   (); # We do not import any function for
 use Pod::Text   (); # the modules other than "system" modules
 use Pod::Usage  ();
 
-my $VERSION        = "7.00.00";
-my $VERSION_DATE   = "2018-11-26";
-my ($PROGRAM_NAME) = "PCGen PrettyLST";
+my $VERSION        = "1.00.00";
+my $VERSION_DATE   = "2018-12-01";
+my ($PROGRAM_NAME) = "PCGen LSTTidy";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
 
 my $today = localtime;
 
-my $return = Pretty::Options::parseOptions(@ARGV);
+my $return = LstTidy::Options::parseOptions(@ARGV);
 
 print "$return";
 
@@ -34,10 +34,10 @@ if ( getOption('test') ) {
 }
 
 # Fix Warning Level
-my $error_message = Pretty::Options::fixWarningLevel();
+my $error_message = LstTidy::Options::fixWarningLevel();
 
 # Check input path is set
-$error_message .= Pretty::Options::checkInputPath(); 
+$error_message .= LstTidy::Options::checkInputPath(); 
 
 # Redirect STDERR if needed
 if (getOption('outputerror')) {
@@ -88,10 +88,10 @@ if ( getOption('htmlhelp') ) {
    exit;
 }
 
-# If present, call the function to generate the "game mode" variables.
-if ( getOption('systempath') ne q{} ) {
-   Pretty::Conversion::sparse_system_files();
-}
+# # If present, call the function to generate the "game mode" variables.
+# if ( getOption('systempath') ne q{} ) {
+#    LstTidy::Conversion::sparse_system_files();
+# }
 
 # If both an inputpath and an outputpath were given, Verify that the outputpath
 # exists

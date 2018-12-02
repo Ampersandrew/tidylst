@@ -1,6 +1,6 @@
 package LstTidy::Options;
 
-use 5.008_001;				# Perl 5.8.1 or better is now mandantory
+use 5.008_001;		# Perl 5.8.1 or better is now mandantory
 use strict;
 use warnings;
 
@@ -126,6 +126,15 @@ our (%clOptions, %activate, %conversionEnabled, %numeric_warning_level);
    3             => 3,
 );
 
+=head2 parseOptions
+
+   Paarse a passed array for the command line arguments.
+
+   Options are parsed into clOption and accessed via the getOption and
+   setOperation routines.
+
+=cut
+
 sub parseOptions {
 
    local @ARGV = @_;
@@ -204,9 +213,9 @@ sub parseOptions {
          'xcheck'          =>  $xCheck);
 
       # Has a conversion been requested
-      enableConversions ($clOptions{convert}) if $clOptions{convert};
+      _enableRequestedConversion ($clOptions{convert}) if $clOptions{convert};
 
-      processOptions();
+      _processOptions();
 
       # Print message for unknown options
       if ( scalar @ARGV ) {
@@ -264,6 +273,8 @@ sub getOption {
    return $clOptions{$opt};
 };
 
+
+
 =head2 setOption
 
    Set a new value in option, returns the current value of the option.
@@ -271,7 +282,6 @@ sub getOption {
    C<$result = setOption( 'basepath', './working' )> 
 
 =cut
-
 
 sub setOption {
    my ($opt, $value) = @_;
@@ -283,11 +293,6 @@ sub setOption {
    return $current;
 };
 
-sub isConversionActive {
-   my ($opt) = @_;
-
-   return $conversionEnabled{$opt};
-};
 
 =head2 disableConversion
 
@@ -301,6 +306,7 @@ sub disableConversion {
    $conversionEnabled{$conversion} = 0;
 }
 
+
 =head2 enableConversion
 
    Turn on a single conversion
@@ -313,28 +319,55 @@ sub enableConversion {
    $conversionEnabled{$conversion} = 1;
 }
 
-=head2 enableConversions
 
-   Turn on any conversions that have been requested via command line options
+=head2 isConversionActive
+
+   Returns trus if the given conversion has been turned on.
 
 =cut
 
-sub enableConversions {
-   my ($convert) = @_;
+sub isConversionActive {
+   my ($opt) = @_;
 
-   my $entry   = $activate{ $convert };
-   my $isArray = reftype $entry eq 'ARRAY';
+   return $conversionEnabled{$opt};
+};
 
-   # Convert whatever we got to an array
-   my @conv = $isArray ?  @$entry : ( $entry );
 
-   # Turn on each entry of the array
-   for my $conversion ( @conv ) {
-      enableConversion($conversion);
+
+=head2 checkInputPath
+
+   Check to see if the input path is needed and if so, make sure it is set.
+   If it is not fill out the error string and set the option that will make
+   sure it is printed.
+
+=cut
+
+sub checkInputPath {
+
+   my $return = qq{};
+
+   # If there is no input pat or file type and we're not just doing help
+   if ( !getOption('inputpath') && 
+        !getOption('filetype') && 
+        !( getOption('man') || getOption('htmlhelp') ) )
+   {
+      $return = "inputpath parameter is missing\n";
+      setOption('help', 1);
    }
+
+   return $return;
 }
 
-sub processOptions {
+
+=head2 _processOptions 
+
+   After the array of arguments have been processed, this operation ensures that
+   the option array correctly reflects the command line options.
+
+=cut
+
+
+sub _processOptions {
 
    # No-warning option
    # level 6 is info, level 5 is notice
@@ -367,60 +400,48 @@ sub processOptions {
       setOption('basepath', getOption('inputpath'));
    }
 
-   fixPath(getOption('basepath'));
-   fixPath(getOption('inputpath'));
-   fixPath(getOption('outputpath'));
+   _fixPath('basepath');
+   _fixPath('inputpath');
+   _fixPath('outputpath');
 };
 
-sub fixPath {
-   my ($name) = @_;
 
-   if (defined $clOptions{name} ) {
-      $clOptions{name} =~ tr{\\}{/};
-   }
-}
 
-sub fixWarningLevel {
+=head2 _enableRequestedConversion
 
-   my $currentLevel = getOption('warninglevel');
-   my $returnString = qq{\n};
-
-   if ( exists $numeric_warning_level{ $currentLevel } ) {
-      # We convert the warning level from  a string to a numerical value
-      setOption('warninglevel', $numeric_warning_level{ $currentLevel });
-   } else {
-      setOption('help', 1);
-      $returnString .= <<"STRING_END";
-Invalid warning level: ${currentLevel}
-Valid options are: error, warning, notice, info and debug\n
-STRING_END
-   }
-
-   return $returnString;
-}
-
-=head2 checkInputPath
-
-   Check to see if the input path is needed and if so, make sure it is set.
-   If it is not fill out the error string and set the option that will make
-   sure it is printed.
+   Turn on any conversions that have been requested via the convert command
+   line option.
 
 =cut
 
-sub checkInputPath {
+sub _enableRequestedConversion {
+   my ($convert) = @_;
 
-   my $return = qq{};
+   my $entry   = $activate{ $convert };
+   my $isArray = reftype $entry eq 'ARRAY';
 
-   # If there is no input pat or file type and we're not just doing help
-   if ( !getOption('inputpath') && 
-        !getOption('filetype') && 
-        !( getOption('man') || getOption('htmlhelp') ) )
-   {
-      $return = "inputpath parameter is missing\n";
-      setOption('help', 1);
+   # Convert whatever we got to an array
+   my @conv = $isArray ?  @$entry : ( $entry );
+
+   # Turn on each entry of the array
+   for my $conversion ( @conv ) {
+      enableConversion($conversion);
    }
+}
 
-   return $return;
+
+=head2 _fixPath 
+
+   convert the windows style path separator \\ to the unix style / 
+
+=cut
+
+sub _fixPath {
+   my ($name) = @_;
+
+   if (defined $clOptions{$name} ) {
+      $clOptions{$name} =~ tr{\\}{/};
+   }
 }
 
 
