@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+package LstTidy::LogHeader;
 
 use strict;
 use warnings;
@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
-my %headings = (
+our %headings = (
    'Category CrossRef'  => "Category cross-reference problems found\n",
    'Created'            => "List of files that were created in the directory\n",
    'CrossRef'           => "Cross-reference problems found\n",
