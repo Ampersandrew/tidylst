@@ -1,24 +1,31 @@
 package LstTidy::Log;
 
-use Mouse;
+use constant {
+   DEBUG      => 7, # INFO message + debug message for the programmer
+   INFO       => 6, # Everything including deprecations message (default)
+   NOTICE     => 5, # No deprecations
+   WARNING    => 4, # PCGEN will prabably not work properly
+   ERROR      => 3, # PCGEN will not work properly or the script is foobar
+};
 
-has 'fileNamePrevious' => (
-   is      => 'rw',
-   isa     => 'Str',
-   default => q{},
-);
+use Mouse;
+use Mouse::Util::TypeConstraints;
+use Scalar::Util;
+
+# Make a type that we will use to coerce a string warning level
+# to an integer in the correct range.
+subtype 'LstTidy::Types::WarnLevel'
+   => as 'Int'
+   => where { $_ >= ERROR or $_ <= DEBUG };
+
+coerce 'LstTidy::Types::WarnLevel'
+   => from 'Str'
+   => via \&_coerceWarning; 
 
 has 'header' => (
    is      => 'rw',
    isa     => 'Str',
    default => q{},
-   writer  => \&set_header,
-);
-
-has 'isFirstError' => (
-   is      => 'rw',
-   isa     => 'Bool',
-   default => 1,
 );
 
 has 'isStartOfLog' => (
@@ -27,36 +34,81 @@ has 'isStartOfLog' => (
    default => 1,
 );
 
-has 'warningLevel' => (
-   is       => 'rw',
-   isa      => 'Str',
-   required => 1,
-   trigger  => \&setPrefix,
-);
-
-has 'prefix' => (
+has 'previousFile' => (
    is      => 'rw',
    isa     => 'Str',
    default => q{},
 );
 
-# Private method. Called when the warning level is changed, this
-# operation sets the prefix for the new warning level.
+has 'printHeader' => (
+   is      => 'rw',
+   isa     => 'Bool',
+   default => 1,
+);
 
-sub setPrefix {
+has 'warningLevel' => (
+   is       => 'rw',
+   isa      => 'LstTidy::Types::WarnLevel',
+   default  => NOTICE,
+   required => 1,
+   coerce   => 1,
+);
 
-   my ($self, $level, $old_level) = @_;
+# make sue the construction warning level is a number in range
 
-   my $prefix = {
-      7   => "DBG",   # DEBUG
-      6   => "  -",   # INFO
-      5   => "   ",   # NOTICE
-      4   => "*=>",   # WARNING
-      3   => "***",   # ERROR
-   }->{$level};
+around 'BUILDARGS' => sub {
 
-   $self->prefix($prefix);
-}
+   my $orig = shift;
+   my $self = shift;
+
+   my $foo = ref $_[0];
+
+   if ($foo =~ /^HASH/) {
+
+      my $wl = $_[0]->{'warningLevel'};
+
+      if  (Scalar::Util::looks_like_number $wl) {
+        if ($wl < ERROR || $wl > DEBUG) {
+           # number out of range, use default
+           $wl = NOTICE;
+        } 
+      } else {
+         local $_ = $wl;
+
+         $wl = _coerceWarning();
+      };
+
+      $_[0]->{'warningLevel'} = $wl;
+   };
+
+   return $self->$orig(@_);
+};
+
+around 'header' => sub {
+
+   my $orig = shift;
+   my $self = shift;
+
+   return $self->$orig unless @_;
+
+   # @_ still has values, we must be setting the value.
+   my $h = shift;
+
+   # Add a line feed before the header to separate it from the previous
+   # content, unless we are at the very start of the log.
+   my $header = $self->isStartOfLog() ? $h : "\n" . "${h}";
+
+   $self->$orig($header);
+
+   # Maske sure the header is printed next time something is logged.
+   $self->printHeader(1);
+
+   # We blank the previous file name to make sure that the file name will be
+   # printed with the header.
+   $self->previousFile('');
+};
+
+
 
 =head1 NAME
 
@@ -78,30 +130,6 @@ sub setPrefix {
 
 =cut
 
-=head2 set_header
-
-   Set the header for the error message.
-
-   This also ensures the header is displayed on the first log call after
-   setting this value.
-
-=cut
-
-sub set_header
-{
-   my ($self, $h) = @_;
-
-   # Add a line feed before the header to separate it from the previous
-   # content, unless we are at the very start of the log.
-   my $header = $self->isStartOfLog() ? $h : "\n${h}";
-
-   $self->header($header);
-   $self->isFirstError(1);
-
-   # We blank the previous file name to make sure that the file name will be
-   # printed with the first message after the header.
-   $self->fileNamePrevious('');
-}
 
 =head2 debug
 
@@ -121,7 +149,7 @@ sub set_header
 
 sub debug {
    my $self = shift;
-   $self->log(7, @_);
+   $self->_log(DEBUG, @_);
 };
 
 =head2 info
@@ -143,7 +171,7 @@ sub debug {
 
 sub info {    
    my $self = shift;
-   $self->log(6, @_);
+   $self->_log(INFO, @_);
 };
 
 =head2 notice
@@ -164,7 +192,7 @@ sub info {
 
 sub notice {  
    my $self = shift;
-   $self->log(5, @_);
+   $self->_log(NOTICE, @_);
 };
 
 =head2 warning
@@ -186,7 +214,7 @@ sub notice {
 
 sub warning { 
    my $self = shift;
-   $self->log(4, @_);
+   $self->_log(WARNING, @_);
 };
 
 =head2 error
@@ -208,7 +236,7 @@ sub warning {
 
 sub error {   
    my $self = shift;
-   $self->log(3, @_);
+   $self->_log(ERROR, @_);
 };
 
 
@@ -230,8 +258,7 @@ sub error {
 
 =cut
 
-sub _log
-{
+sub _log {
    my $self = shift;
    my ( $warning_level, $message, $file_name, $line_number ) = ( @_, undef );
 
@@ -239,9 +266,9 @@ sub _log
    return if ( $self->warningLevel() < $warning_level );
 
    # Print the header if needed
-   if ($self->isFirstError()) {
+   if ($self->printHeader()) {
       warn $self->header();
-      $self->isFirstError(0);
+      $self->printHeader(0);
       $self->isStartOfLog(0);
    }
 
@@ -250,25 +277,85 @@ sub _log
    # we need to replace the / by a \.
    $file_name =~ tr{/}{\\} if $^O eq "MSWin32";
 
-   my $output = $self->prefix();
+   # Construct the output, Add a prefix for the warning level
+   my $output = {
+      &DEBUG   => "DBG",
+      &ERROR   => "***",
+      &INFO    => "  -",
+      &NOTICE  => "   ",
+      &WARNING => "*=>",
+   }->{$warning_level};
 
-   # Construct the output, add the line number if we have one.
-   # so, make sure there is a new-line at the end of the output.
+   # Add the line number if we have one.
    $output .= "(Line ${line_number}): " if defined $line_number;
-   $output .= $message;
 
+   # Add the message we were asked to output.
+   $output .= $message;
+   
+   # Make sure there is a new-line at the end of the output.
    $output .= "\n" unless $message =~ /\n$/;
 
    # We display the file only if it is not the same are the last
    # time _log was called
-   warn "$file_name\n" if $file_name ne $self->fileNamePrevious();
+   warn "$file_name\n" if $file_name ne $self->previousFile();
 
    warn $output; 
 
    # Set the file name of the file this message originated from
    # so that we only write each file name once.
-   $self->fileNamePrevious($file_name);
-}
+   $self->previousFile($file_name);
+};
+
+
+=head2 checkWarningLevel
+
+   Check that warning level is valid, if it is not, then return a default
+
+   Returns a valid warning level, if the warning level passed was invalid, also
+   return an error string.
+
+=cut
+
+sub checkWarningLevel {
+
+   my ($wl) = @_;
+
+   if  (Scalar::Util::looks_like_number $wl) {
+
+      if ($wl < ERROR || $wl > DEBUG) {
+         # return a valid default and an error string for the user
+         return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
+      } 
+
+   } elsif ($wl !~ qr{^(?:d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning)}i) {
+      # return a valid default and an error string for the user
+      return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
+   };
+
+   return $wl;
+};
+
+# Private operation that coerces a valid string into a warning level. If passed an
+# invalid value, will default to notice.
+
+sub _coerceWarning {
+
+   if ($_ =~ qr{d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning}i) {
+
+      return { 
+         d => DEBUG,
+         e => ERROR,
+         i => INFO,
+         n => NOTICE,
+         w => WARNING
+      }->{ lc substr($_, 0, 1) };
+
+   } else {
+
+      # Default to notice
+      return NOTICE;
+   };
+};
 
 __PACKAGE__->meta->make_immutable;
 

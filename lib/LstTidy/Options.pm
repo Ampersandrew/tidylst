@@ -359,33 +359,6 @@ sub checkInputPath {
 }
 
 
-
-=head2 fixWarningLevel
-
-   convert warning level into a numeric value.
-
-=cut
-
-sub fixWarningLevel {
-
-   my $currentLevel = getOption('warninglevel');
-   my $returnString = qq{\n};
-
-   if ( exists $numeric_warning_level{ $currentLevel } ) {
-      # We convert the warning level from a string to a numerical value
-      setOption('warninglevel', $numeric_warning_level{ $currentLevel });
-   } else {
-      setOption('help', 1);
-      $returnString .= <<"STRING_END";
-Invalid warning level: ${currentLevel}
-Valid options are: error, warning, notice, info and debug\n
-STRING_END
-   }
-
-   return $returnString;
-}
-
-
 =head2 _processOptions 
 
    After the array of arguments have been processed, this operation ensures that

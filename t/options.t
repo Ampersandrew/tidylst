@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 58;
+use Test::More tests => 56;
 
 use_ok ('LstTidy::Options');
 
@@ -109,23 +109,6 @@ LstTidy::Options::setOption('help', 0);
 
 is(LstTidy::Options::checkInputPath(), "inputpath parameter is missing\n", "Correct error for no input path");
 is(LstTidy::Options::getOption('help'), 1, "Help is turned on");
-
-# ****************************************************************
-#  fixWarningLevel
-
-LstTidy::Options::setOption('warninglevel' => 'debug');
-LstTidy::Options::fixWarningLevel();
-
-is(LstTidy::Options::getOption('warninglevel'), 7, "dwbug is correctly converted to 7");
-
-LstTidy::Options::setOption('warninglevel' => 'none');
-
-my $expected = <<"STRING_END";
-\nInvalid warning level: none
-Valid options are: error, warning, notice, info and debug\n
-STRING_END
-
-is(LstTidy::Options::fixWarningLevel(), $expected, "Correct error message for bad warning level");
 
 
 # ****************************************************************
