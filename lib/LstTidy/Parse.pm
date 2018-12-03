@@ -3,6 +3,32 @@ package LstTidy::Parse;
 use strict;
 use warnings;
 
+# Constants for the master_line_type
+use constant {
+   # Line importance (Mode)
+   MAIN           => 1, # Main line type for the file
+   SUB            => 2, # Sub line type, must be linked to a MAIN
+   SINGLE         => 3, # Idependant line type
+   COMMENT        => 4, # Comment or empty line.
+
+   # Line formatting option (Format)
+   LINE           => 1, # Every line formatted by itself
+   BLOCK          => 2, # Lines formatted as a block
+   FIRST_COLUMN   => 3, # Only the first column of the block gets aligned
+
+   # Line header option (Header)
+   NO_HEADER      => 1, # No header
+   LINE_HEADER    => 2, # One header before each line
+   BLOCK_HEADER   => 3, # One header for the block
+
+   # Standard YES NO constants
+   NO             => 0,
+   YES            => 1,
+
+   # The defined (non-standard) size of a tab
+   TABSIZE        => 6,
+};
+
 # Valid filetype are the only ones that will be parsed
 # Some filetype are valid but not parsed yet (no function name)
 my %validfiletype = (

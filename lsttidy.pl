@@ -32,6 +32,7 @@ use lib dirname(abs_path $0) . '/lib';
 use LstTidy::Parse;
 use LstTidy::Log;
 use LstTidy::LogHeader;
+use LstTidy::Options qw(getOption setOption isConversionActive);
 
 # Subroutines
 sub FILETYPE_parse;
@@ -66,390 +67,84 @@ my %filehandle_for;
 # Print version information
 print STDERR "$VERSION_LONG\n";
 
-
-
-# The active conversions
-my %conversion_enable =
-        (
-        'Generate BONUS and PRExxx report'      => 0,
-        # After PCGEN 2.7.3
-        'ALL: 4.3.3 Weapon name change' => 0,                   # Bunch of name changed for SRD compliance
-        'EQUIPMENT: remove ATTACKS'             => 0,                   #[ 686169 ] remove ATTACKS: tag
-        'EQUIPMENT: SLOTS:2 for plurals'        => 0,                   #[ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
-        'PCC:GAME to GAMEMODE'                  => 0,                   #[ 707325 ] PCC: GAME is now GAMEMODE
-        'ALL: , to | in VISION'                 => 0,                   #[ 699834 ] Incorrect loading of multiple vision types
-        #[ 728038 ] BONUS:VISION must replace VISION:.ADD
-        'ALL:PRESTAT needs a ,'                 => 0,                   # PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
-        'ALL:BONUS:MOVE convertion'             => 0,                   #[ 711565 ] BONUS:MOVE replaced with BONUS:MOVEADD
-        'ALL:PRECLASS needs a ,'                => 0,                   #[ 731973 ] ALL: new PRECLASS syntax
-        'ALL:COUNT[FEATTYPE=...'                => 0,                   #[ 737718 ] COUNT[FEATTYPE] data change
-        'ALL:Add TYPE=Base.REPLACE'             => 0,                   #[ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
-        'PCC:GAMEMODE DnD to 3e'                => 0,                   #[ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
-        'RACE:CSKILL to MONCSKILL'              => 0,                   #[ 831569 ] RACE:CSKILL to MONCSKILL
-        'RACE:NoProfReq'                                => 0,                   #[ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-        'RACE:BONUS SKILL Climb and Swim'       => 0,                   # Fix for Barak files
-        'WEAPONPROF:No more SIZE'               => 0,                   #[ 845853 ] SIZE is no longer valid in the weaponprof files
-        'EQUIP:no more MOVE'                    => 0,                   #[ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-        'ALL:EQMOD has new keys'                => 0,                   #[ 892746 ] KEYS entries were changed in the main files
-        'CLASS:CASTERLEVEL for all casters'     => 0,                   #[ 876536 ] All spell casting classes need CASTERLEVEL
-        'ALL:MOVE:nn to MOVE:Walk,nn'           => 0,                   #[ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
-        'ALL:Convert SPELL to SPELLS'           => 0,                   #[ 1070084 ] Convert SPELL to SPELLS
-        'TEMPLATE:HITDICESIZE to HITDIE'        => 0,                   #[ 1070344 ] HITDICESIZE to HITDIE in templates.lst
-        'ALL:PREALIGN conversion'               => 0,                   #[ 1173567 ] Convert old style PREALIGN to new style
-        'ALL:PRERACE needs a ,'                 => 0,                   #
-        'ALL:Willpower to Will'                 => 0,                   #[ 1398237 ] ALL: Convert Willpower to Will
-        'ALL:New SOURCExxx tag format'  => 1,                   #[ 1444527 ] New SOURCE tag format
-        'RACE:Remove MFEAT and HITDICE' => 0,                   #[ 1514765 ] Conversion to remove old defaultmonster tags
-        'EQUIP: ALTCRITICAL to ALTCRITMULT'     => 1,                   #[ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
-        'Export lists'                          => 0,                   # Export various lists of entities
-        'SOURCE line replacement'               => 1,
-        'CLASSSKILL convertion to CLASS'        => 0,
-        'CLASS:Four lines'                      => 1,                   #[ 626133 ] Convert CLASS lines into 3 lines
-        'ALL:Multiple lines to one'             => 0,                   # Reformat multiple lines to one line for
-                                                                                # RACE and TEMPLATE
-        'CLASSSPELL convertion to SPELL'        => 0,                   #[ 641912 ] Convert CLASSSPELL to SPELL
-        'SPELL:Add TYPE tags'                   => 0,                   #[ 653596 ] Add a TYPE tag for all SPELLs
-        'BIOSET:generate the new files' => 0,                   #[ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
-        'EQUIPMENT: generate EQMOD'             => 0,                   #[ 677962 ] The DMG wands have no charge.
-        'CLASS: SPELLLIST from Spell.MOD'       => 0,                   #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-        'PCC:GAMEMODE Add to the CMP DnD_'      => 0,                   #In order for the CMP files to work with the
-                                                                                # normal PCGEN files
-        'ALL:Find Willpower'                    => 1,                   #Find the tags that use Willpower so that we can
-                                                                                # plan the conversion to Will
-        'RACE:TYPE to RACETYPE'                 => 0,                   # [ 1353255 ] TYPE to RACETYPE conversion
-        'ALL:CMP NatAttack fix'                 => 0,                   # Fix STR bonus for Natural Attacks in CMP files
-        'ALL:CMP remove PREALIGN'               => 0,                   # Remove the PREALIGN tag everywhere (to help my CMP friends)
-        'RACE:Fix PREDEFAULTMONSTER bonuses'    => 0,           #[1514765] Conversion to remove old defaultmonster tags
-        'ALL:Fix Common Extended ASCII' => 0,                   #[1324519 ] ASCII characters
-        'ALL:Weaponauto simple conversion'      => 0,                   #[ 1223873 ] WEAPONAUTO is no longer valid
-        'DEITY:Followeralign conversion'        => 0,                   #[ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-        'ALL:ADD Syntax Fix'                    => 0,                   #[1678577 ] ADD: syntax no longer uses parens
-        'ALL:PRESPELLTYPE Syntax'               => 0,                   #[1678570 ] Correct PRESPELLTYPE syntax
-        'ALL:Convert ADD:SA to ADD:SAB' => 0,                   #[ 1864711 ] Convert ADD:SA to ADD:SAB
-        'CLASS:no more HASSPELLFORMULA' => 0,                   #[ 1973497 ] HASSPELLFORMULA is deprecated
-
-);
-
-
 # -------------------------------------------------------------
 # Parameter parsing
 # -------------------------------------------------------------
 
-# Constants for ewarn and the warning_level parameter
+# Constants for ewarn and the warninglevel parameter
 
 use constant DEBUG      => 7;   # INFO message + debug message for the programmer
-use constant INFO               => 6;   # Everything including deprecations message (default)
+use constant INFO       => 6;   # Everything including deprecations message (default)
 use constant NOTICE     => 5;   # No deprecations
 use constant WARNING    => 4;   # PCGEN will prabably not work properly
-use constant ERROR      => 3;   # PCGEN will not work properly or the
-                                        # script is foobar
-
-my %numeric_warning_level_for = (
-        debug                   => DEBUG,
-        d                       => DEBUG,
-        7                       => DEBUG,
-        info                    => INFO,
-        informational   => INFO,
-        i                       => INFO,
-        6                       => INFO,
-        notice          => NOTICE,
-        n                       => NOTICE,
-        5                       => NOTICE,
-        warning         => WARNING,
-        warn                    => WARNING,
-        w                       => WARNING,
-        4                       => WARNING,
-        error                   => ERROR,
-        err                     => ERROR,
-        e                       => ERROR,
-        3                       => ERROR,
-);
+use constant ERROR      => 3;   # PCGEN will not work properly or the # script is foobar
 
 # Default command line options
 my %cl_options = (
         basepath                => q{}, # Base path for the @ replacement
         convert         => q{}, # Activate a standard convertion
         exportlist              => 0,           # Export lists of object in CVS format
-        file_type               => q{}, # File type to use if no PCC are read
+        filetype               => q{}, # File type to use if no PCC are read
         gamemode                => q{}, # GAMEMODE filter for the PCC files
         help                    => 0,           # Need help? Display the usage
-        html_help               => 0,           # Generate the HTML doc
-        input_path              => q{}, # Path for the input directory
+        htmlhelp               => 0,           # Generate the HTML doc
+        inputpath              => q{}, # Path for the input directory
         man                     => 0,           # Display the complete doc (man page)
-        missing_header  => 0,           # Report the tags that have no defined header.
+        missingheader  => 0,           # Report the tags that have no defined header.
         nojep                   => 0,           # Do not use the new parse_jep function
         nowarning               => 0,           # Do not display warning messages in the report
         noxcheck                => 0,           # Disable the x-check validations
-        old_source_tag  => 0,           # Use | instead of \t for the SOURCExxx line
-        output_error    => q{}, # Path and file name of the error log
-        output_path             => q{}, # Path for the ouput directory
+        oldsourcetag  => 0,           # Use | instead of \t for the SOURCExxx line
+        outputerror    => q{}, # Path and file name of the error log
+        outputpath             => q{}, # Path for the ouput directory
         report          => 0,           # Generate tag usage report
-        system_path             => q{}, # Path to the system (game mode) files
+        systempath             => q{}, # Path to the system (game mode) files
         test                    => 0,           # Internal, for tests only
-        warning_level   => 'info',  # Warning level for error output
+        warninglevel   => 'info',  # Warning level for error output
         xcheck          => 1,           # Perform cross-check validation
 );
 
-my $error_message = "\n";
-
-if ( scalar @ARGV ) {
-        GetOptions(
-                'basepath|b=s'          => \$cl_options{ basepath },
-                'convert|c=s'           => \$cl_options{ convert },
-                'exportlist'            => \$cl_options{ exportlist },
-                'filetype|f=s'          => \$cl_options{ file_type },
-                'gamemode|gm=s'         => \$cl_options{ gamemode },
-                'help|h|?'                      => \$cl_options{ help },
-                'htmlhelp'                      => \$cl_options{ html_help },
-                'inputpath|i=s'         => \$cl_options{ input_path },
-                'man'                           => \$cl_options{ man },
-                'missingheader|mh'      => \$cl_options{ missing_header },
-                'nojep'                 => \$cl_options{ nojep },
-                'nowarning|nw'          => \$cl_options{ nowarning },
-                'noxcheck|nx'           => \$cl_options{ noxcheck },
-                'old_source_tag'                => \$cl_options{ old_source_tag },
-                'outputerror|e=s'               => \$cl_options{ output_error },
-                'outputpath|o=s'                => \$cl_options{ output_path },
-                'report|r'                      => \$cl_options{ report },
-                'systempath|s=s'                => \$cl_options{ system_path },
-                'test'                  => \$cl_options{ test },
-                'warninglevel|wl=s'     => \$cl_options{ warning_level },
-                'xcheck|x'                      => \$cl_options{ xcheck },
-        );
-
-        # Print message for unknown options
-        if ( scalar @ARGV ) {
-                $error_message = "\nUnknown option:";
-
-                while (@ARGV) {
-                        $error_message .= q{ };
-                        $error_message .= shift;
-                }
-                $error_message .= "\n";
-                $cl_options{help} = 1;
-        }
-}
-else {
-
-        $cl_options{help} = 0;
-}
+my $error_message = "\n" . LstTidy::Options::ParseOptions();
 
 #####################################
 # Test function or display variables
 # or anything else I need.
 
-if ( $cl_options{test} ) {
+if ( getOption('test') ) {
 
-        print "No tests set\n";
-        exit;
+   print "No tests set\n";
+   exit;
 }
 
 #####################################
 # Warning Level
 
-if ( exists $numeric_warning_level_for{ $cl_options{warning_level} } ) {
-        # We convert the warning level from
-        # a string to a numerical value
-        $cl_options{warning_level} = $numeric_warning_level_for{ $cl_options{warning_level} };
-}
-else {
-        $error_message .= "\nInvalid warning level: $cl_options{warning_level}\n"
-                        .  "Valid options are: error, warning, notice, info and debug\n";
-        $cl_options{help} = 1;
-}
+my ($level, $mess) = LstTidy::Log::checkWarningLevel(getOption('warninglevel'));
 
+setOption('warninglevel', $level);
+$error_message .= $mess if defined $mess;
 
 #####################################
 # No-warning option
 
-if ( $cl_options{nowarning} && $cl_options{warning_level} >= INFO ) {
-        $cl_options{warning_level} = NOTICE;
-}
-$logging = Ewarn->new(warning_level=>$cl_options{warning_level});
-
-#####################################
-# Convertion options
-if ( $cl_options{convert} ) {
-        if ( $cl_options{convert} eq 'ADD:SAB' ) {
-                $conversion_enable{'ALL:Convert ADD:SA to ADD:SAB'} = 1;
-        }
-        elsif ( $cl_options{convert} eq 'pcgen60' ) {
-        $conversion_enable{'CLASS:no more HASSPELLFORMULA'} = 1;
-        }
-        elsif ( $cl_options{convert} eq 'RACETYPE' ) {
-                        $conversion_enable{'RACE:TYPE to RACETYPE'} = 1;
-        }
-        elsif ( $cl_options{convert} eq 'Followeralign') {
-                $conversion_enable{'DEITY:Followeralign conversion'} = 1;
-        }
-        elsif ( $cl_options{convert} eq 'Willpower' ) {
-                $conversion_enable{'ALL:Willpower to Will'} = 1;
-        }
-        elsif ( $cl_options{convert} eq 'ASCII' ) {
-                $conversion_enable{'ALL:Fix Common Extended ASCII'} =1; # [1324519 ] ASCII characters
-        }
-        elsif ( $cl_options{convert} eq 'Weaponauto' ) {
-                $conversion_enable{'ALL:Weaponauto simple conversion'} = 1; # [ 1223873 ] WEAPONAUTO is no longer valid
-        }
-        elsif ( $cl_options{convert} eq 'pcgen5120' ) {
-                #[1678577 ] ADD: syntax no longer uses parens
-                #[1514765] Conversion to remove old defaultmonster tags
-                #[1678570 ] Correct PRESPELLTYPE syntax
-                $conversion_enable{'DEITY:Followeralign conversion'} =1;
-                $conversion_enable{'ALL:ADD Syntax Fix'} = 1;
-                $conversion_enable{'ALL:PRESPELLTYPE Syntax'} = 1;
-                # $conversion_enable{'RACE:TYPE to RACETYPE'} = 1;
-                $conversion_enable{'ALL:EQMOD has new keys'} = 1;
-        #       Commenting out for use in possible KIT conversion of old Default monster data.
-        #       $conversion_enable{'RACE:Fix PREDEFAULTMONSTER bonuses'} = 1;
-
-        }
-                elsif ( $cl_options{convert} eq 'pcgen595' ) {
-        #               $conversion_enable{'ALL:PRERACE needs a ,'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen580' ) {
-                        $conversion_enable{'ALL:PREALIGN conversion'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen5713' ) {
-                        $conversion_enable{'ALL:Convert SPELL to SPELLS'}       = 1;
-                        $conversion_enable{'TEMPLATE:HITDICESIZE to HITDIE'} = 1;
-                        $conversion_enable{'ALL:PRECLASS needs a ,'}            = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen574' ) {
-                        $conversion_enable{'CLASS:CASTERLEVEL for all casters'} = 1;
-                        $conversion_enable{'ALL:MOVE:nn to MOVE:Walk,nn'}               = 1;
-                }
-                #  elsif($cl_options{convert} eq 'pcgen56') {
-                #       $conversion_enable{'ALL:EQMOD has new keys'} = 1;
-                #  }
-                elsif ( $cl_options{convert} eq 'pcgen555' ) {
-                        $conversion_enable{'EQUIP:no more MOVE'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen541' ) {
-                        $conversion_enable{'WEAPONPROF:No more SIZE'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen54' ) {
-                        $conversion_enable{'PCC:GAMEMODE DnD to 3e'}    = 1;
-                        $conversion_enable{'PCC:GAME to GAMEMODE'}      = 1;
-                        $conversion_enable{'ALL:Add TYPE=Base.REPLACE'} = 1;
-                        $conversion_enable{'RACE:CSKILL to MONCSKILL'}  = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen54cmp' ) {
-                        $conversion_enable{'PCC:GAME to GAMEMODE'}      = 1;
-                        $conversion_enable{'ALL:Add TYPE=Base.REPLACE'} = 1;
-                        $conversion_enable{'RACE:CSKILL to MONCSKILL'}  = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen534' ) {
-                        #       $conversion_enable{'ALL:COUNT[FEATTYPE=...'} = 1;
-                        $conversion_enable{'PCC:GAME to GAMEMODE'}      = 1;
-                        $conversion_enable{'ALL:Add TYPE=Base.REPLACE'} = 1;
-                        #       $conversion_enable{'CLASS: SPELLLIST from Spell.MOD'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen511' ) {
-                        $conversion_enable{'ALL: , to | in VISION'}  = 1;
-                        $conversion_enable{'ALL:PRECLASS needs a ,'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen438' ) {
-                        $conversion_enable{'ALL:PRESTAT needs a ,'}             = 1;
-                        $conversion_enable{'EQUIPMENT: remove ATTACKS'} = 1;
-                        $conversion_enable{'EQUIPMENT: SLOTS:2 for plurals'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'pcgen433' ) {
-                        $conversion_enable{'ALL: 4.3.3 Weapon name change'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'rmprealign' ) {
-                        $conversion_enable{'ALL:CMP remove PREALIGN'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'natattackfix' ) {
-                        $conversion_enable{'ALL:CMP NatAttack fix'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'skillbonusfix' ) {
-                        $conversion_enable{'RACE:BONUS SKILL Climb and Swim'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'noprofreq' ) {
-
-                        # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-                        $conversion_enable{'RACE:NoProfReq'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'classspell' ) {
-                        $conversion_enable{'CLASSSPELL convertion to SPELL'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'classskill' ) {
-                        $conversion_enable{'CLASSSKILL convertion to CLASS'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'notready' ) {
-                        $conversion_enable{'ALL:BONUS:MOVE convertion'} = 1;
-                }
-                elsif ($cl_options{convert} eq 'foldbacklines'
-                        || $cl_options{convert} eq 'ml21' )
-                {
-                        $conversion_enable{'ALL:Multiple lines to one'} = 1;
-                }
-                elsif ( $cl_options{convert} eq 'gmconv' ) {
-                        $conversion_enable{'PCC:GAMEMODE Add to the CMP DnD_'} = 1;
-                }
-                else {
-                        $error_message .= "\nUnknown convertion option: $cl_options{convert}\n";
-                        $cl_options{help} = 1;
-                }
-}
-
-#####################################
-# old_source_tag option
-
-if ( $cl_options{old_source_tag} ) {
-        # We disable the convertion if the -old_source_tag option is used
-        $conversion_enable{'ALL:New SOURCExxx tag format'} = 0;
-}
-
-#####################################
-# exportlist option
-
-if ( $cl_options{exportlist} ) {
-        $conversion_enable{'Export lists'} = 1;
-}
-
-#####################################
-# noxcheck option
-
-if ( $cl_options{noxcheck} ) {
-
-        # The xcheck option is now on by default.
-        # using noxcheck is the only way to disable it
-        $cl_options{xcheck} = 0;
-}
+$logging = Ewarn->new(warninglevel=>getOption('warninglevel'));
 
 #####################################
 # Path options
 
-if ( !$cl_options{input_path}
-        && !$cl_options{file_type}
-        && !( $cl_options{man} || $cl_options{html_help} ) )
+if (!getOption('inputpath') && !getOption('filetype') && !(getOption('man') || getOption('htmlhelp')))
 {
-        $error_message .= "\n-inputpath parameter is missing\n";
-        $cl_options{help} = 1;
+   $error_message .= "\n-inputpath parameter is missing\n";
+   setOption('help', 1);
 }
-
-#####################################
-# -basepath option
-#
-# If no basepath were given, use
-# input_dir
-
-if ( $cl_options{basepath} eq q{} ) {
-        $cl_options{basepath} = $cl_options{input_path};
-}
-
-$cl_options{basepath} =~ tr{\\}{/};
 
 #####################################
 # Redirect STDERR if needed
 
-if ($cl_options{output_error}) {
-        # my $dir = ? ($cl_options{ input_path } eq '.') : 'current' : $cl_options{ input_path };
-        open STDERR, '>', $cl_options{output_error};
-        print STDERR "Error log for ", $VERSION_LONG, "\n";
-        print STDERR "At ", $today, " on the data files in the \'", $cl_options{ input_path } , "\' directory\n";
+if (getOption('outputerror')) {
+   open STDERR, '>', getOption('outputerror');
+   print STDERR "Error log for ", $VERSION_LONG, "\n";
+   print STDERR "At ", $today, " on the data files in the \'", getOption('inputpath') , "\' directory\n";
 }
 
 # List of default for values defined in system files
@@ -541,8 +236,8 @@ my @valid_system_var_names      = qw(
 # If present, call the function to
 # generate the "game mode" variables.
 
-if ( $cl_options{system_path} ne q{} ) {
-        parse_system_files($cl_options{system_path});
+if ( getOption('systempath') ne q{} ) {
+        parse_system_files(getOption('systempath'));
 }
 
 # Valid check name
@@ -637,7 +332,7 @@ my %tag_proper_value_for = (
 #####################################
 # Diplay usage information
 
-if ( $cl_options{help} or $Getopt::Long::error ) {
+if ( getOption('help') or $Getopt::Long::error ) {
         Pod::Usage::pod2usage(
                 {   -msg        => $error_message,
                 -exitval => 1,
@@ -650,7 +345,7 @@ if ( $cl_options{help} or $Getopt::Long::error ) {
 #####################################
 # Display the man page
 
-if ($cl_options{man}) {
+if (getOption('man')) {
         Pod::Usage::pod2usage(
                 {   -msg        => $error_message,
                 -verbose => 2,
@@ -663,7 +358,7 @@ if ($cl_options{man}) {
 #####################################
 # Generate the HTML man page and display it
 
-if ( $cl_options{html_help} ) {
+if ( getOption('htmlhelp') ) {
         if( !-e "$PROGRAM_NAME.css" ) {
                 generate_css("$PROGRAM_NAME.css");
         }
@@ -681,21 +376,21 @@ if ( $cl_options{html_help} ) {
         exit;
 }
 
-my %source_tags                 = ()    if $conversion_enable{'SOURCE line replacement'};
-my $source_curent_file          = q{}   if $conversion_enable{'SOURCE line replacement'};
+my %source_tags                 = ()    if LstTidy::Options::isConversionActive('SOURCE line replacement');
+my $source_curent_file          = q{}   if LstTidy::Options::isConversionActive('SOURCE line replacement');
 
-my %classskill_files            = ()    if $conversion_enable{'CLASSSKILL convertion to CLASS'};
+my %classskill_files            = ()    if LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS');
 
-my %classspell_files            = ()    if $conversion_enable{'CLASSSPELL convertion to SPELL'};
+my %classspell_files            = ()    if LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL');
 
-my %class_files                 = ()    if $conversion_enable{'SPELL:Add TYPE tags'};
-my %class_spelltypes            = ()    if $conversion_enable{'SPELL:Add TYPE tags'};
+my %class_files                 = ()    if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
+my %class_spelltypes            = ()    if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
 
-my %Spells_For_EQMOD            = ()    if $conversion_enable{'EQUIPMENT: generate EQMOD'};
-my %Spell_Files                 = ()    if $conversion_enable{'EQUIPMENT: generate EQMOD'}
-                                                        || $conversion_enable{'CLASS: SPELLLIST from Spell.MOD'};
+my %Spells_For_EQMOD            = ()    if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
+my %Spell_Files                 = ()    if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
+                                                        || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
 
-my %bonus_prexxx_tag_report     = ()    if $conversion_enable{'Generate BONUS and PRExxx report'};
+my %bonus_prexxx_tag_report     = ()    if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
 
 my %PREALIGN_conversion_5715 = qw(
         0       LG
@@ -709,11 +404,11 @@ my %PREALIGN_conversion_5715 = qw(
         8       CE
         9       NONE
         10      Deity
-) if $conversion_enable{'ALL:PREALIGN conversion'};
+) if LstTidy::Options::isConversionActive('ALL:PREALIGN conversion');
 
 my %Key_conversion_56 = qw(
         BIND            BLIND
-) if $conversion_enable{'ALL:EQMOD has new keys'};
+) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
 #       ABENHABON               BNS_ENHC_AB
 #       ABILITYMINUS    BNS_ENHC_AB
 #       ABILITYPLUS             BNS_ENHC_AB
@@ -910,9 +605,9 @@ my %Key_conversion_56 = qw(
 #       WEAPMITH                MTHRL
 #       WILDA                   WILD_A
 #       WILDS                   WILD_S
-#       ) if $conversion_enable{'ALL:EQMOD has new keys'};
+#       ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
 
-if($conversion_enable{'ALL:EQMOD has new keys'})
+if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
 {
         my ($old_key,$new_key);
         while (($old_key,$new_key) = each %Key_conversion_56)
@@ -945,7 +640,7 @@ my %srd_weapon_name_convertion_433 = (
         q{Trident (Fish Command)}       => q{Trident of Fish Command},
         q{Trident (Warning)}            => q{Trident of Warning},
         q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
-) if $conversion_enable{'ALL: 4.3.3 Weapon name change'};
+) if LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change');
 
 
 # Constants for master_line_type
@@ -983,7 +678,7 @@ my %SOURCE_file_type_def = (
 );
 
 # Some ppl may still want to use the old ways (for PCGen v5.9.5 and older)
-if( $cl_options{old_source_tag} ) {
+if( getOption('oldsourcetag') ) {
         $SOURCE_file_type_def{Sep} = q{|};  # use | instead of [tab] to split
 }
 
@@ -3560,7 +3255,7 @@ my %master_order = (
 ######################## Conversion #############################
 # Tags that must be seen as valid to allow conversion.
 
-if ( $conversion_enable{'ALL:Convert ADD:SA to ADD:SAB'} ) {
+if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
         push @{ $master_order{'CLASS'} },               'ADD:SA';
         push @{ $master_order{'CLASS Level'} },   'ADD:SA';
         push @{ $master_order{'COMPANIONMOD'} },  'ADD:SA';
@@ -3575,23 +3270,23 @@ if ( $conversion_enable{'ALL:Convert ADD:SA to ADD:SAB'} ) {
         push @{ $master_order{'TEMPLATE'} },    'ADD:SA';
         push @{ $master_order{'WEAPONPROF'} },  'ADD:SA';
 }
-if ( $conversion_enable{'EQUIP: ALTCRITICAL to ALTCRITMULT'} ) {
+if ( LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
         push @{ $master_order{'EQUIPMENT'} }, 'ALTCRITICAL';
 }
 
-if ( $conversion_enable{'BIOSET:generate the new files'} ) {
+if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
         push @{ $master_order{'RACE'} }, 'AGE', 'HEIGHT', 'WEIGHT';
 }
 
-if ( $conversion_enable{'EQUIPMENT: remove ATTACKS'} ) {
+if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS') ) {
         push @{ $master_order{'EQUIPMENT'} }, 'ATTACKS';
 }
 
-if ( $conversion_enable{'PCC:GAME to GAMEMODE'} ) {
+if ( LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
         push @{ $master_order{'PCC'} }, 'GAME';
 }
 
-if ( $conversion_enable{'ALL:BONUS:MOVE convertion'} ) {
+if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') ) {
         push @{ $master_order{'CLASS'} },               'BONUS:MOVE:*';
         push @{ $master_order{'CLASS Level'} }, 'BONUS:MOVE:*';
         push @{ $master_order{'COMPANIONMOD'} },        'BONUS:MOVE:*';
@@ -3607,16 +3302,16 @@ if ( $conversion_enable{'ALL:BONUS:MOVE convertion'} ) {
         push @{ $master_order{'WEAPONPROF'} },  'BONUS:MOVE:*';
 }
 
-if ( $conversion_enable{'WEAPONPROF:No more SIZE'} ) {
+if ( LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE') ) {
         push @{ $master_order{'WEAPONPROF'} }, 'SIZE';
 }
 
-if ( $conversion_enable{'EQUIP:no more MOVE'} ) {
+if ( LstTidy::Options::isConversionActive('EQUIP:no more MOVE') ) {
         push @{ $master_order{'EQUIPMENT'} }, 'MOVE';
 }
 
 #   vvvvvv This one is disactivated
-if ( 0 && $conversion_enable{'ALL:Convert SPELL to SPELLS'} ) {
+if ( 0 && LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS') ) {
         push @{ $master_order{'CLASS Level'} },   'SPELL:*';
         push @{ $master_order{'DOMAIN'} },              'SPELL:*';
         push @{ $master_order{'EQUIPMOD'} },    'SPELL:*';
@@ -3624,7 +3319,7 @@ if ( 0 && $conversion_enable{'ALL:Convert SPELL to SPELLS'} ) {
 }
 
 #   vvvvvv This one is disactivated
-if ( 0 && $conversion_enable{'TEMPLATE:HITDICESIZE to HITDIE'} ) {
+if ( 0 && LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
         push @{ $master_order{'TEMPLATE'} }, 'HITDICESIZE';
 }
 
@@ -4697,24 +4392,21 @@ my @modified_files;     # Will hold the name of the modified files
 #####################################
 # Verify if the inputpath was given
 
-if ($cl_options{input_path}) {
+if (getOption('inputpath')) {
 
-        # Verify if the outputpath exist
-        if ( $cl_options{output_path} && !-d $cl_options{output_path} ) {
-                $error_message = "\nThe directory $cl_options{output_path} does not exists.";
+   # Verify if the outputpath exist
+   if ( getOption('outputpath') && !-d getOption('outputpath') ) {
 
-                Pod::Usage::pod2usage(
-                {   -msg        => $error_message,
-                        -exitval => 1,
-                        -output  => \*STDERR,
-                }
-                );
-                exit;
-        }
+      $error_message = "\nThe directory " . getOption('outputpath') . " does not exists.";
 
-        # Change the \ for / in order to ease things
-        $cl_options{input_path}  =~ tr{\\}{/};
-        $cl_options{output_path} =~ tr{\\}{/};
+      Pod::Usage::pod2usage(
+         {  -msg     => $error_message,
+            -exitval => 1,
+            -output  => \*STDERR,
+         }
+      );
+      exit;
+   }
 
         #################################################
         # We populate %valid_tags for all file types.
@@ -4740,7 +4432,7 @@ if ($cl_options{input_path}) {
         ##########################################################
         # Files that needs to be open for special conversions
 
-        if ( $conversion_enable{'Export lists'} ) {
+        if ( LstTidy::Options::isConversionActive('Export lists') ) {
                 # The files should be opened in alpha order since they will
                 # be closed in reverse alpha order.
 
@@ -4801,13 +4493,13 @@ if ($cl_options{input_path}) {
                 print { $filehandle_for{TEMPLATE} } qq{"Tempate Name","Line","Filename"\n};
 
                 # Will hold the list of all variables found in DEFINE tags
-                if ( $cl_options{xcheck} ) {
+                if ( getOption('xcheck') ) {
                 open $filehandle_for{VARIABLE}, '>', 'variable.csv';
                 print { $filehandle_for{VARIABLE} } qq{"Var Name","Line","Filename"\n};
                 }
 
                 # We need to list the tags that use Willpower
-                if ( $conversion_enable{'ALL:Find Willpower'} ) {
+                if ( LstTidy::Options::isConversionActive('ALL:Find Willpower') ) {
                 open $filehandle_for{Willpower}, '>', 'willpower.csv';
                 print { $filehandle_for{Willpower} } qq{"Tag","Line","Filename"\n};
                 }
@@ -4816,8 +4508,8 @@ if ($cl_options{input_path}) {
         ##########################################################
         # Cross-checking must be activated for the CLASSSPELL
         # convertion to work
-        if ( $conversion_enable{'CLASSSPELL convertion to SPELL'} ) {
-                $cl_options{xcheck} = 1;
+        if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
+           setOption('xcheck', 1);
         }
 
         ##########################################################
@@ -4881,7 +4573,7 @@ if ($cl_options{input_path}) {
                         $filelist_notpcc{$File::Find::name} = lc $_;
                 }
         }
-        File::Find::find( \&mywanted, $cl_options{input_path} );
+        File::Find::find( \&mywanted, getOption('inputpath') );
 
         $logging->set_ewarn_header("================================================================\n"
                                 . "Messages generated while parsing the .PCC files\n"
@@ -4936,7 +4628,7 @@ if ($cl_options{input_path}) {
                                 $found_filetype{$tag}++;
 
                                 $value =~ s/^([^|]*).*/$1/;
-                                my $lstfile = find_full_path( $value, $currentbasedir, $cl_options{basepath} );
+                                my $lstfile = find_full_path( $value, $currentbasedir, getOption('basepath') );
                                 $files_to_parse{$lstfile} = $tag;
 
                                 # Check to see if the file exists
@@ -4944,7 +4636,7 @@ if ($cl_options{input_path}) {
                                         $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
                                         delete $files_to_parse{$lstfile};
                                 }
-                                elsif ($conversion_enable{'SPELL:Add TYPE tags'}
+                                elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
                                 && $tag eq 'CLASS' )
                                 {
 
@@ -4953,8 +4645,8 @@ if ($cl_options{input_path}) {
                                         # The CLASS files must be read before any other
                                         $class_files{$lstfile} = 1;
                                 }
-                                elsif ( $tag eq 'SPELL' && ( $conversion_enable{'EQUIPMENT: generate EQMOD'}
-                                        || $conversion_enable{'CLASS: SPELLLIST from Spell.MOD'} ) )
+                                elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
+                                        || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) )
                                 {
 
                                         #[ 677962 ] The DMG wands have no charge.
@@ -4965,7 +4657,7 @@ if ($cl_options{input_path}) {
 
                                         $Spell_Files{$lstfile} = 1;
                                 }
-                                elsif ( $conversion_enable{'CLASSSPELL convertion to SPELL'}
+                                elsif ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL')
                                 && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) )
                                 {
 
@@ -4986,7 +4678,7 @@ if ($cl_options{input_path}) {
                                                 );
                                         }
                                 }
-                                elsif ($conversion_enable{'CLASSSKILL convertion to CLASS'}
+                                elsif (LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS')
                                 && $tag eq 'CLASSSKILL' )
                                 {
 
@@ -5015,7 +4707,7 @@ if ($cl_options{input_path}) {
                                 # All the tags that do not have file should be cought here
 
                                 # Get the SOURCExxx tags for future ref.
-                                if ($conversion_enable{'SOURCE line replacement'}
+                                if (LstTidy::Options::isConversionActive('SOURCE line replacement')
                                 && ( $tag eq 'SOURCELONG'
                                         || $tag eq 'SOURCESHORT'
                                         || $tag eq 'SOURCEWEB'
@@ -5050,10 +4742,10 @@ if ($cl_options{input_path}) {
                                         $GAMEMODE_found = $value;       # The GAMEMODE tag we found
                                         my @modes = split /[|]/, $value;
                                         my $gamemode_regex =
-                                                $cl_options{gamemode}
+                                                getOption('gamemode')
                                                 ? qr{ \A (?: $cl_options{gamemode} ) \z }xmsi
                                                 : qr{ . }xms;
-                                        my $valid_game_mode = $cl_options{gamemode} ? 0 : 1;
+                                        my $valid_game_mode = getOption('gamemode') ? 0 : 1;
 
                                         # First the filter is applied
                                         for my $mode (@modes) {
@@ -5091,7 +4783,7 @@ if ($cl_options{input_path}) {
                                         #               $pcc_file_name, $INPUT_LINE_NUMBER ) if 2 != tr!.!.!;
                                         $BOOKTYPE_found = YES;
                                 }
-                                elsif ( $tag eq 'GAME' && $conversion_enable{'PCC:GAME to GAMEMODE'} ) {
+                                elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
 
                                         # [ 707325 ] PCC: GAME is now GAMEMODE
                                         $pcc_lines[-1] = "GAMEMODE:$value";
@@ -5117,7 +4809,7 @@ if ($cl_options{input_path}) {
 
                 close $pcc_fh;
 
-                if ( $conversion_enable{'CLASSSPELL convertion to SPELL'}
+                if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL')
                         && $found_filetype{'CLASSSPELL'}
                         && !$found_filetype{'SPELL'} )
                 {
@@ -5127,7 +4819,7 @@ if ($cl_options{input_path}) {
                         );
                 }
 
-                if ( $conversion_enable{'CLASSSKILL convertion to CLASS'}
+                if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS')
                         && $found_filetype{'CLASSSKILL'}
                         && !$found_filetype{'CLASS'} )
                 {
@@ -5145,18 +4837,18 @@ if ($cl_options{input_path}) {
                         $logging->ewarn( NOTICE, 'No GAMEMODE tag found', $pcc_file_name );
                 }
 
-                if ( $GAMEMODE_found && $cl_options{exportlist} ) {
+                if ( $GAMEMODE_found && getOption('exportlist') ) {
                         print { $filehandle_for{PCC} }
                                 qq{"$SOURCELONG_found","$SOURCESHORT_found","$GAMEMODE_found","$pcc_file_name"\n};
                 }
 
                 # Do we copy the .PCC???
-                if ( $cl_options{output_path} && ( $must_write ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
+                if ( getOption('outputpath') && ( $must_write ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
                         my $new_pcc_file = $pcc_file_name;
-                        $new_pcc_file =~ s/$cl_options{input_path}/$cl_options{output_path}/i;
+                        $new_pcc_file =~ s/$cl_options{inputpath}/$cl_options{outputpath}/i;
 
                         # Create the subdirectory if needed
-                        create_dir( File::Basename::dirname($new_pcc_file), $cl_options{output_path} );
+                        create_dir( File::Basename::dirname($new_pcc_file), getOption('outputpath') );
 
                         open my $new_pcc_fh, '>', $new_pcc_file;
 
@@ -5175,16 +4867,16 @@ if ($cl_options{input_path}) {
         if ( !keys %files_to_parse ) {
                 $logging->ewarn( ERROR,
                         qq{Could not find any .lst file to parse.},
-                        $cl_options{input_path}
+                        getOption('inputpath')
                 );
                 $logging->ewarn( ERROR,
-                        qq{Is your -inputpath parameter valid? ($cl_options{input_path})},
-                        $cl_options{input_path}
+                        qq{Is your -inputpath parameter valid? ($cl_options{inputpath})},
+                        getOption('inputpath')
                 );
-                if ( $cl_options{gamemode} ) {
+                if ( getOption('gamemode') ) {
                 $logging->ewarn( ERROR,
                         qq{Is your -gamemode parameter valid? ($cl_options{gamemode})},
-                        $cl_options{input_path}
+                        getOption('inputpath')
                 );
                 exit;
                 }
@@ -5206,7 +4898,7 @@ if ($cl_options{input_path}) {
         }
 
         # If the gamemode filter is active, we do not report files not refered to.
-        if ( keys %filelist_notpcc && !$cl_options{gamemode} ) {
+        if ( keys %filelist_notpcc && !getOption('gamemode') ) {
                 $logging->set_ewarn_header("================================================================\n"
                                 . "List of files that are not referenced by any .PCC files\n"
                                 . "----------------------------------------------------------------\n"
@@ -5219,7 +4911,7 @@ if ($cl_options{input_path}) {
         }
 }
 else {
-        $files_to_parse{'STDIN'} = $cl_options{file_type};
+        $files_to_parse{'STDIN'} = getOption('filetype');
 }
 
 $logging->set_ewarn_header("================================================================\n"
@@ -5230,7 +4922,7 @@ $logging->set_ewarn_header("====================================================
 my @files_to_parse_sorted = ();
 my %temp_files_to_parse   = %files_to_parse;
 
-if ( $conversion_enable{'SPELL:Add TYPE tags'} ) {
+if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
 
         # The CLASS files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -5242,7 +4934,7 @@ if ( $conversion_enable{'SPELL:Add TYPE tags'} ) {
         }
 }
 
-if ( $conversion_enable{'CLASSSPELL convertion to SPELL'} ) {
+if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
 
         # The CLASS and DOMAIN files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -5270,7 +4962,7 @@ if ( keys %Spell_Files ) {
         }
 }
 
-if ( $conversion_enable{'CLASSSKILL convertion to CLASS'} ) {
+if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS') ) {
 
         # The CLASSSKILL files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -5412,12 +5104,12 @@ for my $file (@files_to_parse_sorted) {
 
                 my $write_fh;
 
-                if ($cl_options{output_path}) {
+                if (getOption('outputpath')) {
                         my $newfile = $file;
-                        $newfile =~ s/$cl_options{input_path}/$cl_options{output_path}/i;
+                        $newfile =~ s/$cl_options{inputpath}/$cl_options{outputpath}/i;
 
                         # Create the subdirectory if needed
-                        create_dir( File::Basename::dirname($newfile), $cl_options{output_path} );
+                        create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
 
                         open $write_fh, '>', $newfile;
 
@@ -5436,10 +5128,10 @@ for my $file (@files_to_parse_sorted) {
                 LINE:
                 for my $line ( @{$newlines_ref} ) {
                         #$line =~ s/\s+$//;
-                        print {$write_fh} "$line\n" if $cl_options{output_path};
+                        print {$write_fh} "$line\n" if getOption('outputpath');
                 }
 
-                close $write_fh if $cl_options{output_path};
+                close $write_fh if getOption('outputpath');
         }
         else {
                 warn "Didn't process filetype \"$files_to_parse{$file}\".\n";
@@ -5449,7 +5141,7 @@ for my $file (@files_to_parse_sorted) {
 ###########################################
 # Generate the new BIOSET files
 
-if ( $conversion_enable{'BIOSET:generate the new files'} ) {
+if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
         print STDERR "\n================================================================\n";
         print STDERR "List of new BIOSET files generated\n";
         print STDERR "----------------------------------------------------------------\n";
@@ -5459,17 +5151,17 @@ if ( $conversion_enable{'BIOSET:generate the new files'} ) {
 
 ###########################################
 # Print a report with the modified files
-if ( $cl_options{output_path} && scalar(@modified_files) ) {
-        $cl_options{output_path} =~ tr{/}{\\} if $^O eq "MSWin32";
+if ( getOption('outputpath') && scalar(@modified_files) ) {
+        $cl_options{outputpath} =~ tr{/}{\\} if $^O eq "MSWin32";
 
         $logging->set_ewarn_header("================================================================\n"
                                 . "List of files that were created in the directory\n"
-                                . "$cl_options{output_path}\n"
+                                . "$cl_options{outputpath}\n"
                                 . "----------------------------------------------------------------\n"
         );
 
         for my $file (@modified_files) {
-                $file =~ s{ $cl_options{input_path} }{}xmsi;
+                $file =~ s{ $cl_options{inputpath} }{}xmsi;
                 $file =~ tr{/}{\\} if $^O eq "MSWin32";
                 $logging->ewarn( NOTICE, "$file\n", "" );
         }
@@ -5479,8 +5171,8 @@ if ( $cl_options{output_path} && scalar(@modified_files) ) {
 
 ###########################################
 # Print a report for the BONUS and PRExxx usage
-if ( $conversion_enable{'Generate BONUS and PRExxx report'} ) {
-        $cl_options{output_path} =~ tr{/}{\\} if $^O eq "MSWin32";
+if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
+        $cl_options{outputpath} =~ tr{/}{\\} if $^O eq "MSWin32";
 
         print STDERR "\n================================================================\n";
         print STDERR "List of BONUS and PRExxx tags by linetype\n";
@@ -5500,7 +5192,7 @@ if ( $conversion_enable{'Generate BONUS and PRExxx report'} ) {
         print STDERR "================================================================\n";
 }
 
-if ( $cl_options{report} ) {
+if ( getOption('report') ) {
         ###########################################
         # Print a report for the number of tag
         # found.
@@ -5570,7 +5262,7 @@ if ( exists $count_tags{"Invalid"} ) {
         }
 }
 
-if ( $cl_options{xcheck} ) {
+if ( getOption('xcheck') ) {
 
         #####################################################
         # First we process the information that must be added
@@ -5756,7 +5448,7 @@ if ( $cl_options{xcheck} ) {
 
         #################################
         # Print the tag that do not have defined headers if requested
-        if ( $cl_options{missing_header} ) {
+        if ( getOption('missingheader') ) {
                 my $firsttime = 1;
                 for my $linetype ( sort keys %missing_headers ) {
                 if ($firsttime) {
@@ -5782,7 +5474,7 @@ if ( $cl_options{xcheck} ) {
 # Close the files that were opened for
 # special convertion
 
-if ( $conversion_enable{'Export lists'} ) {
+if ( LstTidy::Options::isConversionActive('Export lists') ) {
         # Close all the files in reverse order that they were opened
         for my $line_type ( reverse sort keys %filehandle_for ) {
                 close $filehandle_for{$line_type};
@@ -5792,7 +5484,7 @@ if ( $conversion_enable{'Export lists'} ) {
 #########################################
 # Close the redirected STDERR if needed
 
-if ($cl_options{output_error}) {
+if (getOption('outputerror')) {
         close STDERR;
         print STDOUT "\cG";                     # An audible indication that PL has finished.
 }
@@ -5861,14 +5553,14 @@ sub normalize_file($) {
 # This function uses the information of master_file_type to
 # identify the curent line type and parse it.
 #
-# Parameters: $file_type        = The type of the file has defined by
+# Parameters: $fileType        = The type of the file has defined by
 #                                               the .PCC file
 #                       $lines_ref      = Reference to an array containing all
 #                                               the lines of the file
 #                       $file_for_error = File name to use with ewarn
 
 sub FILETYPE_parse {
-        my $file_type   = shift;
+        my $fileType   = shift;
         my $lines_ref   = shift;
         my $file_for_error = shift;
 
@@ -5903,7 +5595,7 @@ sub FILETYPE_parse {
         ## Gawaine42
         ## [ 1324519 ] ASCII characters
         ## Start by replacing the smart quotes and other similar characters.
-        if ($conversion_enable{'ALL:Fix Common Extended ASCII'}) {
+        if (LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')) {
                 $new_line =~ s/\x82/,/g;
                 $new_line =~ s/\x84/,,/g;
                 $new_line =~ s/\x85/.../g;
@@ -5941,7 +5633,7 @@ sub FILETYPE_parse {
                 # Find the line type
                 my $index = 0;
                 LINE_SPEC:
-                for my $line_spec ( @{ $master_file_type{$file_type} } ) {
+                for my $line_spec ( @{ $master_file_type{$fileType} } ) {
                 if ( $new_line =~ $line_spec->{RegEx} ) {
 
                         # Found it !!!
@@ -5953,7 +5645,7 @@ sub FILETYPE_parse {
                 continue { $index++ }
 
                 # Did we find anything?
-                if ( $index >= @{ $master_file_type{$file_type} } ) {
+                if ( $index >= @{ $master_file_type{$fileType} } ) {
                 $logging->ewarn(WARNING,
                         qq(Can\'t find the line type for "$new_line"),
                         $file_for_error,
@@ -6040,7 +5732,7 @@ sub FILETYPE_parse {
                                                 # later validate if they are valid
                                                 push @{ $referer{$curent_linetype}{$entity_name} },
                                                         [ $curent_token, $file_for_error, $line_for_error ]
-                                                        if $cl_options{xcheck};
+                                                        if getOption('xcheck');
 
                                                 # Special case for .COPY=<new name>
                                                 # <new name> is a valid entity
@@ -6051,7 +5743,7 @@ sub FILETYPE_parse {
                                                 last COLUMN;
                                         }
                                         else {
-                                                if ( $cl_options{xcheck} ) {
+                                                if ( getOption('xcheck') ) {
 
                                                         # We keep track of the entities that could be used
                                                         # with a .MOD type of tag for later validation.
@@ -6144,7 +5836,7 @@ sub FILETYPE_parse {
                 ############################################################
                 # Validate the line
                 validate_line(\%line_tokens, $curent_linetype, $file_for_error, $line_for_error)
-                if $cl_options{xcheck};
+                if getOption('xcheck');
 
                 ############################################################
                 # .CLEAR order verification
@@ -6216,11 +5908,11 @@ sub FILETYPE_parse {
         #
         #       # Header begins with the line type header.
         #       my $this_header = $curent_linetype
-        #                               ? get_header($master_order{$curent_linetype}[0],$file_type)
+        #                               ? get_header($master_order{$curent_linetype}[0],$fileType)
         #                               : "";
         #       my $next_header = $line_index <= @newlines && ref($newlines[$line_index+1]) eq 'ARRAY' &&
         #                               $newlines[$line_index+1][0]
-        #                               ? get_header($master_order{$newlines[$line_index+1][0]}[0],$file_type)
+        #                               ? get_header($master_order{$newlines[$line_index+1][0]}[0],$fileType)
         #                               : "";
         #       if(($this_header && index($line_tokens, $this_header) == 0) ||
         #               ($next_header && index($line_tokens,$next_header) == 0))
@@ -6242,14 +5934,14 @@ sub FILETYPE_parse {
         ######################## Conversion #############################
         # We manipulate the tags for the whole file here
 
-        additionnal_file_parsing(\@newlines, $file_type, $file_for_error);
+        additionnal_file_parsing(\@newlines, $fileType, $file_for_error);
 
         ##################################################
         ##################################################
         # Phase II - Reformating the lines
 
         # No reformating needed?
-        return $lines_ref unless $cl_options{output_path} && LstTidy::Parse::isWriteableFileType($file_type);
+        return $lines_ref unless getOption('outputpath') && LstTidy::Parse::isWriteableFileType($fileType);
 
         # Now on to all the non header lines.
         CORE_LINE:
@@ -6455,7 +6147,7 @@ sub FILETYPE_parse {
                 else {
 
                         # Invalid option
-                        die "Invalid \%master_file_type options: $file_type:$curent_linetype:$mode:$header";
+                        die "Invalid \%master_file_type options: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == MAIN ) {
@@ -6505,7 +6197,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( get_header( $tag, $file_type ) );
+                                my $length = mylength( get_header( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -6622,7 +6314,7 @@ sub FILETYPE_parse {
                         }
                 }
                 else {
-                        die "Invalid \%master_file_type format: $file_type:$curent_linetype:$mode:$header";
+                        die "Invalid \%master_file_type format: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == SUB ) {
@@ -6676,7 +6368,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( get_header( $tag, $file_type ) );
+                                my $length = mylength( get_header( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -6835,7 +6527,7 @@ sub FILETYPE_parse {
                 }
                 }
                 else {
-                die "Invalide \%master_file_type mode: $file_type:$curent_linetype:$mode";
+                die "Invalide \%master_file_type mode: $fileType:$curent_linetype:$mode";
                 }
 
         }
@@ -6989,7 +6681,7 @@ sub parse_tag {
 
         # [ 1678570 ] Correct PRESPELLTYPE syntax
         # PRESPELLTYPE conversion
-        if ($conversion_enable{'ALL:PRESPELLTYPE Syntax'} &&
+        if (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax') &&
                 $tag eq 'PRESPELLTYPE' &&
                 $tag_text =~ /^PRESPELLTYPE:([^\d]+),(\d+),(\d+)/)
         {
@@ -7013,7 +6705,7 @@ sub parse_tag {
         # that are on the end of other tags or in PREMULTS.
         # I'll leave out the pipe-delimited error here, since it's more likely
         # to end up with confusion when the tag isn't standalone.
-        elsif ($conversion_enable{'ALL:PRESPELLTYPE Syntax'}
+        elsif (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax')
                 && $tag_text =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/)
         {
                 $value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/g;
@@ -7040,7 +6732,7 @@ sub parse_tag {
                         $tag   = $addtag;
                         $value = "($therest)$add_count";
                 }
-                        if ((($type == 1) || ($type == 2)) && ($conversion_enable{'ALL:ADD Syntax Fix'}))
+                        if ((($type == 1) || ($type == 2)) && (LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix')))
                         {
                                 $tag = "ADD:";
                                 $addtag =~ s/ADD://;
@@ -7401,7 +7093,7 @@ sub parse_tag {
         ############################################################
         # We call the validating function if needed
         validate_tag( $real_tag, $value, $linetype, $file_for_error, $line_for_error )
-                if $cl_options{xcheck};
+                if getOption('xcheck');
 
         # If there is already a :  in the tag name, no need to add one more
         my $need_sep = index( $real_tag, ':' ) == -1 ? q{:} : q{};
@@ -8979,7 +8671,7 @@ BEGIN {
 
                                         #####################################################
                                         # Export a list of variable names if requested
-                                        if ( $conversion_enable{'Export lists'} ) {
+                                        if ( LstTidy::Options::isConversionActive('Export lists') ) {
                                                 my $file = $file_for_error;
                                                 $file =~ tr{/}{\\};
                                                 print { $filehandle_for{VARIABLE} }
@@ -9239,7 +8931,7 @@ sub validate_pre_tag {
                 qq{validate_pre_tag: $tag_name; $tag_value; $enclosing_tag; $linetype;},
                 $file_for_error,
                 $line_for_error
-        ) if ( $cl_options{warning_level} == DEBUG );
+        ) if ( getOption('warninglevel') == DEBUG );
 
         my $pretag = $tag_name;
         my $is_neg = 1 if $pretag =~ s/^!(.*)/$1/;
@@ -10004,10 +9696,10 @@ BEGIN {
                         @list                   # List of entries to be added
                 ) = ( @_, "" );
 
-                # If $file_for_error is not under $cl_options{input_path}, we do not add
+                # If $file_for_error is not under getOption('inputpath'), we do not add
                 # it to be validated. This happens when a -basepath parameter is used
                 # with the script.
-                return if $file_for_error !~ / \A $cl_options{input_path} /xmsi;
+                return if $file_for_error !~ / \A $cl_options{inputpath} /xmsi;
 
                 # We remove the empty elements in the list
                 @list = grep { $_ ne "" } @list;
@@ -10618,7 +10310,7 @@ BEGIN {
                 croak q{Wrong number of parameters for parse_jep} if scalar @_ != 4;
                 # If the -nojep command line option was used, we
                 # call the old parser
-                if ( $cl_options{nojep} ) {
+                if ( getOption('nojep') ) {
                         return extract_var_name(@_);
                 }
                 else {
@@ -10889,7 +10581,7 @@ sub additionnal_tag_parsing {
         # Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
         # Bonuses associated with a PREDEFAULTMONSTER:N are retained without
         #               the PREDEFAULTMONSTER:N
-        if ( $conversion_enable{'RACE:Fix PREDEFAULTMONSTER bonuses'}
+        if ( LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
                 && $tag_name =~ /BONUS/ ) {
         if ($tag_value =~ /PREDEFAULTMONSTER:N/ ) {
                 $_[1] =~ s/[|]PREDEFAULTMONSTER:N//;
@@ -10901,7 +10593,7 @@ sub additionnal_tag_parsing {
         }
         }
 
-        if ( $conversion_enable{'ALL:Weaponauto simple conversion'}
+        if ( LstTidy::Options::isConversionActive('ALL:Weaponauto simple conversion')
                 && $tag_name =~ /WEAPONAUTO/)
                 {
                 $_[0] = 'AUTO';
@@ -10927,7 +10619,7 @@ sub additionnal_tag_parsing {
         # BONUS:CHECKS|<list of save types>|<other tag parameters>
         # PRECHECKBASE:<number>,<list of saves>
 
-        if ( $conversion_enable{'ALL:Willpower to Will'} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:Willpower to Will') ) {
                 if ( $tag_name eq 'BONUS:CHECKS' ) {
                 # We split the tag parameters
                 my @tag_params = split q{\|}, $tag_value;
@@ -10967,7 +10659,7 @@ sub additionnal_tag_parsing {
         ##################################################################
         # We find the tags that use the word Willpower
 
-        if ( $conversion_enable{'ALL:Find Willpower'} && $cl_options{exportlist} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:Find Willpower') && getOption('exportlist') ) {
                 if ( $tag_value
                         =~ m{ \b                # Word boundary
                                 Willpower       # We need to find the word Willpower
@@ -10987,7 +10679,7 @@ sub additionnal_tag_parsing {
         # PRERACE now only accepts the format PRERACE:<number>,<race list>
         # All the PRERACE tags must be reformated to use the default way.
 
-        if ( $conversion_enable{'ALL:PRERACE needs a ,'} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:PRERACE needs a ,') ) {
                 if ( $tag_name eq 'PRERACE' || $tag_name eq '!PRERACE' ) {
                 if ( $tag_value !~ / \A \d+ [,], /xms ) {
                         $_[1] = '1,' . $_[1];
@@ -11034,7 +10726,7 @@ sub additionnal_tag_parsing {
         # PREALIGN now accept letters instead of numbers to specify alignments
         # All the PREALIGN tags must be reformated to the letters.
 
-        if ( $conversion_enable{'ALL:PREALIGN conversion'} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:PREALIGN conversion') ) {
                 if ( $tag_name eq 'PREALIGN' || $tag_name eq '!PREALIGN' ) {
                 my $new_value = join ',', map { $PREALIGN_conversion_5715{$_} || $_ } split ',',
                         $tag_value;
@@ -11077,7 +10769,7 @@ sub additionnal_tag_parsing {
         #
         # HITDICESIZE:.* must become HITDIE:.* in the TEMPLATE line types.
 
-        if (   $conversion_enable{'TEMPLATE:HITDICESIZE to HITDIE'}
+        if (   LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE')
                 && $tag_name eq 'HITDICESIZE'
                 && $linetype eq 'TEMPLATE'
         ) {
@@ -11096,7 +10788,7 @@ sub additionnal_tag_parsing {
         #
         # This is needed by my CMP friends .
 
-        if ( $conversion_enable{'ALL:CMP remove PREALIGN'} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN') ) {
                 if ( $tag_value =~ /PREALIGN/ ) {
                 my $ponc = $tag_name =~ /:/ ? "" : ":";
 
@@ -11131,7 +10823,7 @@ sub additionnal_tag_parsing {
         # All the MOVE:<number> tags must be converted to
         # MOVE:Walk,<number>
 
-        if (   $conversion_enable{'ALL:MOVE:nn to MOVE:Walk,nn'}
+        if (   LstTidy::Options::isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn')
                 && $tag_name eq "MOVE"
         ) {
                 if ( $tag_value =~ /^(\d+$)/ ) {
@@ -11150,7 +10842,7 @@ sub additionnal_tag_parsing {
         # All the EQMOD and PRETYPE:EQMOD tags must be scanned for
         # possible KEY replacement.
 
-        if($conversion_enable{'ALL:EQMOD has new keys'} &&
+        if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys') &&
                 ($tag_name eq "EQMOD" || $tag_name eq "REPLACES" || ($tag_name eq "PRETYPE" && $tag_value =~ /^(\d+,)?EQMOD/)))
         {
                 for my $old_key (keys %Key_conversion_56)
@@ -11174,7 +10866,7 @@ sub additionnal_tag_parsing {
         # but only if MONSTERCLASS is present and there is not already a
         # MONCSKILL present.
 
-        if (   $conversion_enable{'RACE:CSKILL to MONCSKILL'}
+        if (   LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL')
                 && $linetype eq "RACE"
                 && $tag_name eq "CSKILL"
         ) {
@@ -11188,7 +10880,7 @@ sub additionnal_tag_parsing {
         ##################################################################
         # GAMEMODE DnD is now 3e
 
-        if (   $conversion_enable{'PCC:GAMEMODE DnD to 3e'}
+        if (   LstTidy::Options::isConversionActive('PCC:GAMEMODE DnD to 3e')
                 && $tag_name  eq "GAMEMODE"
                 && $tag_value eq "DnD"
         ) {
@@ -11203,7 +10895,7 @@ sub additionnal_tag_parsing {
         ##################################################################
         # Add 3e to GAMEMODE:DnD_v30e and 35e to GAMEMODE:DnD_v35e
 
-        if (   $conversion_enable{'PCC:GAMEMODE Add to the CMP DnD_'}
+        if (   LstTidy::Options::isConversionActive('PCC:GAMEMODE Add to the CMP DnD_')
                 && $tag_name eq "GAMEMODE"
                 && $tag_value =~ /DnD_/
         ) {
@@ -11245,7 +10937,7 @@ sub additionnal_tag_parsing {
         # All the other BONUS:COMBAT|BAB should be reported since there
         # should not be any really.
 
-        if (   $conversion_enable{'ALL:Add TYPE=Base.REPLACE'}
+        if (   LstTidy::Options::isConversionActive('ALL:Add TYPE=Base.REPLACE')
                 && $tag_name eq "BONUS:COMBAT"
                 && $tag_value =~ /^\|(BAB)\|/i
         ) {
@@ -11326,7 +11018,7 @@ sub additionnal_tag_parsing {
         # A ALL. must be added at the end of every COUNT[FEATTYPE=FooBar]
         # found in the DEFINE tags if not already there.
 
-        if (   $conversion_enable{'ALL:COUNT[FEATTYPE=...'}
+        if (   LstTidy::Options::isConversionActive('ALL:COUNT[FEATTYPE=...')
                 && $tag_name eq "DEFINE"
         ) {
                 if ( $tag_value =~ /COUNT\[FEATTYPE=/i ) {
@@ -11364,7 +11056,7 @@ sub additionnal_tag_parsing {
         # PRECLASS now only accepts the format PRECLASS:1,<class>=<n>
         # All the PRECLASS tags must be reformated to use the default way.
 
-        if ( $conversion_enable{'ALL:PRECLASS needs a ,'} ) {
+        if ( LstTidy::Options::isConversionActive('ALL:PRECLASS needs a ,') ) {
                 if ( $tag_name eq 'PRECLASS' || $tag_name eq '!PRECLASS' ) {
                 unless ( $tag_value =~ /^\d+,/ ) {
                         $_[1] = '1,' . $_[1];
@@ -11414,7 +11106,7 @@ sub additionnal_tag_parsing {
         # except EQUIPMENT and EQUIPMOD where it most be replaced by
         # BONUS:POSTMOVEADD
 
-        if (   $conversion_enable{'ALL:BONUS:MOVE convertion'} && $tag_name eq 'BONUS:MOVE' ){
+        if (   LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') && $tag_name eq 'BONUS:MOVE' ){
                 if ( $linetype eq "EQUIPMENT" || $linetype eq "EQUIPMOD" ) {
                         $_[0] = "BONUS:POSTMOVEADD";
                 }
@@ -11437,7 +11129,7 @@ sub additionnal_tag_parsing {
         # [ 728038 ] BONUS:VISION must replace VISION:.ADD
         # Now doing the VISION:.ADD convertion
 
-        if (   $conversion_enable{'ALL: , to | in VISION'} && $tag_name eq 'VISION' ) {
+        if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION') && $tag_name eq 'VISION' ) {
                 unless ( $tag_value =~ /(\.ADD,|1,)/i ) {
                         if ( $_[1] =~ tr{,}{|} ) {
                                 $logging->ewarn( WARNING,
@@ -11453,7 +11145,7 @@ sub additionnal_tag_parsing {
         # PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
         # All the PRESTAT tags must be reformated to use the default way.
 
-        if ( $conversion_enable{'ALL:PRESTAT needs a ,'} && $tag_name eq 'PRESTAT' ) {
+        if ( LstTidy::Options::isConversionActive('ALL:PRESTAT needs a ,') && $tag_name eq 'PRESTAT' ) {
                 if ( index( $tag_value, ',' ) == -1 ) {
                         # There is no ',', we need to add one
                         $_[1] = '1,' . $_[1];
@@ -11469,7 +11161,7 @@ sub additionnal_tag_parsing {
         # [ 686169 ] remove ATTACKS: tag
         # ATTACKS:<attacks> must be replaced by BONUS:COMBAT|ATTACKS|<attacks>
 
-        if ( $conversion_enable{'EQUIPMENT: remove ATTACKS'}
+        if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS')
                 && $tag_name eq 'ATTACKS'
                 && $linetype eq 'EQUIPMENT' ) {
                 my $number_attacks = $tag_value;
@@ -11486,7 +11178,7 @@ sub additionnal_tag_parsing {
         ##################################################################
         # Name change for SRD compliance (PCGEN 4.3.3)
 
-        if ($conversion_enable{'ALL: 4.3.3 Weapon name change'}
+        if (LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change')
                 && (   $tag_name eq 'WEAPONBONUS'
                 || $tag_name eq 'WEAPONAUTO'
                 || $tag_name eq 'PROF'
@@ -12039,7 +11731,7 @@ BEGIN {
         #
         # In most files, take ADD:SA and replace with ADD:SAB
 
-        if (   $conversion_enable{'ALL:Convert ADD:SA to ADD:SAB'}
+        if (   LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
                 && exists $line_ref->{'ADD:SA'}
         ) {
                 $logging->ewarn( WARNING,
@@ -12061,7 +11753,7 @@ BEGIN {
         # Gawaine42 (Richard Bowers)
         # Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
         # This should remove the whole tag.
-        if ($conversion_enable{'RACE:Fix PREDEFAULTMONSTER bonuses'}
+        if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
                         && $filetype eq "RACE"
         ) {
         for my $key ( keys %$line_ref ) {
@@ -12089,7 +11781,7 @@ BEGIN {
         #
         # In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT'
 
-        if (   $conversion_enable{'EQUIP: ALTCRITICAL to ALTCRITMULT'}
+        if (   LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'ALTCRITICAL'}
         ) {
@@ -12124,7 +11816,7 @@ BEGIN {
         # there is a MONSTERCLASS present.
 
         # We remove MFEAT or warn of missing MONSTERCLASS tag.
-        if (   $conversion_enable{'RACE:Remove MFEAT and HITDICE'}
+        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MFEAT'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -12146,7 +11838,7 @@ BEGIN {
         }
 
         # We remove HITDICE or warn of missing MONSTERCLASS tag.
-        if (   $conversion_enable{'RACE:Remove MFEAT and HITDICE'}
+        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'HITDICE'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -12173,7 +11865,7 @@ BEGIN {
         ## Note: Makes simplifying assumption that FOLLOWERALIGN
         ## will occur only once in a given line, although DOMAINS may
         ## occur multiple times.
-        if (($conversion_enable{'DEITY:Followeralign conversion'})
+        if ((LstTidy::Options::isConversionActive('DEITY:Followeralign conversion'))
                 && $filetype eq "DEITY"
                 && (exists $line_ref->{'FOLLOWERALIGN'}))
         {
@@ -12246,7 +11938,7 @@ BEGIN {
                 }
                 };
 
-                if (   $conversion_enable{'RACE:TYPE to RACETYPE'}
+                if (   LstTidy::Options::isConversionActive('RACE:TYPE to RACETYPE')
                 && ( $filetype eq "RACE"
                         || $filetype eq "TEMPLATE" )
                 && not (exists $line_ref->{'RACETYPE'})
@@ -12270,7 +11962,7 @@ BEGIN {
                 # The SOURCELONG tags found on any linetype but the SOURCE line type must
                 # be converted to use tab if | are found.
 
-                if (   $conversion_enable{'ALL:New SOURCExxx tag format'}
+                if (   LstTidy::Options::isConversionActive('ALL:New SOURCExxx tag format')
                 && exists $line_ref->{'SOURCELONG'} ) {
                 my @new_tags;
 
@@ -12303,7 +11995,7 @@ BEGIN {
                 # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
                 # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
 
-                if ( $conversion_enable{'ALL:Convert SPELL to SPELLS'}
+                if ( LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS')
                 && exists $line_ref->{'SPELL'} )
                 {
                 my %spellbooks;
@@ -12374,7 +12066,7 @@ BEGIN {
                 #
                 # This is needed by my good CMP friends.
 
-                if ( $conversion_enable{'ALL:CMP remove PREALIGN'} ) {
+                if ( LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN') ) {
                 if ( exists $line_ref->{'PREALIGN'} ) {
                         my $number = +@{ $line_ref->{'PREALIGN'} };
                         delete $line_ref->{'PREALIGN'};
@@ -12402,7 +12094,7 @@ BEGIN {
                 # We add it if there is only one Melee attack and the
                 # bonus is not already present.
 
-                if ( $conversion_enable{'ALL:CMP NatAttack fix'}
+                if ( LstTidy::Options::isConversionActive('ALL:CMP NatAttack fix')
                 && exists $line_ref->{'NATURALATTACKS'} )
                 {
 
@@ -12480,7 +12172,7 @@ BEGIN {
                 # No conversion needed. We just have to remove the MOVE tags that
                 # are doing nothing anyway.
 
-                if (   $conversion_enable{'EQUIP:no more MOVE'}
+                if (   LstTidy::Options::isConversionActive('EQUIP:no more MOVE')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -12488,7 +12180,7 @@ BEGIN {
                 delete $line_ref->{'MOVE'};
                 }
 
-                if (   $conversion_enable{'CLASS:no more HASSPELLFORMULA'}
+                if (   LstTidy::Options::isConversionActive('CLASS:no more HASSPELLFORMULA')
                 && $filetype eq "CLASS"
                 && exists $line_ref->{'HASSPELLFORMULA'} )
                 {
@@ -12503,7 +12195,7 @@ BEGIN {
                 # BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
                 # removed or lowered by 8.
 
-                if (   $conversion_enable{'RACE:BONUS SKILL Climb and Swim'}
+                if (   LstTidy::Options::isConversionActive('RACE:BONUS SKILL Climb and Swim')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -12647,7 +12339,7 @@ BEGIN {
                 # The SIZE tag must be removed from all WEAPONPROF files since it
                 # cause loading problems with the latest versio of PCGEN.
 
-                if (   $conversion_enable{'WEAPONPROF:No more SIZE'}
+                if (   LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE')
                 && $filetype eq "WEAPONPROF"
                 && exists $line_ref->{'SIZE'} )
                 {
@@ -12665,7 +12357,7 @@ BEGIN {
                 # NoProfReq must be added to AUTO:WEAPONPROF if the race has
                 # at least one hand and if NoProfReq is not already there.
 
-                if (   $conversion_enable{'RACE:NoProfReq'}
+                if (   LstTidy::Options::isConversionActive('RACE:NoProfReq')
                 && $filetype eq "RACE" )
                 {
                 my $needNoProfReq = 1;
@@ -12719,7 +12411,7 @@ BEGIN {
                 # but only if MONSTERCLASS is present and there is not already a
                 # MONCSKILL present.
 
-                if (   $conversion_enable{'RACE:CSKILL to MONCSKILL'}
+                if (   LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'CSKILL'}
                 && exists $line_ref->{'MONSTERCLASS'}
@@ -12744,7 +12436,7 @@ BEGIN {
                 #   VISION:1,Darkvision (60')
                 #   VISION:.ADD,See Invisibility (120'),See Etheral (120'),Darkvision (120')
 
-                if (   $conversion_enable{'ALL: , to | in VISION'}
+                if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION')
                 && exists $line_ref->{'VISION'}
                 && $line_ref->{'VISION'}[0] =~ /(\.ADD,|1,)(.*)/i )
                 {
@@ -12789,7 +12481,7 @@ BEGIN {
                 # For items with TYPE:Boot, Glove, Bracer, we must check for plural
                 # form and add a SLOTS:2 tag is the item is plural.
 
-                if (   $conversion_enable{'EQUIPMENT: SLOTS:2 for plurals'}
+                if (   LstTidy::Options::isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
                 && $filetype            eq 'EQUIPMENT'
                 && $line_info->[0] eq 'EQUIPMENT'
                 && !exists $line_ref->{'SLOTS'} )
@@ -12835,7 +12527,7 @@ BEGIN {
                 # The $spell_level will also be extracted from the CLASSES tag.
                 # The $caster_level will be $spell_level * 2 -1
 
-                if ( $conversion_enable{'EQUIPMENT: generate EQMOD'} ) {
+                if ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD') ) {
                 if (   $filetype eq 'SPELL'
                         && $line_info->[0] eq 'SPELL'
                         && ( exists $line_ref->{'CLASSES'} ) )
@@ -12930,7 +12622,7 @@ BEGIN {
                 # we must call record_bioset_tags to record the AGE, HEIGHT and
                 # WEIGHT tags.
 
-                if (   $conversion_enable{'BIOSET:generate the new files'}
+                if (   LstTidy::Options::isConversionActive('BIOSET:generate the new files')
                 && $filetype            eq 'RACE'
                 && $line_info->[0] eq 'RACE'
                 && (   exists $line_ref->{'AGE'}
@@ -12965,7 +12657,7 @@ BEGIN {
                 # [ 653596 ] Add a TYPE tag for all SPELLs
                 # .
 
-                if (   $conversion_enable{'SPELL:Add TYPE tags'}
+                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
                 && exists $line_ref->{'SPELLTYPE'}
                 && $filetype            eq 'CLASS'
                 && $line_info->[0] eq 'CLASS'
@@ -12986,7 +12678,7 @@ BEGIN {
                 }
                 }
 
-                if (   $conversion_enable{'SPELL:Add TYPE tags'}
+                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
                 && $filetype                    eq 'SPELL'
                 && $line_info->{Linetype} eq 'SPELL' )
                 {
@@ -13004,7 +12696,7 @@ BEGIN {
                 #
                 # Only the first SOURCE line found is replaced.
 
-                if (   $conversion_enable{'SOURCE line replacement'}
+                if (   LstTidy::Options::isConversionActive('SOURCE line replacement')
                 && defined $line_info
                 && $line_info->[0] eq 'SOURCE'
                 && $source_curent_file ne $file_for_error )
@@ -13025,8 +12717,8 @@ BEGIN {
 
                         $line_info->[1] = \%line_tokens;
                 }
-                elsif ( $file_for_error =~ / \A $cl_options{input_path} /xmsi ) {
-                        # We give this notice only if the curent file is under $cl_options{input_path}.
+                elsif ( $file_for_error =~ / \A $cl_options{inputpath} /xmsi ) {
+                        # We give this notice only if the curent file is under getOption('inputpath').
                         # If -basepath is used, there could be files loaded outside of the -inputpath
                         # without their PCC.
                         $logging->ewarn( NOTICE, "No PCC source information found", $file_for_error, $line_for_error );
@@ -13038,7 +12730,7 @@ BEGIN {
                 # Export each file name and log them with the filename and the
                 # line number
 
-                if ( $conversion_enable{'Export lists'} ) {
+                if ( LstTidy::Options::isConversionActive('Export lists') ) {
                 my $filename = $file_for_error;
                 $filename =~ tr{/}{\\};
 
@@ -13145,7 +12837,7 @@ BEGIN {
                 ######################## Conversion ########################
                 # We manipulate the tags for the line here
 
-                if ( $conversion_enable{'Generate BONUS and PRExxx report'} ) {
+                if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
                 for my $tag_type ( sort keys %$line_ref ) {
                         if ( $tag_type =~ /^BONUS|^!?PRE/ ) {
                                 $bonus_prexxx_tag_report{$filetype}{$_} = 1 for ( @{ $line_ref->{$tag_type} } );
@@ -13195,7 +12887,7 @@ BEGIN {
                 # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
                 #
 
-#  if($conversion_enable{'CLASS: SPELLLIST from Spell.MOD'})
+#  if(LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
 #  {
 #       if($filetype eq 'SPELL')
 #       {
@@ -13262,7 +12954,7 @@ BEGIN {
                 # with multiple lines (for clarity) and then want them formatted
                 # properly for submission.
 
-                if ( $conversion_enable{'ALL:Multiple lines to one'} ) {
+                if ( LstTidy::Options::isConversionActive('ALL:Multiple lines to one') ) {
                 my %valid_line_type = (
                         'RACE'  => 1,
                         'TEMPLATE' => 1,
@@ -13388,7 +13080,7 @@ BEGIN {
                 #   '000ClassSpellLevel',
                 #   '001ClassSpells'
 
-                if ( $conversion_enable{'CLASSSPELL convertion to SPELL'} ) {
+                if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
                 if ( $filetype eq 'CLASSSPELL' ) {
 
                         # Here we will put aside all the CLASSSPELL that
@@ -13615,7 +13307,7 @@ BEGIN {
                 #
                 # 2003.07.11: a fourth line was added for the SPELL related tags
 
-                if (   $conversion_enable{'CLASS:Four lines'}
+                if (   LstTidy::Options::isConversionActive('CLASS:Four lines')
                 && $filetype eq 'CLASS' )
                 {
                 my $last_main_line = -1;
@@ -13785,7 +13477,7 @@ BEGIN {
                                 # that have a SPELLTYPE tag except if there is also an
                                 # ITEMCREATE tag present.
 
-                                if (   $conversion_enable{'CLASS:CASTERLEVEL for all casters'}
+                                if (   LstTidy::Options::isConversionActive('CLASS:CASTERLEVEL for all casters')
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
@@ -13865,7 +13557,7 @@ BEGIN {
                 # directory, entries with class name.MOD must be generated
                 # at the end of the first CLASS file in the same directory.
 
-                if ( $conversion_enable{'CLASSSKILL convertion to CLASS'} ) {
+                if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS') ) {
                 if ( $filetype eq 'CLASSSKILL' ) {
 
                         # Here we will put aside all the CLASSSKILL that
@@ -14158,7 +13850,7 @@ sub get_header {
                 || $tagheader{default}{$tag_name}
                 || $tag_name;
 
-        if ( $cl_options{missing_header} && $tag_name eq $header ) {
+        if ( getOption('missingheader') && $tag_name eq $header ) {
                 $missing_headers{$line_type}{$header}++;
         }
 
@@ -14308,13 +14000,13 @@ sub embedded_coma_split {
                 if ( scalar @system_files == 0 ) {
                 $logging->ewarn ( ERROR,
                         qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
-                        $cl_options{system_path}
+                        getOption('systempath')
                 );
                 }
 
                 # We only keep the files that correspond to the selected
                 # game mode
-                if ($cl_options{gamemode}) {
+                if (getOption('gamemode')) {
                 @system_files
                         = grep { m{ \A $system_file_path
                                         [/] gameModes
@@ -14328,7 +14020,7 @@ sub embedded_coma_split {
                 if ( scalar @system_files == 0 ) {
                 $logging->ewarn ( ERROR,
                         qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/$cl_options{gamemode}/ directory},
-                        $cl_options{system_path}
+                        getOption('systempath')
                 );
                 }
 
@@ -14426,13 +14118,13 @@ sub embedded_coma_split {
                 }
 
                 # If the -exportlist option was used, we generate a system.csv file
-                if ( $cl_options{exportlist} ) {
+                if ( getOption('exportlist') ) {
 
                 open my $csv_file, '>', 'system.csv';
 
                 print {$csv_file} qq{"System Directory","$original_system_file_path"\n};
 
-                if ( $cl_options{gamemode} ) {
+                if ( getOption('gamemode') ) {
                         print {$csv_file} qq{"Game Mode Selected","$cl_options{gamemode}"\n};
                 }
                 print {$csv_file} qq{\n};
@@ -14630,7 +14322,7 @@ sub warn_deprecate {
                 sub generate_bioset_files {
                 for my $dir ( sort keys %RecordedBiosetTags ) {
                         my $filename = $dir . '/biosettings.lst';
-                        $filename =~ s/$cl_options{input_path}/$cl_options{output_path}/i;
+                        $filename =~ s/$cl_options{inputpath}/$cl_options{outputpath}/i;
 
                         open my $bioset_fh, '>', $filename;
 
@@ -14987,10 +14679,10 @@ sub new
    sub ewarn
 {
                 my $self = shift;
-                my ( $warning_level, $message, $file_name, $line_number ) = ( @_, undef );
+                my ( $warninglevel, $message, $file_name, $line_number ) = ( @_, undef );
 
                 # Verify if warning level should be displayed
-                return if ( $self->{warning_level} < $warning_level );
+                return if ( $self->{warninglevel} < $warninglevel );
 
                 # Print the header if needed
                 if ($_is_first_error)
@@ -15015,12 +14707,12 @@ sub new
                 # We display the line number if there is one (optional parameter)
                 if ( defined $line_number )
                 {
-                warn $self->getWarning($warning_level)
+                warn $self->getWarning($warninglevel)
                         . "(Line $line_number): $message";
                 }
                 else
                 {
-                warn $self->getWarning($warning_level)
+                warn $self->getWarning($warninglevel)
                         . "$message";
                 }
 
@@ -15508,10 +15200,10 @@ PCGEN. This only changes the path values in the .PCC, the files stay in the dire
 
 =back
 
-=head2 B<-old_source_tag>
+=head2 B<-oldsourcetag>
 
 From PCGen version 5.9.6, there is a new format for the SOURCExxx tag that use the tab instead of the |. prettylst.pl
-automatically converts the SOURCExxx tags to the new format. The B<-old_source_tag> option must be used if
+automatically converts the SOURCExxx tags to the new format. The B<-oldsourcetag> option must be used if
 you want to keep the old format in place.
 
 =head2 B<-report> or B<-r>
@@ -16088,7 +15780,7 @@ Filter out the Subversion system directories
 
 The SOURCExxx tags are now separated by tabs instead of |
 
-The -old_source_tag option has been added to use | instead of tab in the SOURCExxx lines
+The -oldsourcetag option has been added to use | instead of tab in the SOURCExxx lines
 
 Implemented a "fix" for the /../ in directories
 

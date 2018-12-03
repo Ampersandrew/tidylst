@@ -10,7 +10,7 @@ use Exporter qw(import);
 
 our (@ISA, @EXPORT_OK);
 
-@EXPORT_OK = qw(getOption setOption);
+@EXPORT_OK = qw(getOption setOption isConversionActive);
 
 # Default command line options
 our (%clOptions, %activate, %conversionEnabled, %numeric_warning_level);
