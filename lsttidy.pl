@@ -1,16 +1,15 @@
 #!/usr/bin/perl
 
-use 5.008_001;                          # Perl 5.8.1 or better is now mandantory
 use strict;
 use warnings;
 use Fatal qw( open close );             # Force some built-ins to die on error
 use English qw( -no_match_vars );       # No more funky punctuation variables
 
-my $VERSION             = "6.06.00";
-my $VERSION_DATE        = "2015-12-15";
-my ($PROGRAM_NAME)      = "PCGen PrettyLST";
-my ($SCRIPTNAME)        = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
-my $VERSION_LONG        = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
+my $VERSION        = "1.00.00";
+my $VERSION_DATE   = "2018-12-2";
+my ($PROGRAM_NAME) = "PCGen LstTidy";
+my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
+my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
 
 my $today = localtime;
 our $logging;
@@ -18,11 +17,10 @@ our $logging;
 use Carp;
 use Getopt::Long;
 use FileHandle;
-use Pod::Html   ();     # We do not import any function for
-use Pod::Text   ();     # the modules other than "system" modules
-use Pod::Usage  ();
-use Data::Dumper        ();
-use File::Find  ();
+use Pod::Html    ();     # We do not import any function for
+use Pod::Text    ();     # the modules other than "system" modules
+use Pod::Usage   ();
+use File::Find   ();
 use File::Basename ();
 use Text::Balanced ();
 
@@ -69,41 +67,6 @@ my %filehandle_for;
 print STDERR "$VERSION_LONG\n";
 
 
-# The file type that will be rewritten.
-my %writefiletype = (
-        'ABILITY'       => 1,
-        'ABILITYCATEGORY' => 1, # Not sure how we want to do this, so leaving off the list for now. - Tir Gwaith
-        'BIOSET'                => 1,
-        'CLASS'         => 1,
-        'CLASS Level'   => 1,
-        'COMPANIONMOD'  => 1,
-        'COPYRIGHT'             => 0,
-        'COVER'         => 0,
-        'DEITY'         => 1,
-        'DOMAIN'                => 1,
-        'EQUIPMENT'             => 1,
-        'EQUIPMOD'              => 1,
-        'FEAT'          => 1,
-        'KIT',          => 1,
-        'LANGUAGE'              => 1,
-        'LSTEXCLUDE'    => 0,
-        'INFOTEXT'              => 0,
-        'PCC'                   => 1,
-        'RACE'          => 1,
-        'SKILL'         => 1,
-        'SPELL'         => 1,
-        'TEMPLATE'              => 1,
-        'WEAPONPROF'    => 1,
-        'ARMORPROF'             => 1,
-        'SHIELDPROF'    => 1,
-        '#EXTRAFILE'    => 0,
-        'VARIABLE'              => 1,
-        'DATACONTROL'           => 1,
-        'GLOBALMOD'             => 1,
-        'SAVE'          => 1,
-        'STAT'          => 1,
-        'ALIGNMENT'             => 1,
-);
 
 # The active conversions
 my %conversion_enable =
@@ -4720,8 +4683,6 @@ INIT {
    
    # At this point everything is compiled, so we can pass a sub ref to
    # a helper module.
-   
-
 
    LstTidy::Parse::setParseRoutine(\&FILETYPE_parse);
 
@@ -5190,7 +5151,7 @@ if ($cl_options{input_path}) {
                 }
 
                 # Do we copy the .PCC???
-                if ( $cl_options{output_path} && ( $must_write ) && $writefiletype{"PCC"} ) {
+                if ( $cl_options{output_path} && ( $must_write ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
                         my $new_pcc_file = $pcc_file_name;
                         $new_pcc_file =~ s/$cl_options{input_path}/$cl_options{output_path}/i;
 
@@ -5424,7 +5385,7 @@ for my $file (@files_to_parse_sorted) {
                 # Some file types are never written
                 warn "SKIP rewrite for $file because it is a multi-line file" if $filetype eq 'multi-line';
                 next FILE_TO_PARSE if $filetype eq 'multi-line';                # we still need to implement rewriting for multi-line
-                next FILE_TO_PARSE if !$writefiletype{ $files_to_parse{$file} };
+                next FILE_TO_PARSE if ! LstTidy::Parse::isWriteableFileType( $files_to_parse{$file} );
 
                 # We compare the result with the orginal file.
                 # If there are no modification, we do not create the new files
@@ -6288,7 +6249,7 @@ sub FILETYPE_parse {
         # Phase II - Reformating the lines
 
         # No reformating needed?
-        return $lines_ref unless $cl_options{output_path} && $writefiletype{$file_type};
+        return $lines_ref unless $cl_options{output_path} && LstTidy::Parse::isWriteableFileType($file_type);
 
         # Now on to all the non header lines.
         CORE_LINE:

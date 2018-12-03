@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 35;
+use Test::More tests => 37;
 
 use_ok ('LstTidy::Parse');
 
@@ -58,5 +58,8 @@ for my $type ( keys %enabled ) {
    }
 
 }
+
+is(LstTidy::Parse::isWriteableFileType('ABILITY'), 1, "Ability files are writeable");
+is(LstTidy::Parse::isWriteableFileType('COPYRIGHT'), 0, "Copyright files are not writeable");
 
 
