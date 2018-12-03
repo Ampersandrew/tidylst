@@ -115,63 +115,7 @@ if (getOption('outputerror')) {
 }
 
 
-# List of default for values defined in system files
-my @valid_system_alignments = qw(LG LN LE NG TN NE CG CN CE NONE Deity);
-
-my @valid_system_check_names = qw(Fortitude Reflex Will);
-
-my @valid_system_game_modes  = ( 
-   # Main PCGen Release
-   qw(35e 3e Deadlands Darwins_World_2 FantasyCraft Gaslight Killshot LoE Modern
-   Pathfinder Sidewinder Spycraft Xcrawl OSRIC),
-   
-   # Third Party/Homebrew Support
-   qw(DnD CMP_D20_Fantasy_v30e CMP_D20_Fantasy_v35e CMP_D20_Fantasy_v35e_Kalamar
-   CMP_D20_Modern CMP_DnD_Blackmoor CMP_DnD_Dragonlance CMP_DnD_Eberron
-   CMP_DnD_Forgotten_Realms_v30e CMP_DnD_Forgotten_Realms_v35e
-   CMP_DnD_Oriental_Adventures_v30e CMP_DnD_Oriental_Adventures_v35e CMP_HARP
-   SovereignStoneD20) );
-
-# This meeds replaced, we should be getting this information from the STATS file.
-my @valid_system_stats          = qw(
-   STR DEX CON INT WIS CHA NOB FAM PFM
-   
-   DVR WEA AGI QUI SDI REA INS PRE
-);
-
-my @valid_system_var_names      = qw(
-   ACTIONDICE                    ACTIONDIEBONUS          ACTIONDIETYPE
-   Action                        ActionLVL               BUDGETPOINTS
-   CURRENTVEHICLEMODS            ClassDefense            DamageThreshold
-   EDUCATION                     EDUCATIONMISC           FAVORCHECK
-   FIGHTINGDEFENSIVELYAC         FightingDefensivelyAC   FightingDefensivelyACBonus
-   GADGETPOINTS                  INITCOMP                INSPIRATION
-   INSPIRATIONMISC               LOADSCORE               MAXLEVELSTAT
-   MAXVEHICLEMODS                MISSIONBUDGET           MUSCLE
-   MXDXEN                        NATIVELANGUAGES         NORMALMOUNT
-   OFFHANDLIGHTBONUS             PSIONLEVEL              Reputation
-   TWOHANDDAMAGEDIVISOR          TotalDefenseAC          TotalDefenseACBonus
-   UseAlternateDamage            VEHICLECRUISINGMPH      VEHICLEDEFENSE
-   VEHICLEHANDLING               VEHICLEHARDNESS         VEHICLESPEED
-   VEHICLETOPMPH                 VEHICLEWOUNDPOINTS      Wealth
-   CR                            CL                      ECL
-   SynergyBonus                  NoTypeProficiencies     NormalMount
-   CHOICE                        BAB                     NormalFollower
-
-   Action                        ActionLVL               ArmorQui
-   ClassDefense                  DamageThreshold         DenseMuscle
-   FIGHTINGDEFENSIVELYACBONUS    Giantism                INITCOMP
-   LOADSCORE                     MAXLEVELSTAT            MUSCLE
-   MXDXEN                        Mount                   OFFHANDLIGHTBONUS
-   TOTALDEFENSEACBONUS           TWOHANDDAMAGEDIVISOR
-
-   ACCHECK                       ARMORACCHECK            BASESPELLSTAT
-   CASTERLEVEL                   INITIATIVEMISC          INITIATIVEMOD
-   MOVEBASE                      SHIELDACCHECK           SIZE
-   SKILLRANK                     SKILLTOTAL              SPELLFAILURE
-   SR                            TL                      LIST
-   MASTERVAR                     APPLIEDAS
-);
+LstTidy::Reformat::addTagsForConversions(); 
 
 #####################################
 # -systempath option
@@ -180,46 +124,14 @@ my @valid_system_var_names      = qw(
 # generate the "game mode" variables.
 
 if ( getOption('systempath') ne q{} ) {
-   parse_system_files(getOption('systempath'));
+   LstTidy::Parse::parse_system_files(getOption('systempath'), $log);
 }
 
-# Valid check name
-my %valid_check_name = map { $_ => 1} @valid_system_check_names, '%LIST', '%CHOICE';
+# Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
+my @valid_system_alignments  = LstTidy::Parse::getValidSystemArr('alignments');
+my @valid_system_stats       = LstTidy::Parse::getValidSystemArr('stats');
+my @valid_system_var_names   = LstTidy::Parse::getValidSystemArr('vars');
 
-# Valid game type (for the .PCC files)
-my %valid_game_modes = map { $_ => 1 } (
-   @valid_system_game_modes,
-
-   # CMP game modes
-   'CMP_OGL_Arcana_Unearthed',
-   'CMP_DnD_Blackmoor',
-   'CMP_DnD_Dragonlance',
-   'CMP_DnD_Eberron',
-   'CMP_DnD_Forgotten_Realms_v30e',
-   'CMP_DnD_Forgotten_Realms_v35e',
-   'CMP_HARP',
-   'CMP_D20_Modern',
-   'CMP_DnD_Oriental_Adventures_v30e',
-   'CMP_DnD_Oriental_Adventures_v35e',
-   'CMP_D20_Fantasy_v30e',
-   'CMP_D20_Fantasy_v35e',
-   'CMP_D20_Fantasy_v35e_Kalamar',
-   'DnD_v3.5e_VPWP',
-   'CMP_D20_Fantasy_v35e_VPWP',
-   '4e',
-   '5e',
-   'DnDNext',
-   'AE',
-   'Arcana_Evolved',
-   'Dragon_Age',
-   'MC_WoD',
-   'MutantsAndMasterminds3e',
-   'Starwars_SE',
-   'SWSE',
-   'Starwars_Edge',
-   'T20',
-   'Traveller20',
-);
 
 
 # Limited choice tags
@@ -276,26 +188,28 @@ my %tag_proper_value_for = (
 #####################################
 # Diplay usage information
 
-if ( getOption('help') or $Getopt::Long::error ) {
-        Pod::Usage::pod2usage(
-                {   -msg        => $error_message,
-                -exitval => 1,
-                -output  => \*STDERR
-                }
-        );
-        exit;
+if ( getOption('help') or $LstTidy::Options::error ) {
+   Pod::Usage::pod2usage(
+      {   
+         -msg     => $error_message,
+         -exitval => 1,
+         -output  => \*STDERR
+      }
+   );
+   exit;
 }
 
 #####################################
 # Display the man page
 
 if (getOption('man')) {
-        Pod::Usage::pod2usage(
-                {   -msg        => $error_message,
-                -verbose => 2,
-                -output  => \*STDERR
-                }
-        );
+   Pod::Usage::pod2usage(
+      {
+         -msg     => $error_message,
+         -verbose => 2,
+         -output  => \*STDERR
+      }
+   );
    exit;
 }
 
@@ -303,79 +217,79 @@ if (getOption('man')) {
 # Generate the HTML man page and display it
 
 if ( getOption('htmlhelp') ) {
-        if( !-e "$PROGRAM_NAME.css" ) {
-                generate_css("$PROGRAM_NAME.css");
-        }
+   if( !-e "$PROGRAM_NAME.css" ) {
+      generate_css("$PROGRAM_NAME.css");
+   }
 
-        Pod::Html::pod2html(
-                "--infile=$PROGRAM_NAME",
-                "--outfile=$PROGRAM_NAME.html",
-                "--css=$PROGRAM_NAME.css",
-                "--title=$PROGRAM_NAME -- Reformat the PCGEN .lst files",
-                '--header',
-        );
+   Pod::Html::pod2html(
+      "--infile=$PROGRAM_NAME",
+      "--outfile=$PROGRAM_NAME.html",
+      "--css=$PROGRAM_NAME.css",
+      "--title=$PROGRAM_NAME -- Reformat the PCGEN .lst files",
+      '--header',
+   );
 
-        `start /max $PROGRAM_NAME.html`;
+   `start /max $PROGRAM_NAME.html`;
 
-        exit;
+   exit;
 }
 
-my %source_tags                 = ()    if LstTidy::Options::isConversionActive('SOURCE line replacement');
-my $source_curent_file          = q{}   if LstTidy::Options::isConversionActive('SOURCE line replacement');
+my %source_tags        = ()  if LstTidy::Options::isConversionActive('SOURCE line replacement');
+my $source_curent_file = q{} if LstTidy::Options::isConversionActive('SOURCE line replacement');
 
-my %classskill_files            = ()    if LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS');
+my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS');
 
-my %classspell_files            = ()    if LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL');
+my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL');
 
-my %class_files                 = ()    if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
-my %class_spelltypes            = ()    if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
+my %class_files        = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
+my %class_spelltypes   = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
 
-my %Spells_For_EQMOD            = ()    if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
-my %Spell_Files                 = ()    if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                                                        || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
+my %Spells_For_EQMOD   = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
+my %Spell_Files        = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
+                                || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
 
-my %bonus_prexxx_tag_report     = ()    if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
+my %bonus_prexxx_tag_report = ()  if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
 
 my %PREALIGN_conversion_5715 = qw(
-        0       LG
-        1       LN
-        2       LE
-        3       NG
-        4       TN
-        5       NE
-        6       CG
-        7       CN
-        8       CE
-        9       NONE
-        10      Deity
+   0   LG
+   1   LN
+   2   LE
+   3   NG
+   4   TN
+   5   NE
+   6   CG
+   7   CN
+   8   CE
+   9   NONE
+   10  Deity
 ) if LstTidy::Options::isConversionActive('ALL:PREALIGN conversion');
 
 my %Key_conversion_56 = qw(
         BIND            BLIND
 ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
-#       ABENHABON               BNS_ENHC_AB
+#       ABENHABON       BNS_ENHC_AB
 #       ABILITYMINUS    BNS_ENHC_AB
-#       ABILITYPLUS             BNS_ENHC_AB
-#       ACDEFLBON               BNS_AC_DEFL
-#       ACENHABON               BNS_ENHC_AC
-#       ACINSIBON               BNS_AC_INSI
-#       ACLUCKBON               BNS_AC_LUCK
-#       ACOTHEBON               BNS_AC_OTHE
-#       ACPROFBON               BNS_AC_PROF
-#       ACSACRBON               BNS_AC_SCRD
+#       ABILITYPLUS     BNS_ENHC_AB
+#       ACDEFLBON       BNS_AC_DEFL
+#       ACENHABON       BNS_ENHC_AC
+#       ACINSIBON       BNS_AC_INSI
+#       ACLUCKBON       BNS_AC_LUCK
+#       ACOTHEBON       BNS_AC_OTHE
+#       ACPROFBON       BNS_AC_PROF
+#       ACSACRBON       BNS_AC_SCRD
 #       ADAARH          ADAM
 #       ADAARH          ADAM
 #       ADAARL          ADAM
 #       ADAARM          ADAM
-#       ADAWE                   ADAM
+#       ADAWE           ADAM
 #       AMINAT          ANMATD
 #       AMMO+1          PLUS1W
 #       AMMO+2          PLUS2W
 #       AMMO+3          PLUS3W
 #       AMMO+4          PLUS4W
 #       AMMO+5          PLUS5W
-#       AMMODARK                DARK
-#       AMMOSLVR                SLVR
+#       AMMODARK        DARK
+#       AMMOSLVR        SLVR
 #       ARFORH          FRT_HVY
 #       ARFORL          FRT_LGHT
 #       ARFORM          FRT_MOD
@@ -388,70 +302,70 @@ my %Key_conversion_56 = qw(
 #       ARMR+3          PLUS3A
 #       ARMR+4          PLUS4A
 #       ARMR+5          PLUS5A
-#       ARMRADMH                ADAM
-#       ARMRADML                ADAM
-#       ARMRADMM                ADAM
-#       ARMRMITH                MTHRL
-#       ARMRMITL                MTHRL
-#       ARMRMITM                MTHRL
+#       ARMRADMH        ADAM
+#       ARMRADML        ADAM
+#       ARMRADMM        ADAM
+#       ARMRMITH        MTHRL
+#       ARMRMITL        MTHRL
+#       ARMRMITM        MTHRL
 #       ARWCAT          ARW_CAT
 #       ARWDEF          ARW_DEF
-#       BANEA                   BANE_A
-#       BANEM                   BANE_M
-#       BANER                   BANE_R
-#       BASHH                   BASH_H
-#       BASHL                   BASH_L
-#       BIND                    BLIND
-#       BONSPELL                BNS_SPELL
-#       BONUSSPELL              BNS_SPELL
+#       BANEA           BANE_A
+#       BANEM           BANE_M
+#       BANER           BANE_R
+#       BASHH           BASH_H
+#       BASHL           BASH_L
+#       BIND            BLIND
+#       BONSPELL        BNS_SPELL
+#       BONUSSPELL      BNS_SPELL
 #       BRIENAI         BRI_EN_A
 #       BRIENM          BRI_EN_M
 #       BRIENT          BRI_EN_T
 #       CHAOSA          CHAOS_A
 #       CHAOSM          CHAOS_M
 #       CHAOSR          CHAOS_R
-#       CLDIRNAI                CIRON
+#       CLDIRNAI        CIRON
 #       CLDIRNW         CIRON
 #       DAGSLVR         SLVR
 #       DEFLECTBONUS    BNS_AC_DEFL
 #       DRGNAR          DRACO
 #       DRGNSH          DRACO
 #       DRKAMI          DARK
-#       DRKSH                   DARK
-#       DRKWE                   DARK
+#       DRKSH           DARK
+#       DRKWE           DARK
 #       ENBURM          EN_BUR_M
 #       ENBURR          EN_BUR_R
 #       ENERGM          ENERG_M
 #       ENERGR          ENERG_R
-#       FLAMA                   FLM_A
-#       FLAMM                   FLM_M
-#       FLAMR                   FLM_R
+#       FLAMA           FLM_A
+#       FLAMM           FLM_M
+#       FLAMR           FLM_R
 #       FLBURA          FLM_BR_A
 #       FLBURM          FLM_BR_M
 #       FLBURR          FLM_BR_R
-#       FROSA                   FROST_A
-#       FROSM                   FROST_M
-#       FROSR                   FROST_R
+#       FROSA           FROST_A
+#       FROSM           FROST_M
+#       FROSR           FROST_R
 #       GHTOUA          GHOST_A
 #       GHTOUAM         GHOST_AM
 #       GHTOUM          GHOST_M
 #       GHTOUR          GHOST_R
-#       HCLDIRNW                CIRON/2
-#       HOLYA                   HOLY_A
-#       HOLYM                   HOLY_M
-#       HOLYR                   HOLY_R
+#       HCLDIRNW        CIRON/2
+#       HOLYA           HOLY_A
+#       HOLYM           HOLY_M
+#       HOLYR           HOLY_R
 #       ICBURA          ICE_BR_A
 #       ICBURM          ICE_BR_M
 #       ICBURR          ICE_BR_R
-#       LAWA                    LAW_A
-#       LAWM                    LAW_M
-#       LAWR                    LAW_R
-#       LUCKBONUS               BNS_SAV_LUC
-#       LUCKBONUS2              BNS_SKL_LCK
-#       MERCA                   MERC_A
-#       MERCM                   MERC_M
-#       MERCR                   MERC_R
-#       MICLE                   MI_CLE
+#       LAWA            LAW_A
+#       LAWM            LAW_M
+#       LAWR            LAW_R
+#       LUCKBONUS       BNS_SAV_LUC
+#       LUCKBONUS2      BNS_SKL_LCK
+#       MERCA           MERC_A
+#       MERCM           MERC_M
+#       MERCR           MERC_R
+#       MICLE           MI_CLE
 #       MITHAMI         MTHRL
 #       MITHARH         MTHRL
 #       MITHARL         MTHRL
@@ -462,65 +376,65 @@ my %Key_conversion_56 = qw(
 #       NATENHA         BNS_ENHC_NAT
 #       NATURALARMOR    BNS_ENHC_NAT
 #       PLUS1AM         PLUS1W
-#       PLUS1AMI                PLUS1W
+#       PLUS1AMI        PLUS1W
 #       PLUS1WI         PLUS1W
 #       PLUS2AM         PLUS2W
-#       PLUS2AMI                PLUS2W
+#       PLUS2AMI        PLUS2W
 #       PLUS2WI         PLUS2W
 #       PLUS3AM         PLUS3W
-#       PLUS3AMI                PLUS3W
+#       PLUS3AMI        PLUS3W
 #       PLUS3WI         PLUS3W
 #       PLUS4AM         PLUS4W
-#       PLUS4AMI                PLUS4W
+#       PLUS4AMI        PLUS4W
 #       PLUS4WI         PLUS4W
 #       PLUS5AM         PLUS5W
-#       PLUS5AMI                PLUS5W
+#       PLUS5AMI        PLUS5W
 #       PLUS5WI         PLUS5W
 #       RESIMP          RST_IMP
 #       RESIST          RST_IST
-#       RESISTBONUS             BNS_SAV_RES
-#       SAVINSBON               BNS_SAV_INS
-#       SAVLUCBON               BNS_SAV_LUC
-#       SAVOTHBON               BNS_SAV_OTH
-#       SAVPROBON               BNS_SAV_PRO
-#       SAVRESBON               BNS_SAV_RES
-#       SAVSACBON               BNS_SAV_SAC
+#       RESISTBONUS     BNS_SAV_RES
+#       SAVINSBON       BNS_SAV_INS
+#       SAVLUCBON       BNS_SAV_LUC
+#       SAVOTHBON       BNS_SAV_OTH
+#       SAVPROBON       BNS_SAV_PRO
+#       SAVRESBON       BNS_SAV_RES
+#       SAVSACBON       BNS_SAV_SAC
 #       SE50CST         SPL_CHRG
-#       SECW                    SPL_CMD
-#       SESUCAMA                A_1USEMI
-#       SESUCAME                A_1USEMI
-#       SESUCAMI                A_1USEMI
-#       SESUCDMA                D_1USEMI
-#       SESUCDME                D_1USEMI
-#       SESUCDMI                D_1USEMI
+#       SECW            SPL_CMD
+#       SESUCAMA        A_1USEMI
+#       SESUCAME        A_1USEMI
+#       SESUCAMI        A_1USEMI
+#       SESUCDMA        D_1USEMI
+#       SESUCDME        D_1USEMI
+#       SESUCDMI        D_1USEMI
 #       SESUUA          SPL_1USE
-#       SEUA                    SPL_ACT
-#       SE_1USEACT              SPL_1USE
+#       SEUA            SPL_ACT
+#       SE_1USEACT      SPL_1USE
 #       SE_50TRIGGER    SPL_CHRG
 #       SE_COMMANDWORD  SPL_CMD
-#       SE_USEACT               SPL_ACT
+#       SE_USEACT       SPL_ACT
 #       SHBURA          SHK_BR_A
 #       SHBURM          SHK_BR_M
 #       SHBURR          SHK_BR_R
 #       SHDGRT          SHDW_GRT
 #       SHDIMP          SHDW_IMP
-#       SHDOW                   SHDW
+#       SHDOW           SHDW
 #       SHFORH          FRT_HVY
 #       SHFORL          FRT_LGHT
 #       SHFORM          FRT_MOD
-#       SHLDADAM                ADAM
-#       SHLDDARK                DARK
-#       SHLDMITH                MTHRL
-#       SHOCA                   SHOCK_A
-#       SHOCM                   SHOCK_M
-#       SHOCR                   SHOCK_R
-#       SKILLBONUS              BNS_SKL_CIR
-#       SKILLBONUS2             BNS_SKL_CMP
-#       SKLCOMBON               BNS_SKL_CMP
-#       SLICK                   SLK
+#       SHLDADAM        ADAM
+#       SHLDDARK        DARK
+#       SHLDMITH        MTHRL
+#       SHOCA           SHOCK_A
+#       SHOCM           SHOCK_M
+#       SHOCR           SHOCK_R
+#       SKILLBONUS      BNS_SKL_CIR
+#       SKILLBONUS2     BNS_SKL_CMP
+#       SKLCOMBON       BNS_SKL_CMP
+#       SLICK           SLK
 #       SLKGRT          SLK_GRT
 #       SLKIMP          SLK_IMP
-#       SLMV                    SLNT_MV
+#       SLMV            SLNT_MV
 #       SLMVGRT         SLNT_MV_GRT
 #       SLMVIM          SLNT_MV_IM
 #       SLVRAMI         ALCHM
@@ -529,8 +443,8 @@ my %Key_conversion_56 = qw(
 #       SLVRWEF         ALCHM
 #       SLVRWEH         ALCHM/2
 #       SLVRWEL         ALCHM
-#       SPELLRESI               BNS_SPL_RST
-#       SPELLRESIST             BNS_SPL_RST
+#       SPELLRESI       BNS_SPL_RST
+#       SPELLRESIST     BNS_SPL_RST
 #       SPLRES          SPL_RST
 #       SPLSTR          SPL_STR
 #       THNDRA          THNDR_A
@@ -544,46 +458,46 @@ my %Key_conversion_56 = qw(
 #       WEAP+3          PLUS3W
 #       WEAP+4          PLUS4W
 #       WEAP+5          PLUS5W
-#       WEAPADAM                ADAM
-#       WEAPDARK                DARK
-#       WEAPMITH                MTHRL
-#       WILDA                   WILD_A
-#       WILDS                   WILD_S
+#       WEAPADAM        ADAM
+#       WEAPDARK        DARK
+#       WEAPMITH        MTHRL
+#       WILDA           WILD_A
+#       WILDS           WILD_S
 #       ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
 
 if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
 {
-        my ($old_key,$new_key);
-        while (($old_key,$new_key) = each %Key_conversion_56)
-        {
-                if($old_key eq $new_key) {
-                        print "==> $old_key\n";
-                        delete $Key_conversion_56{$old_key};
-                }
-        }
+   my ($old_key,$new_key);
+   while (($old_key,$new_key) = each %Key_conversion_56)
+   {
+      if($old_key eq $new_key) {
+         print "==> $old_key\n";
+         delete $Key_conversion_56{$old_key};
+      }
+   }
 }
 
 my %srd_weapon_name_convertion_433 = (
-        q{Sword (Great)}                        => q{Greatsword},
-        q{Sword (Long)}                 => q{Longsword},
-        q{Dagger (Venom)}                       => q{Venom Dagger},
-        q{Dagger (Assassin's)}          => q{Assassin's Dagger},
-        q{Mace (Smiting)}                       => q{Mace of Smiting},
-        q{Mace (Terror)}                        => q{Mace of Terror},
-        q{Greataxe (Life-Drinker)}      => q{Life Drinker},
-        q{Rapier (Puncturing)}          => q{Rapier of Puncturing},
-        q{Scimitar (Sylvan)}            => q{Sylvan Scimitar},
-        q{Sword (Flame Tongue)}         => q{Flame Tongue},
-        q{Sword (Planes)}                       => q{Sword of the Planes},
-        q{Sword (Luck Blade)}           => q{Luck Blade},
-        q{Sword (Subtlety)}             => q{Sword of Subtlety},
-        q{Sword (Holy Avenger)}         => q{Holy Avenger},
-        q{Sword (Life Stealing)}        => q{Sword of Life Stealing},
-        q{Sword (Nine Lives Stealer)}   => q{Nine Lives Stealer},
-        q{Sword (Frost Brand)}          => q{Frost Brand},
-        q{Trident (Fish Command)}       => q{Trident of Fish Command},
-        q{Trident (Warning)}            => q{Trident of Warning},
-        q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
+   q{Sword (Great)}                => q{Greatsword},
+   q{Sword (Long)}                 => q{Longsword},
+   q{Dagger (Venom)}               => q{Venom Dagger},
+   q{Dagger (Assassin's)}          => q{Assassin's Dagger},
+   q{Mace (Smiting)}               => q{Mace of Smiting},
+   q{Mace (Terror)}                => q{Mace of Terror},
+   q{Greataxe (Life-Drinker)}      => q{Life Drinker},
+   q{Rapier (Puncturing)}          => q{Rapier of Puncturing},
+   q{Scimitar (Sylvan)}            => q{Sylvan Scimitar},
+   q{Sword (Flame Tongue)}         => q{Flame Tongue},
+   q{Sword (Planes)}               => q{Sword of the Planes},
+   q{Sword (Luck Blade)}           => q{Luck Blade},
+   q{Sword (Subtlety)}             => q{Sword of Subtlety},
+   q{Sword (Holy Avenger)}         => q{Holy Avenger},
+   q{Sword (Life Stealing)}        => q{Sword of Life Stealing},
+   q{Sword (Nine Lives Stealer)}   => q{Nine Lives Stealer},
+   q{Sword (Frost Brand)}          => q{Frost Brand},
+   q{Trident (Fish Command)}       => q{Trident of Fish Command},
+   q{Trident (Warning)}            => q{Trident of Warning},
+   q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
 ) if LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change');
 
 
@@ -627,7 +541,7 @@ if( getOption('oldsourcetag') ) {
 }
 
 # Information needed to parse the line type
-my %master_file_type = (
+my %masterFileType = (
 
         ABILITY => [
                 \%SOURCE_file_type_def,
@@ -1350,9 +1264,8 @@ my @PRE_Tags = (
 
 # Hash used by validate_pre_tag to verify if a PRExxx tag exists
 my %PRE_Tags = (
-        'PREAPPLY'              => 1,   # Only valid when embeded - THIS IS DEPRECATED
-# Uncommenting until conversion for monster kits is done to prevent error messages.
-        'PREDEFAULTMONSTER' => 1,       # Only valid when embeded
+   'PREAPPLY'          => 1,   # Only valid when embeded - THIS IS DEPRECATED
+   'PREDEFAULTMONSTER' => 1,   # Only valid when embeded
 );
 
 for my $pre_tag (@PRE_Tags) {
@@ -1532,1666 +1445,7 @@ my @double_PCC_tags = (
 
 
 # Order for the tags for each line type.
-my %master_order = (
-        'ABILITY' => [
-                '000AbilityName',
-                'KEY',
-                'SORTKEY',
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'CATEGORY',
-                'TYPE:.CLEAR',
-                'TYPE:*',
-                'VISIBLE',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'SPELL:*',
-                'SPELLS:*',
-                'DESCISPI',
-                'DESC:.CLEAR',
-                'DESC:*',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'MOVE',
-                'MOVECLONE',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'UDAM',
-                'UMULT',
-                'ABILITY:*',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FAVOREDCLASS',
-                'ADD:FORCEPOINT',
-                'ADD:LANGUAGE:*',
-                'ADD:SKILL:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:WEAPONPROFS',
-                'ADDSPELLLEVEL',
-                'REMOVE',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'FOLLOWERS',
-                'CHANGEPROF',
-                'COMPANIONLIST:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL',
-                'VISION',
-                'SR',
-                'DR',
-                'REP',
-                'COST',
-                'KIT',
-                @SOURCE_Tags,
-                'NATURALATTACKS',
-                'ASPECT:*',
-                'BENEFIT:*',
-                'TEMPDESC',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS:*',
-                'SPELLLEVEL:DOMAIN:*',
-                'UNENCUMBEREDMOVE',
-                'TEMPBONUS:*',
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'APPLIEDNAME',                  #  Deprecated 6.05.01
-                'SA:.CLEAR',            # Deprecated
-                'SA:*',                         # Deprecated
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-#               'SPELLPOINTCOST:*',
-        ],
-
-        'ABILITYCATEGORY' => [
-                '000AbilityCategory',
-                'VISIBLE',
-                'EDITABLE',
-                'EDITPOOL',
-                'FRACTIONALPOOL',
-                'POOL',
-                'CATEGORY',
-                'TYPE',
-                'ABILITYLIST',
-                'PLURAL',
-                'DISPLAYNAME',
-                'DISPLAYLOCATION',
-        ],
-
-        'ARMORPROF' => [
-                '000ArmorName',
-                'KEY',
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'TYPE',
-                'HANDS',
-                @PRE_Tags,
-                @SOURCE_Tags,
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'SAB:.CLEAR',
-                'SAB:*',
-                'SA:.CLEAR',    # Deprecated
-                'SA:*',                 # Deprecated
-        ],
-
-        'BIOSET AGESET' => [
-                'AGESET',
-                'BONUS:STAT:*',
-        ],
-
-        'BIOSET RACENAME' => [
-                'RACENAME',
-                'CLASS',
-                'SEX',
-                'BASEAGE',
-                'MAXAGE',
-                'AGEDIEROLL',
-                'HAIR',
-                'EYES',
-                'SKINTONE',
-                ],
-
-        'CLASS' => [
-                '000ClassName',
-                'SORTKEY',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'HD',
-                'XTRAFEATS',
-                'SPELLSTAT',
-                'BONUSSPELLSTAT',
-                'FACT:SpellType:*',
-                'SPELLTYPE',
-                'TYPE',
-                'CLASSTYPE',
-                'FACT:Abb:*',
-                'ABB',
-                'MAXLEVEL',
-                'CASTAS',
-                'MEMORIZE',
-                'KNOWNSPELLS',
-                'SPELLBOOK',
-                'HASSUBCLASS',
-                'ALLOWBASECLASS',
-                'HASSUBSTITUTIONLEVEL',
-                'EXCLASS',
-                @SOURCE_Tags,
-                'LANGBONUS:.CLEAR',
-                'LANGBONUS:*',
-                'WEAPONBONUS',
-                'VISION',
-                'SR',
-                'DR',
-                'ATTACKCYCLE',
-                'DEF',
-                'ITEMCREATE',
-                'KNOWNSPELLSFROMSPECIALTY',
-                'PROHIBITED',
-                'PROHIBITSPELL:*',
-                'LEVELSPERFEAT',
-                'ABILITY:*',
-                'VFEAT:*',
-                'MULTIPREREQS',
-                'VISIBLE',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',
-                'CHANGEPROF',
-                'DOMAIN:*',                     # [ 1973526 ] DOMAIN is supported on Class line
-                'ADDDOMAINS:*',
-                'REMOVE',
-                'BONUS:HD:*',           # Class Lines
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'REP:*',
-                'SPELLLIST',
-                'GENDER',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'KIT',
-                'DEITY',
-                @PRE_Tags,
-                'PRERACETYPE',
-                '!PRERACETYPE',
-                'STARTSKILLPTS',
-                'MODTOSKILLS',
-                'SKILLLIST',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'MONSKILL',
-                'MONNONSKILLHD:*',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS',
-                'SPELLLEVEL:DOMAIN',
-                'UNENCUMBEREDMOVE',
-                'TEMPBONUS',
-                'ROLE',
-                'HASSPELLFORMULA',              # [ 1893279 ] HASSPELLFORMULA Class Line tag  # [ 1973497 ] HASSPELLFORMULA is deprecated
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-        ],
-
-        'CLASS Level' => [
-                '000Level',
-                'REPEATLEVEL',
-                'DONOTADD',
-                'UATT',
-                'UDAM',
-                'UMULT',
-                'ADD:SPELLCASTER',
-                'CAST',
-                'KNOWN',
-                'SPECIALTYKNOWN',
-                'KNOWNSPELLS',
-                'PROHIBITSPELL:*',
-                'HITDIE',
-                'MOVE',
-                'VISION',
-                'SR',
-                'DR',
-                'DOMAIN:*',
-                'DEITY',
-                @PRE_Tags,
-                'SAB:.CLEAR',
-                'SAB:*',
-                'BONUS:HD:*',           # Class Lines
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'TEMPDESC',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:LANGUAGE:*',
-                'ADD:TEMPLATE:*',
-                'REMOVE',
-                'LANGBONUS:.CLEAR',
-                'LANGBONUS:*',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'EXCHANGELEVEL',
-                'ABILITY:*',
-                'SPELL',
-                'SPELLS:*',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'KIT',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'CHANGEPROF:*',
-                'ADDDOMAINS',                   # [ 1973660 ] ADDDOMAINS is supported on Class Level lines
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'WEAPONBONUS',
-                'SUBCLASS',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS',
-                'SPELLLEVEL:DOMAIN',
-                'SPELLLIST',
-                'NATURALATTACKS',
-                'UNENCUMBEREDMOVE',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'SPECIALS',                     #  Deprecated 6.05.01
-                'FEAT',                 #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'SA:.CLEAR:*',                  #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-                'FEATAUTO:.CLEAR',      # Deprecated - 6.0
-                'FEATAUTO:*',           # Deprecated - 6.0
-        ],
-
-        'COMPANIONMOD' => [
-                '000Follower',
-                'SORTKEY',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'FOLLOWER',
-                'TYPE',
-                'HD',
-                'DR',
-                'SR',
-                'ABILITY:.CLEAR',
-                'ABILITY:*',
-                'COPYMASTERBAB',
-                'COPYMASTERCHECK',
-                'COPYMASTERHP',
-                'USEMASTERSKILL',
-                'GENDER',
-                'PRERACE',
-                '!PRERACE',
-                'MOVE',
-                'KIT',
-                'AUTO:ARMORPROF:*',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'ADD:LANGUAGE',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'RACETYPE',
-                'SWITCHRACE:*',
-                'TEMPLATE:*',           # [ 2946558 ] TEMPLATE can be used in COMPANIONMOD lines
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'DESC:.CLEAR',
-                'DESC:*',
-                'FEAT:.CLEAR',                  #  Deprecated 6.05.01
-                'FEAT:*',                       #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:FEAT:.CLEAR',                     #  Deprecated 6.05.01
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-        ],
-
-        'DEITY' => [
-                '000DeityName',
-                'SORTKEY',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'DOMAINS:*',
-                'FOLLOWERALIGN',
-                'DESCISPI',
-                'DESC',
-                'FACT:*',
-                'FACTSET:*',
-                'DEITYWEAP',
-                'ALIGN',
-                @SOURCE_Tags,
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'SR',
-                'DR',
-                'AUTO:WEAPONPROF',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'ABILITY:*',
-                'UNENCUMBEREDMOVE',
-                'SYMBOL',                       #  Deprecated 6.05.01
-                'PANTHEON',                     #  Deprecated 6.05.01
-                'TITLE',                        #  Deprecated 6.05.01
-                'WORSHIPPERS',          #  Deprecated 6.05.01
-                'APPEARANCE',                   #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'RACE:*',                       #  Deprecated 6.05.01
-        ],
-
-        'DOMAIN' => [
-                '000DomainName',
-                'SORTKEY',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'SPELL',
-                'SPELLS:*',
-                'VISION',
-                'SR',
-                'DR',
-                'ABILITY:*',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                @SOURCE_Tags,
-                'DESCISPI',
-                'DESC:.CLEAR',
-                'DESC:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:DOMAIN',
-                'UNENCUMBEREDMOVE',
-                'FEAT:*',                       #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'FEATAUTO',                     #  Deprecated
-                'SA:*',         # Deprecated 
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-        ],
-
-        'EQUIPMENT' => [
-                '000EquipmentName',
-                'KEY',
-                'SORTKEY',
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'PROFICIENCY:WEAPON',
-                'PROFICIENCY:ARMOR',
-                'PROFICIENCY:SHIELD',
-                'TYPE:.CLEAR',
-                'TYPE:*',
-                'ALTTYPE',
-                'RESIZE',                       # [ 1956719 ] Add RESIZE tag to Equipment file
-                'CONTAINS',
-                'NUMPAGES',
-                'PAGEUSAGE',
-                'COST',
-                'WT',
-                'SLOTS',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'ACCHECK:*',
-                'BASEITEM',
-                'BASEQTY',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'CRITMULT',
-                'CRITRANGE',
-                'ALTCRITMULT',
-                'ALTCRITRANGE',
-                'FUMBLERANGE',
-                'DAMAGE',
-                'ALTDAMAGE',
-                'EQMOD:*',
-                'ALTEQMOD',
-                'HANDS',
-                'WIELD',
-                'MAXDEX',
-                'MODS',
-                'RANGE',
-                'REACH',
-                'REACHMULT',
-                'SIZE',
-                'MOVE',
-                'MOVECLONE',
-                @SOURCE_Tags,
-                'SPELLFAILURE',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ABILITY:*',
-                'VISION',
-                'SR',
-                'DR',
-                'SPELL:*',
-                'SPELLS:*',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:EQM:*',
-                'BONUS:EQMARMOR:*',
-                'BONUS:EQMWEAPON:*',
-                'BONUS:ESIZE:*',
-                'BONUS:ITEMCOST:*',
-                'BONUS:WEAPON:*',
-                'QUALITY:*',            # [ 1593868 ] New equipment tag "QUALITY"
-                'SPROP:.CLEAR',
-                'SPROP:*',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'UDAM',
-                'UMULT',
-                'AUTO:EQUIP:*',
-                'AUTO:WEAPONPROF:*',
-                'DESC:*',
-                'TEMPDESC',
-                'UNENCUMBEREDMOVE',
-                'ICON',
-                'VFEAT:.CLEAR',                 #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'LANGAUTO:.CLEAR',                      #  Deprecated - replaced by AUTO:LANG
-                'LANGAUTO:*',                   #  Deprecated - replaced by AUTO:LANG
-                'RATEOFFIRE',                   #  Deprecated 6.05.01 - replaced by FACT
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'SA:.CLEAR',            # Deprecated - replaced by SAB
-                'SA:*',                         # Deprecated
-#               'ALTCRITICAL',          # Removed [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT
-        ],
-
-        'EQUIPMOD' => [
-                '000ModifierName',
-                'KEY',
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'FORMATCAT',
-                'NAMEOPT',
-                'TYPE:.CLEAR',
-                'TYPE:*',
-                'PLUS',
-                'COST',
-                'VISIBLE',
-                'ITYPE',
-                'IGNORES',
-                'REPLACES',
-                'COSTPRE',
-                @SOURCE_Tags,
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'ADDPROF',
-                'VISION',
-                'SR',
-                'DR',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:EQM:*',
-                'BONUS:EQMARMOR:*',
-                'BONUS:EQMWEAPON:*',
-                'BONUS:ITEMCOST:*',
-                'BONUS:WEAPON:*',
-                'SPROP:*',
-                'ABILITY',
-                'FUMBLERANGE',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'ARMORTYPE:*',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'ASSIGNTOALL',
-                'CHARGES',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'SPELL',
-                'SPELLS:*',
-                'AUTO:EQUIP:*',
-                'UNENCUMBEREDMOVE',
-                'RATEOFFIRE',                   #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-        ],
-
-# This entire File is being deprecated
-        'FEAT' => [
-                '000FeatName',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'TYPE:.CLEAR',
-                'TYPE',
-                'VISIBLE',
-                'CATEGORY',                     # [ 1671410 ] xcheck CATEGORY:Feat in Feat object.
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'SA:.CLEAR',
-                'SA:*',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'SPELL:*',
-                'SPELLS:*',
-                'DESCISPI',
-                'DESC:.CLEAR',          # [ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
-                'DESC:*',                       # [ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'MOVE',
-                'MOVECLONE',
-                'REMOVE',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'UDAM',
-                'UMULT',
-                'VFEAT:*',
-                'ABILITY:*',
-                'ADD:*',
-                'ADD:.CLEAR',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FAVOREDCLASS',
-                'ADD:FEAT:*',
-                'ADD:FORCEPOINT',
-                'ADD:LANGUAGE:*',
-                'ADD:SKILL',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',
-                'ADD:WEAPONPROFS',
-                'ADDSPELLLEVEL',
-                'APPLIEDNAME',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'CHANGEPROF:*',
-                'FOLLOWERS',
-                'COMPANIONLIST:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL',
-                'VISION',
-                'SR',
-                'DR:.CLEAR',
-                'DR:*',
-                'REP',
-                'COST',
-                'KIT',
-                @SOURCE_Tags,
-                'NATURALATTACKS',
-                'ASPECT:*',
-                'BENEFIT:*',
-                'TEMPDESC',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS:*',
-                'SPELLLEVEL:DOMAIN:*',
-                'UNENCUMBEREDMOVE',
-                'TEMPBONUS',
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-        ],
-
-        'KIT ALIGN' => [
-                'ALIGN',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT CLASS' => [
-                'CLASS',
-                'LEVEL',
-                'SUBCLASS',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT DEITY' => [
-                'DEITY',
-                'DOMAIN',
-                'COUNT',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT FEAT' => [
-                'FEAT',
-                'FREE',
-                'COUNT',
-                'OPTION',
-                @PRE_Tags,
-        ],
-        'KIT ABILITY' => [
-                'ABILITY',
-                'FREE',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT FUNDS' => [
-                'FUNDS',
-                'QTY',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT GEAR' => [
-                'GEAR',
-                'QTY',
-                'SIZE',
-                'MAXCOST',
-                'LOCATION',
-                'EQMOD',
-                'LOOKUP',
-                'LEVEL',
-                'SPROP',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT GENDER' => [
-                'GENDER',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT KIT' => [
-                'KIT',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT LANGBONUS' => [
-                'LANGBONUS',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT LEVELABILITY' => [
-                'LEVELABILITY',
-                'ABILITY',
-                @PRE_Tags,
-        ],
-
-        'KIT NAME' => [
-                'NAME',
-                @PRE_Tags,
-        ],
-
-        'KIT PROF' => [
-                'PROF',
-                'RACIAL',
-                'COUNT',
-                @PRE_Tags,
-        ],
-
-        'KIT RACE' => [
-                'RACE',
-                @PRE_Tags,
-        ],
-
-        'KIT REGION' => [
-                'REGION',
-                @PRE_Tags,
-        ],
-
-        'KIT SELECT' => [
-                'SELECT',
-                @PRE_Tags,
-        ],
-
-        'KIT SKILL' => [
-                'SKILL',
-                'RANK',
-                'FREE',
-                'COUNT',
-                'OPTION',
-                'SELECTION',
-                @PRE_Tags,
-        ],
-
-        'KIT SPELLS' => [
-                'SPELLS',
-                'COUNT',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT STARTPACK' => [
-                'STARTPACK',
-                'TYPE',
-                'VISIBLE',
-                'APPLY',
-                'EQUIPBUY',
-                'EQUIPSELL',
-                @PRE_Tags,
-                'SOURCEPAGE',
-        ],
-
-        'KIT STAT' => [
-                'STAT',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'KIT TABLE' => [
-                'TABLE',
-                'LOOKUP',
-                'VALUES',
-                @PRE_Tags,
-        ],
-
-        'KIT TEMPLATE' => [
-                'TEMPLATE',
-                'OPTION',
-                @PRE_Tags,
-        ],
-
-        'LANGUAGE' => [
-                '000LanguageName',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'TYPE',
-                'SOURCEPAGE',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-        ],
-
-        'MASTERBONUSRACE' => [
-                '000MasterBonusRace',
-                'TYPE',
-                'BONUS:ABILITYPOOL:*',
-                'BONUS:CASTERLEVEL:*',
-                'BONUS:CHECKS:*',
-                'BONUS:COMBAT:*',
-                'BONUS:CONCENTRATION:*',
-                'BONUS:DC:*',
-                'BONUS:FEAT:*',
-                'BONUS:MOVEADD:*',
-                'BONUS:HP:*',
-                'BONUS:MOVEMULT:*',
-                'BONUS:POSTMOVEADD:*',
-                'BONUS:SAVE:*',                         # Global        Replacement for CHECKS
-                'BONUS:SKILL:*',
-                'BONUS:STAT:*',
-                'BONUS:UDAM:*',
-                'BONUS:VAR:*',
-                'ADD:LANGUAGE',
-                'ABILITY:*',                    # [ 2596967 ] ABILITY not recognized for MASTERBONUSRACE
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'SAB:.CLEAR',
-                'SAB:*',
-
-        ],
-
-        'PCC' => [
-                'ALLOWDUPES',
-                'CAMPAIGN',
-                'GAMEMODE',
-                'GENRE',
-                'BOOKTYPE',
-                'KEY',                          # KEY is allowed
-                'PUBNAMELONG',
-                'PUBNAMESHORT',
-                'PUBNAMEWEB',
-                'RANK',
-                'SETTING',
-                'TYPE',
-                'PRECAMPAIGN',
-                '!PRECAMPAIGN',
-                'SHOWINMENU',           # [ 1718370 ] SHOWINMENU tag missing for PCC files
-                'SOURCELONG',
-                'SOURCESHORT',
-                'SOURCEWEB',
-                'SOURCEDATE',           # [ 1584007 ] New Tag: SOURCEDATE in PCC
-                'COVER',
-                'COPYRIGHT',
-                'LOGO',
-                'DESC',
-                'URL',
-                'LICENSE',
-                'HELP',
-                'INFOTEXT',
-                'ISD20',
-                'ISLICENSED',
-                'ISOGL',
-                'ISMATURE',
-                'BIOSET',
-                'HIDETYPE',
-                'COMPANIONLIST',                # [ 1672551 ] PCC tag COMPANIONLIST
-                'REQSKILL',
-                'STATUS',
-                'FORWARDREF',
-                'OPTION',
-
-                # These tags load files
-                'DATACONTROL',
-                'STAT',
-                'SAVE',
-                'ALIGNMENT',
-                'ABILITY',
-                'ABILITYCATEGORY',
-                'ARMORPROF',
-                'CLASS',
-                'CLASSSKILL',
-                'CLASSSPELL',
-                'COMPANIONMOD',
-                'DEITY',
-                'DOMAIN',
-                'EQUIPMENT',
-                'EQUIPMOD',
-                'FEAT',
-                'KIT',
-                'LANGUAGE',
-                'LSTEXCLUDE',
-                'PCC',
-                'RACE',
-                'SHIELDPROF',
-                'SKILL',
-                'SPELL',
-                'TEMPLATE',
-                'WEAPONPROF',
-                '#EXTRAFILE',           # Fix #EXTRAFILE so it recognizes #EXTRAFILE references (so OGL is a known referenced file again.)
-
-                #These tags are normal file global tags....
-                @double_PCC_tags,               #Global tags that are double - $tag does not end with ':'
-        ],
-
-        'RACE' => [
-                '000RaceName',
-                'SORTKEY',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'FAVCLASS',
-                'XTRASKILLPTSPERLVL',
-                'STARTFEATS',
-                'FACT:*',
-                'SIZE',
-                'MOVE',
-                'MOVECLONE',
-                'UNENCUMBEREDMOVE',
-                'FACE',
-                'REACH',
-                'VISION',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'LANGBONUS:.CLEAR',
-                'LANGBONUS:*',
-                'WEAPONBONUS:*',
-                'CHANGEPROF:*',
-                'PROF',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL',
-                'MONCSKILL',
-                'MONCCSKILL',
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'FEAT:*',                       #  Deprecated 6.05.01
-                'ABILITY:*',
-                'MFEAT:*',
-                'LEGS',
-                'HANDS',
-                'GENDER',
-                'NATURALATTACKS:*',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'HITDICE',
-                'SR',
-                'DR:.CLEAR',
-                'DR:*',
-                'SKILLMULT',
-                'BAB',
-                'HITDIE',
-                'MONSTERCLASS',
-                'RACETYPE:.CLEAR',
-                'RACETYPE:*',
-                'RACESUBTYPE:.CLEAR',
-                'RACESUBTYPE:*',
-                'TYPE',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'HITDICEADVANCEMENT',
-                'LEVELADJUSTMENT',
-                'CR',
-                'CRMOD',
-                'ROLE',
-                @SOURCE_Tags,
-                'SPELL:*',
-                'SPELLS:*',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'REGION',
-                'SUBREGION',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS:*',
-                'SPELLLEVEL:DOMAIN:*',
-                'KIT',
-                'SA:.CLEAR',            # Deprecated
-                'SA:*',                         # Deprecated
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-        ],
-
-        'SHIELDPROF' => [
-                '000ShieldName',
-                'KEY',
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'TYPE',
-                'HANDS',
-                @PRE_Tags,
-                @SOURCE_Tags,
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'SAB:.CLEAR',
-                'SAB:*',
-                'SA:.CLEAR',    # Deprecated
-                'SA:*',                 # Deprecated
-        ],
-
-        'SKILL' => [
-                '000SkillName',
-                'SORTKEY',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'KEYSTAT',
-                'USEUNTRAINED',
-                'ACHECK',
-                'EXCLUSIVE',
-                'CLASSES',
-                'TYPE',
-                'VISIBLE',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                'SERVESAS',
-                @SOURCE_Tags,
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'SITUATION',
-                'DEFINE',
-                'DEFINESTAT:*',
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:EQUIP:*',
-                'ABILITY',
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'REQ',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DESC',
-                'TEMPDESC',
-                'TEMPBONUS',
-                'SA:.CLEAR:*',          # Deprecated
-                'SA:*',                         # Deprecated
-        ],
-
-        'SOURCE' => [
-                'SOURCELONG',
-                'SOURCESHORT',
-                'SOURCEWEB',
-                'SOURCEDATE',                   # [ 1584007 ] New Tag: SOURCEDATE in PCC
-        ],
-
-        'SPELL' => [
-                '000SpellName',
-                'SORTKEY',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'TYPE',
-                'CLASSES:.CLEARALL',
-                'CLASSES:*',
-                'DOMAINS',
-                'STAT:*',
-                'PPCOST',
-#               'SPELLPOINTCOST:*',                     # Delay implementing this until SPELLPOINTCOST is documented
-                'SCHOOL:.CLEAR',
-                'SCHOOL:*',
-                'SUBSCHOOL',
-                'DESCRIPTOR:.CLEAR',
-                'DESCRIPTOR:*',
-                'VARIANTS:.CLEAR',
-                'VARIANTS:*',
-                'COMPS',
-                'CASTTIME:.CLEAR',
-                'CASTTIME:*',
-                'RANGE:.CLEAR',
-                'RANGE:*',
-                'ITEM:*',
-                'TARGETAREA:.CLEAR',
-                'TARGETAREA:*',
-                'DURATION:.CLEAR',
-                'DURATION:*',
-                'CT',
-                'SAVEINFO',
-                'SPELLRES',
-                'COST',
-                'XPCOST',
-                @PRE_Tags,
-                'DEFINE',
-                'DEFINESTAT:*',
-#               @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:PPCOST',         # SPELL has a short list of BONUS tags
-                'BONUS:CASTERLEVEL:*',
-                'BONUS:CHECKS',
-                'BONUS:COMBAT:*',
-                'BONUS:DAMAGE:*',
-                'BONUS:DR:*',
-                'BONUS:FEAT:*',
-                'BONUS:HP',
-                'BONUS:MISC:*',
-                'BONUS:MOVEADD',
-                'BONUS:MOVEMULT:*',
-                'BONUS:POSTMOVEADD',
-                'BONUS:RANGEMULT:*',
-                'BONUS:SAVE:*',                         # Global        Replacement for CHECKS
-                'BONUS:SIZEMOD',
-                'BONUS:SKILL:*',
-                'BONUS:STAT:*',
-                'BONUS:UDAM:*',
-                'BONUS:VAR:*',
-                'BONUS:VISION',
-                'BONUS:WEAPON:*',
-                'BONUS:WEAPONPROF:*',
-                'BONUS:WIELDCATEGORY:*',
-                'DR:.CLEAR',
-                'DR:*',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                @SOURCE_Tags,
-                'DESCISPI',
-                'DESC:.CLEAR',
-                'DESC:*',
-                'TEMPDESC',
-                'TEMPBONUS',
-#               'SPELLPOINTCOST:*',
-        ],
-
-        'SUBCLASS' => [
-                '000SubClassName',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'HD',
-#               'ABB',                  #  Invalid for SubClass
-                'COST',
-                'PROHIBITCOST',
-                'CHOICE',
-                'SPELLSTAT',
-                'SPELLTYPE',
-                'LANGAUTO:.CLEAR',                      #  Deprecated 6.05.01
-                'LANGAUTO:*',                   #  Deprecated 6.05.01
-                'LANGBONUS:.CLEAR',
-                'LANGBONUS:*',
-                'BONUS:ABILITYPOOL:*',  # SubClass has a short list of BONUS tags
-                'BONUS:CASTERLEVEL:*',
-                'BONUS:CHECKS:*',
-                'BONUS:COMBAT:*',
-                'BONUS:DC:*',
-                'BONUS:FEAT:*',                 #  Deprecated 6.05.01
-                'BONUS:HD:*',
-                'BONUS:SAVE:*',                         # Global        Replacement for CHECKS
-                'BONUS:SKILL:*',
-                'BONUS:UDAM:*',
-                'BONUS:VAR:*',
-                'BONUS:WEAPON:*',
-                'BONUS:WIELDCATEGORY:*',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'REMOVE',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'SPELLLIST',
-                'KNOWNSPELLSFROMSPECIALTY',
-                'PROHIBITED',
-                'PROHIBITSPELL:*',
-                'STARTSKILLPTS',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE',
-                'DEFINESTAT:*',
-                @PRE_Tags,
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'DOMAIN:*',                     # [ 1973526 ] DOMAIN is supported on Class line
-                'ADDDOMAINS',
-                'UNENCUMBEREDMOVE',
-                @SOURCE_Tags,
-                'SA:.CLEAR:*',          # Deprecated
-                'SA:*',                         # Deprecated
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-        ],
-
-        'SUBSTITUTIONCLASS' => [
-                '000SubstitutionClassName',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-#               'ABB',                  #  Invalid for SubClass
-                'COST',
-                'PROHIBITCOST',
-                'CHOICE',
-                'SPELLSTAT',
-                'SPELLTYPE',
-                'BONUS:ABILITYPOOL:*',  # Substitution Class has a short list of BONUS tags
-                'BONUS:CASTERLEVEL:*',
-                'BONUS:CHECKS:*',
-                'BONUS:COMBAT:*',
-                'BONUS:DC:*',
-                'BONUS:FEAT:*',                 #  Deprecated 6.05.01
-                'BONUS:HD:*',
-                'BONUS:SAVE:*',                         # Global        Replacement for CHECKS
-                'BONUS:SKILL:*',
-                'BONUS:UDAM:*',
-                'BONUS:VAR:*',
-                'BONUS:WEAPON:*',
-                'BONUS:WIELDCATEGORY:*',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:SPELLCASTER:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'REMOVE',
-                'SPELLLIST',
-                'KNOWNSPELLSFROMSPECIALTY',
-                'PROHIBITED',
-                'PROHIBITSPELL:*',
-                'STARTSKILLPTS',
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE',
-                'DEFINESTAT:*',
-                @PRE_Tags,
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'ADDDOMAINS',
-                'UNENCUMBEREDMOVE',
-                @SOURCE_Tags,
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'SA:.CLEAR:*',          # Deprecated
-                'SA:*',                         # Deprecated
-        ],
-
-        'SUBCLASSLEVEL' => [
-                'SUBCLASSLEVEL',
-                'REPEATLEVEL',
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'UATT',
-                'UDAM',
-                'UMULT',
-                'ADD:SPELLCASTER:*',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLLEVEL:CLASS:*',
-                'CAST',
-                'KNOWN',
-                'SPECIALTYKNOWN',
-                'KNOWNSPELLS',
-                'PROHIBITSPELL:*',
-                'VISION',
-                'SR',
-                'DR',
-                'DOMAIN:*',
-                'SA:.CLEAR:*',                  #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'SAB:.CLEAR',
-                'SAB:*',
-                'BONUS:HD:*',           # Class Lines
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'HITDIE',
-                'ABILITY:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'CSKILL:.CLEAR',
-                'CSKILL:*',
-                'CCSKILL:.CLEAR',
-                'CCSKILL:*',
-                'LANGAUTO.CLEAR',       # Deprecated - Remove 6.0
-                'LANGAUTO:*',           # Deprecated - Remove 6.0
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'EXCHANGELEVEL',
-                'SPELLS:*',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'CHANGEPROF:*',
-                'REMOVE',
-                'ADDDOMAINS',
-                'WEAPONBONUS',
-                'FEATAUTO:.CLEAR',                      #  Deprecated 6.05.01
-                'FEATAUTO:*',                   #  Deprecated 6.05.01
-                'SUBCLASS',
-                'SPELLLIST',
-                'NATURALATTACKS',
-                'UNENCUMBEREDMOVE',
-                'SPECIALS',                     # Deprecated
-                'SPELL',                        # Deprecated
-        ],
-
-        'SUBSTITUTIONLEVEL' => [
-                'SUBSTITUTIONLEVEL',
-                'REPEATLEVEL',
-                @QUALIFY_Tags,
-                'SERVESAS',
-                'HD',
-                'STARTSKILLPTS',
-                'UATT',
-                'UDAM',
-                'UMULT',
-                'ADD:SPELLCASTER',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLLEVEL:CLASS:*',
-                'CAST',
-                'KNOWN',
-                'SPECIALTYKNOWN',
-                'KNOWNSPELLS',
-                'PROHIBITSPELL:*',
-                'VISION',
-                'SR',
-                'DR',
-                'DOMAIN',
-                'SA:.CLEAR:*',                  #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'SAB:.CLEAR',
-                'SAB:*',
-                'BONUS:HD:*',           # Class Lines
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUS:WEAPON:*',
-                'HITDIE',
-                'ABILITY:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'EXCHANGELEVEL',
-                'SPECIALS',                     #  Deprecated 6.05.01
-                'SPELL',
-                'SPELLS:*',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'CHANGEPROF:*',
-                'REMOVE',
-                'ADDDOMAINS',
-                'WEAPONBONUS',
-                'FEATAUTO:.CLEAR',                      #  Deprecated 6.05.01
-                'FEATAUTO:*',                   #  Deprecated 6.05.01
-                'SUBCLASS',
-                'SPELLLIST',
-                'NATURALATTACKS',
-                'UNENCUMBEREDMOVE',
-                'LANGAUTO.CLEAR',       # Deprecated - Remove 6.0
-                'LANGAUTO:*',           # Deprecated - Remove 6.0
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-        ],
-
-        'SWITCHRACE' => [
-                'SWITCHRACE',
-        ],
-
-        'TEMPLATE' => [
-                '000TemplateName',
-                'SORTKEY',
-                'KEY',                          # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'HITDIE',
-                'HITDICESIZE',
-                'CR',
-                'SIZE',
-                'FACE',
-                'REACH',
-                'LEGS',
-                'HANDS',
-                'GENDER',
-                'VISIBLE',
-                'REMOVEABLE',
-                'DR:*',
-                'LEVELADJUSTMENT',
-                'TEMPLATE:.CLEAR',
-                'TEMPLATE:*',
-                @SOURCE_Tags,
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-                'SAB:.CLEAR',
-                'SAB:*',
-                'DEFINE:*',
-                'DEFINESTAT:*',
-                'LEVEL:*',
-                @PRE_Tags,
-                @QUALIFY_Tags,
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'BONUSFEATS',           # Template Bonus
-                'BONUS:MONSKILLPTS',    # Template Bonus
-                'BONUSSKILLPOINTS',     # Template Bonus
-                'BONUS:WEAPON:*',
-                'NONPP',
-                'STACK',
-                'MULT',
-                'CHOOSE',
-                'SELECT',
-                'CSKILL:.CLEAR',
-                'CSKILL',
-                'CCSKILL:.CLEAR',
-                'CCSKILL',
-                'ADD:.CLEAR',
-                'ADD:*',
-                'ADD:ABILITY:*',
-                'ADD:CLASSSKILLS',
-                'ADD:EQUIP:*',
-                'ADD:FEAT:*',                   #  Deprecated 6.05.01
-                'ADD:LANGUAGE:*',
-                'ADD:TEMPLATE:*',
-                'ADD:VFEAT:*',                  #  Deprecated 6.05.01
-                'FAVOREDCLASS',
-                'ABILITY:*',
-                'FEAT:*',                       #  Deprecated 6.05.01
-                'VFEAT:*',                      #  Deprecated 6.05.01
-                'AUTO:ARMORPROF:*',
-                'AUTO:EQUIP:*',
-                'AUTO:FEAT:*',                  #  Deprecated 6.05.01
-                'AUTO:LANG:*',
-                'AUTO:SHIELDPROF:*',
-                'AUTO:WEAPONPROF:*',
-                'REMOVE:*',
-                'CHANGEPROF:*',
-                'KIT',
-                'LANGBONUS:.CLEAR',
-                'LANGBONUS:*',
-                'MOVE',
-                'MOVEA',                        #  Deprecated 6.05.01
-                'MOVECLONE',
-                'REGION',
-                'SUBREGION',
-                'REMOVABLE',
-                'SR:*',
-                'SUBRACE',
-                'RACETYPE',
-                'RACESUBTYPE:.REMOVE',
-                'RACESUBTYPE:*',
-                'TYPE',
-                'ADDLEVEL',
-                'VISION',
-                'HD:*',
-                'WEAPONBONUS',
-                'GENDERLOCK',
-                'SPELLS:*',
-                'SPELLKNOWN:CLASS:*',
-                'SPELLKNOWN:DOMAIN:*',
-                'SPELLLEVEL:CLASS:*',
-                'SPELLLEVEL:DOMAIN:*',
-                'ADD:SPELLCASTER',
-                'NATURALATTACKS:*',
-                'UNENCUMBEREDMOVE',
-                'COMPANIONLIST',
-                'FOLLOWERS',
-                'DESC:.CLEAR',
-                'DESC:*',
-                'TEMPDESC',
-                'TEMPBONUS',
-                'SPELL:*',              # Deprecated 5.x.x - Remove 6.0 - use SPELLS
-                'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-#               'HEIGHT',               # Deprecated
-                'LANGAUTO:.CLEAR',      # Deprecated - 6.0
-                'LANGAUTO:*',           # Deprecated - 6.0
-#               'WEIGHT',               # Deprecated
-        ],
-
-        'WEAPONPROF' => [
-                '000WeaponName',
-                'KEY',                  # [ 1695877 ] KEY tag is global
-                'NAMEISPI',
-                'OUTPUTNAME',
-                'TYPE',
-                'HANDS',
-                @PRE_Tags,
-                @SOURCE_Tags,
-                @Global_BONUS_Tags,     # [ 1956340 ] Centralize global BONUS tags
-                'SAB:.CLEAR',
-                'SAB:*',
-                'SA:.CLEAR',                    #  Deprecated 6.05.01
-                'SA:*',                 #  Deprecated 6.05.01
-        ],
-
-        'VARIABLE' => [
-                '000VariableName',
-                'EXPLANATION',                  
-        ],
-
-        'DATACONTROL' => [
-                '000DatacontrolName',
-                'DATAFORMAT',
-                'REQUIRED',
-                'SELECTABLE',
-                'VISIBLE',
-                'DISPLAYNAME',
-                'EXPLANATION',                  
-        ],
-
-        'GLOBALMOD' => [
-                '000GlobalmonName',
-                'EXPLANATION',                  
-        ],
-
-        'ALIGNMENT' => [
-                '000AlignmentName',
-                'SORTKEY',                      
-                'ABB',                  
-                'KEY',                  
-                'VALIDFORDEITY',                        
-                'VALIDFORFOLLOWER',                     
-        ],
-
-        'STAT' => [
-                '000StatName',
-                'SORTKEY',                      
-                'ABB',                  
-                'KEY',                  
-                'STATMOD',                      
-                'DEFINE:MAXLEVELSTAT',                  
-                'DEFINE',                       
-                @Global_BONUS_Tags,                     
-                'ABILITY',                      
-        ],
-
-        'SAVE' => [
-                '000SaveName',
-                'SORTKEY',                      
-                'KEY',                  
-                @Global_BONUS_Tags,                     
-        ],
+my %masterOrder = (
 
 );
 
@@ -3200,71 +1454,71 @@ my %master_order = (
 # Tags that must be seen as valid to allow conversion.
 
 if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
-        push @{ $master_order{'CLASS'} },               'ADD:SA';
-        push @{ $master_order{'CLASS Level'} },   'ADD:SA';
-        push @{ $master_order{'COMPANIONMOD'} },  'ADD:SA';
-        push @{ $master_order{'DEITY'} },               'ADD:SA';
-        push @{ $master_order{'DOMAIN'} },              'ADD:SA';
-        push @{ $master_order{'EQUIPMENT'} },   'ADD:SA';
-        push @{ $master_order{'EQUIPMOD'} },    'ADD:SA';
-        push @{ $master_order{'FEAT'} },                'ADD:SA';
-        push @{ $master_order{'RACE'} },                'ADD:SA';
-        push @{ $master_order{'SKILL'} },               'ADD:SA';
-        push @{ $master_order{'SUBCLASSLEVEL'} }, 'ADD:SA';
-        push @{ $master_order{'TEMPLATE'} },    'ADD:SA';
-        push @{ $master_order{'WEAPONPROF'} },  'ADD:SA';
+        push @{ $masterOrder{'CLASS'} },               'ADD:SA';
+        push @{ $masterOrder{'CLASS Level'} },   'ADD:SA';
+        push @{ $masterOrder{'COMPANIONMOD'} },  'ADD:SA';
+        push @{ $masterOrder{'DEITY'} },               'ADD:SA';
+        push @{ $masterOrder{'DOMAIN'} },              'ADD:SA';
+        push @{ $masterOrder{'EQUIPMENT'} },   'ADD:SA';
+        push @{ $masterOrder{'EQUIPMOD'} },    'ADD:SA';
+        push @{ $masterOrder{'FEAT'} },                'ADD:SA';
+        push @{ $masterOrder{'RACE'} },                'ADD:SA';
+        push @{ $masterOrder{'SKILL'} },               'ADD:SA';
+        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'ADD:SA';
+        push @{ $masterOrder{'TEMPLATE'} },    'ADD:SA';
+        push @{ $masterOrder{'WEAPONPROF'} },  'ADD:SA';
 }
 if ( LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
-        push @{ $master_order{'EQUIPMENT'} }, 'ALTCRITICAL';
+        push @{ $masterOrder{'EQUIPMENT'} }, 'ALTCRITICAL';
 }
 
 if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
-        push @{ $master_order{'RACE'} }, 'AGE', 'HEIGHT', 'WEIGHT';
+        push @{ $masterOrder{'RACE'} }, 'AGE', 'HEIGHT', 'WEIGHT';
 }
 
 if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS') ) {
-        push @{ $master_order{'EQUIPMENT'} }, 'ATTACKS';
+        push @{ $masterOrder{'EQUIPMENT'} }, 'ATTACKS';
 }
 
 if ( LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
-        push @{ $master_order{'PCC'} }, 'GAME';
+        push @{ $masterOrder{'PCC'} }, 'GAME';
 }
 
 if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') ) {
-        push @{ $master_order{'CLASS'} },               'BONUS:MOVE:*';
-        push @{ $master_order{'CLASS Level'} }, 'BONUS:MOVE:*';
-        push @{ $master_order{'COMPANIONMOD'} },        'BONUS:MOVE:*';
-        push @{ $master_order{'DEITY'} },               'BONUS:MOVE:*';
-        push @{ $master_order{'DOMAIN'} },              'BONUS:MOVE:*';
-        push @{ $master_order{'EQUIPMENT'} },   'BONUS:MOVE:*';
-        push @{ $master_order{'EQUIPMOD'} },    'BONUS:MOVE:*';
-        push @{ $master_order{'FEAT'} },                'BONUS:MOVE:*';
-        push @{ $master_order{'RACE'} },                'BONUS:MOVE:*';
-        push @{ $master_order{'SKILL'} },               'BONUS:MOVE:*';
-        push @{ $master_order{'SUBCLASSLEVEL'} }, 'BONUS:MOVE:*';
-        push @{ $master_order{'TEMPLATE'} },    'BONUS:MOVE:*';
-        push @{ $master_order{'WEAPONPROF'} },  'BONUS:MOVE:*';
+        push @{ $masterOrder{'CLASS'} },               'BONUS:MOVE:*';
+        push @{ $masterOrder{'CLASS Level'} }, 'BONUS:MOVE:*';
+        push @{ $masterOrder{'COMPANIONMOD'} },        'BONUS:MOVE:*';
+        push @{ $masterOrder{'DEITY'} },               'BONUS:MOVE:*';
+        push @{ $masterOrder{'DOMAIN'} },              'BONUS:MOVE:*';
+        push @{ $masterOrder{'EQUIPMENT'} },   'BONUS:MOVE:*';
+        push @{ $masterOrder{'EQUIPMOD'} },    'BONUS:MOVE:*';
+        push @{ $masterOrder{'FEAT'} },                'BONUS:MOVE:*';
+        push @{ $masterOrder{'RACE'} },                'BONUS:MOVE:*';
+        push @{ $masterOrder{'SKILL'} },               'BONUS:MOVE:*';
+        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'BONUS:MOVE:*';
+        push @{ $masterOrder{'TEMPLATE'} },    'BONUS:MOVE:*';
+        push @{ $masterOrder{'WEAPONPROF'} },  'BONUS:MOVE:*';
 }
 
 if ( LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE') ) {
-        push @{ $master_order{'WEAPONPROF'} }, 'SIZE';
+        push @{ $masterOrder{'WEAPONPROF'} }, 'SIZE';
 }
 
 if ( LstTidy::Options::isConversionActive('EQUIP:no more MOVE') ) {
-        push @{ $master_order{'EQUIPMENT'} }, 'MOVE';
+        push @{ $masterOrder{'EQUIPMENT'} }, 'MOVE';
 }
 
 #   vvvvvv This one is disactivated
 if ( 0 && LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS') ) {
-        push @{ $master_order{'CLASS Level'} },   'SPELL:*';
-        push @{ $master_order{'DOMAIN'} },              'SPELL:*';
-        push @{ $master_order{'EQUIPMOD'} },    'SPELL:*';
-        push @{ $master_order{'SUBCLASSLEVEL'} }, 'SPELL:*';
+        push @{ $masterOrder{'CLASS Level'} },   'SPELL:*';
+        push @{ $masterOrder{'DOMAIN'} },              'SPELL:*';
+        push @{ $masterOrder{'EQUIPMOD'} },    'SPELL:*';
+        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'SPELL:*';
 }
 
 #   vvvvvv This one is disactivated
 if ( 0 && LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
-        push @{ $master_order{'TEMPLATE'} }, 'HITDICESIZE';
+        push @{ $masterOrder{'TEMPLATE'} }, 'HITDICESIZE';
 }
 
 # Working variables
@@ -3594,14 +1848,10 @@ my %token_CHOOSE_tag = map { $_ => 1 } (
         'FEATSELECT',                   # Deprecated 5.15 - Remove 6.00
 );
 
-my %master_mult;                # Will hold the tags that can be there more then once
-
-my %valid_tags;         # Will hold the valid tags for each type of file.
 
 my %count_tags;         # Will hold the number of each tag found (by linetype)
 
-my %missing_headers;    # Will hold the tags that do not have defined headers
-                                # for each linetype.
+my %missing_headers;    # Will hold the tags that do not have defined headers for each linetype.
 
 ################################################################################
 # Global variables used by the validation code
@@ -4352,26 +2602,8 @@ if (getOption('inputpath')) {
       exit;
    }
 
-        #################################################
-        # We populate %valid_tags for all file types.
-
-        for my $line_type ( keys %master_order ) {
-                for my $tag ( @{ $master_order{$line_type} } ) {
-                if ( $tag =~ / ( .* ) [:][*] \z /xms ) {
-                        # Tag that end by :* in @master_order are allowed
-                        # to be present more then once on the same line
-                        $tag = $1;
-                        $master_mult{$line_type}{$tag} = 1;
-                }
-
-                if ( exists $valid_tags{$line_type}{$tag} ) {
-                        die "Tag $tag found more then once for $line_type";
-                }
-                else {
-                        $valid_tags{$line_type}{$tag} = 1;
-                }
-                }
-        }
+   # Construct the valid tags for all file types
+   LstTidy::Reformat::constructValidTags();
 
         ##########################################################
         # Files that needs to be open for special conversions
@@ -4642,8 +2874,8 @@ if (getOption('inputpath')) {
                                 #               ($lstfile) = ($lstfile =~ m{/([^/]+)$});
                                 delete $filelist_notpcc{$lstfile} if exists $filelist_notpcc{$lstfile};
                                 $LST_found = YES;
-                        }
-                        elsif ( $valid_tags{'PCC'}{$tag} ) {
+
+                        } elsif (LstTidy::Reformat::isValidTag('PCC', $tag)) {
 
                                 # All the tags that do not have file should be cought here
 
@@ -4697,15 +2929,15 @@ if (getOption('inputpath')) {
                                         # Then we check if the game mode is valid only if
                                         # the game modes have not been filtered out
                                         if ($valid_game_mode) {
-                                                for my $mode (@modes) {
-                                                        if ( !$valid_game_modes{$mode} ) {
-                                                                $log->notice(
-                                                                        qq{Invalid GAMEMODE "$mode" in "$_"},
-                                                                        $pcc_file_name,
-                                                                        $INPUT_LINE_NUMBER
-                                                                );
-                                                        }
-                                                }
+                                           for my $mode (@modes) {
+                                              if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
+                                                 $log->notice(
+                                                    qq{Invalid GAMEMODE "$mode" in "$_"},
+                                                    $pcc_file_name,
+                                                    $INPUT_LINE_NUMBER
+                                                 );
+                                              }
+                                           }
                                         }
 
                                         if ( !$valid_game_mode ) {
@@ -5141,11 +3373,11 @@ if ( getOption('report') ) {
                 print STDERR "Line Type: $line_type\n";
 
                 for my $tag ( sort report_tag_sort keys %{ $count_tags{"Valid"}{$line_type} } ) {
-                        my $tagdisplay = $tag;
-                        $tagdisplay .= "*" if $master_mult{$line_type}{$tag};
-                        my $line = "    $tagdisplay";
-                        $line .= ( " " x ( 26 - length($tagdisplay) ) ) . $count_tags{"Valid"}{$line_type}{$tag};
-                        print STDERR "$line\n";
+                   my $tagdisplay = $tag;
+                   $tagdisplay .= "*" if LstTidy::Reformat::isValidMultiTag($line_type, $tag);
+                   my $line = "    $tagdisplay";
+                   $line .= ( " " x ( 26 - length($tagdisplay) ) ) . $count_tags{"Valid"}{$line_type}{$tag};
+                   print STDERR "$line\n";
                 }
 
                 $first = 0;
@@ -5460,7 +3692,7 @@ sub normalize_file($) {
 # FILETYPE_parse
 # --------------
 #
-# This function uses the information of master_file_type to
+# This function uses the information of masterFileType to
 # identify the curent line type and parse it.
 #
 # Parameters: $fileType        = The type of the file has defined by
@@ -5543,7 +3775,7 @@ sub FILETYPE_parse {
                 # Find the line type
                 my $index = 0;
                 LINE_SPEC:
-                for my $line_spec ( @{ $master_file_type{$fileType} } ) {
+                for my $line_spec ( @{ $masterFileType{$fileType} } ) {
                 if ( $new_line =~ $line_spec->{RegEx} ) {
 
                         # Found it !!!
@@ -5555,7 +3787,7 @@ sub FILETYPE_parse {
                 continue { $index++ }
 
                 # Did we find anything?
-                if ( $index >= @{ $master_file_type{$fileType} } ) {
+                if ( $index >= @{ $masterFileType{$fileType} } ) {
                 $log->warning(
                         qq(Can\'t find the line type for "$new_line"),
                         $file_for_error,
@@ -5705,7 +3937,7 @@ sub FILETYPE_parse {
                         my $key = parse_tag($token, $curent_linetype, $file_for_error, $line_for_error);
 
                         if ($key) {
-                                if ( exists $line_tokens{$key} && !exists $master_mult{$curent_linetype}{$key} ) {
+                                if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
                                         $log->notice(
                                                 qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
                                                 $file_for_error,
@@ -5777,16 +4009,18 @@ sub FILETYPE_parse {
                         # We are on a comment line, we need to find the
                         # curent and the next line header.
 
+
+
                         # Curent header
                         my $this_header =
                                 $curent_linetype
-                                ? get_header( $master_order{$curent_linetype}[0], $curent_linetype )
+                                ? get_header( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
                                 : "";
 
                         # Next line header
                         my $next_header =
                                 $next_linetype
-                                ? get_header( $master_order{$next_linetype}[0], $next_linetype )
+                                ? get_header( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
                                 : "";
 
                         if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
@@ -5794,12 +4028,8 @@ sub FILETYPE_parse {
                         {
 
                                 # It is a header, let's tag it as such.
-                                $newlines[$line_index] = [
-                                        'HEADER',
-                                        $line_tokens,
-                                ];
-                        }
-                        else {
+                                $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
+                        } else {
 
                                 # It is just a comment, we won't botter with it ever again.
                                 $newlines[$line_index] = $line_tokens;
@@ -5807,38 +4037,6 @@ sub FILETYPE_parse {
                 }
         }
 
-        #my $line_index = 0;
-        #for my $line_ref (@newlines)
-        #{
-        #  my ($curent_linetype, $line_tokens, $main_linetype,
-        #       $curent_entity, $line_info) = @$line_ref;
-        #
-        #  if(ref($line_tokens) ne 'HASH')
-        #  {
-        #
-        #       # Header begins with the line type header.
-        #       my $this_header = $curent_linetype
-        #                               ? get_header($master_order{$curent_linetype}[0],$fileType)
-        #                               : "";
-        #       my $next_header = $line_index <= @newlines && ref($newlines[$line_index+1]) eq 'ARRAY' &&
-        #                               $newlines[$line_index+1][0]
-        #                               ? get_header($master_order{$newlines[$line_index+1][0]}[0],$fileType)
-        #                               : "";
-        #       if(($this_header && index($line_tokens, $this_header) == 0) ||
-        #               ($next_header && index($line_tokens,$next_header) == 0))
-        #       {
-        #       $line_ref = [ 'HEADER',
-        #                               $line_tokens,
-        #                       ];
-        #       }
-        #       else
-        #       {
-        #               $line_ref = $line_tokens;
-        #       }
-        #       next;
-        #  }
-        #
-        #} continue { $line_index++ };
 
         #################################################################
         ######################## Conversion #############################
@@ -5874,8 +4072,8 @@ sub FILETYPE_parse {
                 my $sep = $line_info->{Sep} || "\t";
                 if ( $sep ne "\t" ) {
 
-                # First, the tag known in master_order
-                for my $tag ( @{ $master_order{$curent_linetype} } ) {
+                # First, the tag known in masterOrder
+                for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
                         if ( exists $line_tokens->{$tag} ) {
                                 $newline .= join $sep, @{ $line_tokens->{$tag} };
                                 $newline .= $sep;
@@ -5883,7 +4081,7 @@ sub FILETYPE_parse {
                         }
                 }
 
-                # The remaining tag are not in the master_order list
+                # The remaining tag are not in the masterOrder list
                 for my $tag ( sort keys %$line_tokens ) {
                         $newline .= join $sep, @{ $line_tokens->{$tag} };
                         $newline .= $sep;
@@ -5917,8 +4115,8 @@ sub FILETYPE_parse {
                         # between the columns. If there is a header in the previous
                         # line, we remove it.
 
-                        # First, the tag known in master_order
-                        for my $tag ( @{ $master_order{$curent_linetype} } ) {
+                        # First, the tag known in masterOrder
+                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
                                 if ( exists $line_tokens->{$tag} ) {
                                 $newline .= join $sep, @{ $line_tokens->{$tag} };
                                 $newline .= $sep;
@@ -5926,7 +4124,7 @@ sub FILETYPE_parse {
                                 }
                         }
 
-                        # The remaining tag are not in the master_order list
+                        # The remaining tag are not in the masterOrder list
                         for my $tag ( sort keys %$line_tokens ) {
                                 $newline .= join $sep, @{ $line_tokens->{$tag} };
                                 $newline .= $sep;
@@ -5962,7 +4160,7 @@ sub FILETYPE_parse {
                         # Find the columns order and build the header and
                         # the curent line
                         TAG_NAME:
-                        for my $tag ( @{ $master_order{$curent_linetype} } ) {
+                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
 
                                 # We skip the tag is not present
                                 next TAG_NAME if !exists $col_length{$tag};
@@ -5996,7 +4194,7 @@ sub FILETYPE_parse {
                                 delete $line_tokens->{$tag};
                         }
 
-                        # Add the tags that were not in the master_order
+                        # Add the tags that were not in the masterOrder
                         for my $tag ( sort keys %$line_tokens ) {
 
                                 # What is the length of the column?
@@ -6057,7 +4255,7 @@ sub FILETYPE_parse {
                 else {
 
                         # Invalid option
-                        die "Invalid \%master_file_type options: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%masterFileType options: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == MAIN ) {
@@ -6118,8 +4316,8 @@ sub FILETYPE_parse {
                         my %seen;
                         my @col_order;
 
-                        # First, the columns included in master_order
-                        for my $tag ( @{ $master_order{$curent_linetype} } ) {
+                        # First, the columns included in masterOrder
+                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
                                 push @col_order, $tag if exists $col_length{$tag};
                                 $seen{$tag}++;
                         }
@@ -6224,7 +4422,7 @@ sub FILETYPE_parse {
                         }
                 }
                 else {
-                        die "Invalid \%master_file_type format: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%masterFileType format: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == SUB ) {
@@ -6289,8 +4487,8 @@ sub FILETYPE_parse {
                         my %seen;
                         my @col_order;
 
-                        # First, the columns included in master_order
-                        for my $tag ( @{ $master_order{$curent_linetype} } ) {
+                        # First, the columns included in masterOrder
+                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
                                 push @col_order, $tag if exists $col_length{$tag};
                                 $seen{$tag}++;
                         }
@@ -6429,15 +4627,15 @@ sub FILETYPE_parse {
 
                         }
                         else {
-                                die "Invalid \%master_file_type: $curent_linetype:$mode:$format:$header";
+                                die "Invalid \%masterFileType: $curent_linetype:$mode:$format:$header";
                         }
                 }
                 else {
-                        die "Invalid \%master_file_type: $curent_linetype:$mode:$format:$header";
+                        die "Invalid \%masterFileType: $curent_linetype:$mode:$format:$header";
                 }
                 }
                 else {
-                die "Invalide \%master_file_type mode: $fileType:$curent_linetype:$mode";
+                die "Invalid \%masterFileType mode: $fileType:$curent_linetype:$mode";
                 }
 
         }
@@ -6545,7 +4743,7 @@ sub parse_tag {
 
         # Is this a pragma?
         if ( $tag_text =~ /^(\#.*?):(.*)/ ) {
-                return wantarray ? ( $1, $2 ) : $1 if exists $valid_tags{$linetype}{$1};
+           return wantarray ? ( $1, $2 ) : $1 if LstTidy::Reformat::isValidTag($linetype, $1);
         }
 
         # Return already if no text to parse (comment)
@@ -6877,10 +5075,9 @@ sub parse_tag {
         # If the .CLEAR version of the tag doesn't exists, we do not
         # change the tag name but we give a warning.
         if ( defined $value && $value =~ /^.CLEAR/i ) {
-                if ( exists $valid_tags{$linetype}{"$tag:.CLEARALL"} ) {
+                if ( LstTidy::Reformat::isValidTag($linetype, "$tag:.CLEARALL")) {
                         # Nothing to see here. Move on.
-                }
-                elsif ( !exists $valid_tags{$linetype}{"$tag:.CLEAR"} ) {
+                } elsif ( ! LstTidy::Reformat::isValidTag($linetype, "$tag:.CLEAR")) {
                         $log->notice(
                                 qq{The tag "$tag:.CLEAR" from "$tag_text" is not in the $linetype tag list\n},
                                 $file_for_error,
@@ -6899,11 +5096,13 @@ sub parse_tag {
         # Verify if the tag is valid for the line type
         my $real_tag = ( $negate_pre ? "!" : "" ) . $tag;
 
-        if ( !$no_more_error && !exists $valid_tags{$linetype}{$tag} && index( $tag_text, '#' ) != 0 ) {
+
+
+        if ( !$no_more_error && !  LstTidy::Reformat::isValidTag($linetype, $tag) && index( $tag_text, '#' ) != 0 ) {
                 my $do_warn = 1;
                 if ($tag_text =~ /^ADD:([^\(\|]+)[\|\(]+/) {
                         my $tag_text = ($1);
-                        if (exists $valid_tags{$linetype}{"ADD:$tag_text"}) {
+                        if (LstTidy::Reformat::isValidTag($linetype, "ADD:$tag_text")) {
                                 $do_warn = 0;
                         }
                 }
@@ -6917,7 +5116,9 @@ sub parse_tag {
                         $count_tags{"Invalid"}{$linetype}{$real_tag}++;
                 }
         }
-        elsif ( exists $valid_tags{$linetype}{$tag} ) {
+
+
+        elsif (LstTidy::Reformat::isValidTag($linetype, $tag)) {
 
                 # Statistic gathering
                 $count_tags{"Valid"}{"Total"}{$real_tag}++;
@@ -7148,25 +5349,24 @@ BEGIN {
                                 my ($found_base, $found_non_base) = ( NO, NO );
 
                                 for my $check_name ( split q{,}, $check_names ) {
-                                # We keep the original name for error messages
-                                my $clean_check_name = $check_name;
+                                   # We keep the original name for error messages
+                                   my $clean_check_name = $check_name;
 
-                                # Did we use BASE.? is yes, we remove it
-                                if ( $clean_check_name =~ s/ \A BASE [.] //xms ) {
-                                        $found_base = YES;
-                                }
-                                else {
-                                        $found_non_base = YES;
-                                }
+                                   # Did we use BASE.? is yes, we remove it
+                                   if ( $clean_check_name =~ s/ \A BASE [.] //xms ) {
+                                      $found_base = YES;
+                                   } else {
+                                      $found_non_base = YES;
+                                   }
 
-                                # Is the check name valid
-                                if ( !exists $valid_check_name{$clean_check_name} ) {
-                                        $log->notice(
-                                                qq{Invalid save check name "$clean_check_name" found in "$tag_name$tag_value"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
+                                   # Is the check name valid
+                                   if ( ! LstTidy::Parse::isValidCheck($clean_check_name) ) {
+                                      $log->notice(
+                                         qq{Invalid save check name "$clean_check_name" found in "$tag_name$tag_value"},
+                                         $file_for_error,
+                                         $line_for_error
+                                      );
+                                   }
                                 }
 
                                 # Verify if there is a mix of BASE and non BASE
@@ -8892,13 +7092,13 @@ sub validate_pre_tag {
 
                 for my $item ( @items ) {
                 if ( my ($check_name,$value) = ( $item =~ / \A ( \w+ ) = ( \d+ ) \z /xms ) ) {
-                        if ( !exists $valid_check_name{$check_name} ) {
-                                $log->notice(
-                                qq{Invalid save check name "$check_name" found in "$tag_name:$tag_value"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
+                   if ( ! LstTidy::Parse::isValidCheck($check_name) ) {
+                      $log->notice(
+                         qq{Invalid save check name "$check_name" found in "$tag_name:$tag_value"},
+                         $file_for_error,
+                         $line_for_error
+                      );
+                   }
                 }
                 else {
                         $log->notice(
@@ -11137,7 +9337,7 @@ sub validate_line {
         ) {
 
                 # We get the line identifier.
-                my $identifier = $line_ref->{ $master_order{$linetype}[0] }[0];
+                my $identifier = $line_ref->{ @{LstTidy::Reformat::getLineTypeOrder($linetype)}[0] }[0];
 
                 # We hunt for the bad comma.
                 if($identifier =~ /,/) {
@@ -12252,12 +10452,14 @@ BEGIN {
                 && $filetype eq "WEAPONPROF"
                 && exists $line_ref->{'SIZE'} )
                 {
-                $log->warning(
-                        qq{Removing the SIZE tag in line "$line_ref->{$master_order{'WEAPONPROF'}[0]}[0]"},
-                        $file_for_error,
-                        $line_for_error
-                );
-                delete $line_ref->{'SIZE'};
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('WEAPONPROF')}[0];
+
+                   $log->warning(
+                      qq{Removing the SIZE tag in line "$line_ref->{$tagLookup}[0]"},
+                      $file_for_error,
+                      $line_for_error
+                   );
+                   delete $line_ref->{'SIZE'};
                 }
 
                 ##################################################################
@@ -12395,7 +10597,8 @@ BEGIN {
                 && $line_info->[0] eq 'EQUIPMENT'
                 && !exists $line_ref->{'SLOTS'} )
                 {
-                my $equipment_name = $line_ref->{ $master_order{'EQUIPMENT'}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('EQUIPMENT')}[0];
+                   my $equipment_name = $line_ref->{ $tagLookup }[0];
 
                 if ( exists $line_ref->{'TYPE'} ) {
                         my $type = $line_ref->{'TYPE'}[0];
@@ -12538,10 +10741,12 @@ BEGIN {
                         || exists $line_ref->{'HEIGHT'}
                         || exists $line_ref->{'WEIGHT'} )
                 ) {
-                my ( $dir, $race, $age, $height, $weight );
+                my ( $tagLookup, $dir, $race, $age, $height, $weight );
 
-                $dir  = File::Basename::dirname($file_for_error);
-                $race = $line_ref->{ $master_order{'RACE'}[0] }[0];
+                   $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('RACE')}[0];
+                   $dir       = File::Basename::dirname($file_for_error);
+                   $race      = $line_ref->{ $tagLookup }[0];
+
                 if ( $line_ref->{'AGE'} ) {
                         $age = $line_ref->{'AGE'}[0];
                         $log->warning( qq{Removing "$line_ref->{'AGE'}[0]"}, $file_for_error, $line_for_error );
@@ -12577,7 +10782,8 @@ BEGIN {
                 # for the same class. It is also assumed that SPELLTYPE has only
                 # one value. SPELLTYPE:Any is ignored.
 
-                my $class_name = $line_ref->{ $master_order{'CLASS'}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                my $class_name = $line_ref->{ $tagLookup }[0];
                 SPELLTYPE_TAG:
                 for my $spelltype_tag ( values %{ $line_ref->{'SPELLTYPE'} } ) {
                         my $spelltype = "";
@@ -12673,7 +10879,8 @@ BEGIN {
                 }
 
                 if ( $filetype eq 'EQUIPMENT' ) {
-                        my $equipname  = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $equipname  = $line_ref->{ $tagLookup }[0];
                         my $outputname = "";
                         $outputname = substr( $line_ref->{'OUTPUTNAME'}[0], 11 )
                                 if exists $line_ref->{'OUTPUTNAME'};
@@ -12687,7 +10894,8 @@ BEGIN {
                 }
 
                 if ( $filetype eq 'EQUIPMOD' ) {
-                        my $equipmodname = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $equipmodname = $line_ref->{ $tagLookup }[0];
                         my ( $key, $type ) = ( "", "" );
                         $key  = substr( $line_ref->{'KEY'}[0],  4 ) if exists $line_ref->{'KEY'};
                         $type = substr( $line_ref->{'TYPE'}[0], 5 ) if exists $line_ref->{'TYPE'};
@@ -12696,29 +10904,33 @@ BEGIN {
                 }
 
                 if ( $filetype eq 'FEAT' ) {
-                        my $featname = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $featname = $line_ref->{ $tagLookup }[0];
                         print { $filehandle_for{FEAT} } qq{"$featname","$line_for_error","$filename"\n};
                 }
 
                 if ( $filetype eq 'KIT STARTPACK' ) {
-                        my ($kitname)
-                                = ( $line_ref->{ $master_order{$filetype}[0] }[0] =~ /\A STARTPACK: (.*) \z/xms );
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                   my ($kitname) = ( $line_ref->{ $tagLookup }[0] =~ /\A STARTPACK: (.*) \z/xms );
                         print { $filehandle_for{KIT} } qq{"$kitname","$line_for_error","$filename"\n};
                 }
 
                 if ( $filetype eq 'KIT TABLE' ) {
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my ($tablename)
-                                = ( $line_ref->{ $master_order{$filetype}[0] }[0] =~ /\A TABLE: (.*) \z/xms );
+                                = ( $line_ref->{ $tagLookup }[0] =~ /\A TABLE: (.*) \z/xms );
                         print { $filehandle_for{TABLE} } qq{"$tablename","$line_for_error","$filename"\n};
                 }
 
                 if ( $filetype eq 'LANGUAGE' ) {
-                        my $languagename = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $languagename = $line_ref->{ $tagLookup }[0];
                         print { $filehandle_for{LANGUAGE} } qq{"$languagename","$line_for_error","$filename"\n};
                 }
 
                 if ( $filetype eq 'RACE' ) {
-                        my $racename            = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $racename            = $line_ref->{ $tagLookup }[0];
 
                         my $race_type = q{};
                         $race_type = $line_ref->{'RACETYPE'}[0] if exists $line_ref->{'RACETYPE'};
@@ -12733,12 +10945,14 @@ BEGIN {
                 }
 
                 if ( $filetype eq 'SKILL' ) {
-                        my $skillname = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $skillname = $line_ref->{ $tagLookup }[0];
                         print { $filehandle_for{SKILL} } qq{"$skillname","$line_for_error","$filename"\n};
                 }
 
                 if ( $filetype eq 'TEMPLATE' ) {
-                        my $template_name = $line_ref->{ $master_order{$filetype}[0] }[0];
+                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
+                        my $template_name = $line_ref->{ $tagLookup }[0];
                         print { $filehandle_for{TEMPLATE} } qq{"$template_name","$line_for_error","$filename"\n};
                 }
                 }
@@ -12914,8 +11128,8 @@ BEGIN {
                                                 # We add the tags except for the first one (the entity tag)
                                                 # that is already there.
                                                 push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} }
-                                                        if $_ ne $master_order{$curent_linetype}[0];
-                                                }
+                                                        if $_ ne @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0];
+                                                     }
                                         }
                                         else {
                                                 last ENTITY_LINE;
@@ -13197,7 +11411,7 @@ BEGIN {
                                                 \%newline,
                                                 1 + @$lines_ref,
                                                 $spellname,
-                                                $master_file_type{SPELL}[1],    # Watch for the 1
+                                                $masterFileType{SPELL}[1],    # Watch for the 1
                                         ];
 
                                 }
@@ -13289,7 +11503,7 @@ BEGIN {
                                         $last_line = $j;
                                         for ( keys %{ $lines_ref->[$j][1] } ) {
                                                 push @{ $new_class_line{$_} }, @{ $lines_ref->[$j][1]{$_} }
-                                                if $_ ne $master_order{'CLASS'}[0];
+                                                if $_ ne @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
                                         }
                                 }
                                 else {
@@ -13343,8 +11557,9 @@ BEGIN {
                                 if ( keys %new_pre_line ) {
 
                                 # Need to tell what CLASS we are dealing with
-                                $new_pre_line{ $master_order{'CLASS'}[0] }
-                                        = $new_class_line{ $master_order{'CLASS'}[0] };
+                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                                $new_pre_line{ $tagLookup }
+                                        = $new_class_line{ $tagLookup };
                                 push @new_class_lines,
                                         [
                                         'CLASS',
@@ -13360,8 +11575,9 @@ BEGIN {
                                 if ( keys %new_skill_line ) {
 
                                 # Need to tell what CLASS we are dealing with
-                                $new_skill_line{ $master_order{'CLASS'}[0] }
-                                        = $new_class_line{ $master_order{'CLASS'}[0] };
+                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                                $new_skill_line{ $tagLookup }
+                                        = $new_class_line{ $tagLookup };
                                 push @new_class_lines,
                                         [
                                         'CLASS',
@@ -13377,8 +11593,9 @@ BEGIN {
                                 if ( keys %new_spell_line ) {
 
                                 # Need to tell what CLASS we are dealing with
-                                $new_spell_line{ $master_order{'CLASS'}[0] }
-                                        = $new_class_line{ $master_order{'CLASS'}[0] };
+                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                                $new_spell_line{ $tagLookup }
+                                        = $new_class_line{ $tagLookup };
 
                                 ##################################################################
                                 # [ 876536 ] All spell casting classes need CASTERLEVEL
@@ -13391,7 +11608,8 @@ BEGIN {
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
-                                        my $class = $new_spell_line{ $master_order{'CLASS'}[0] }[0];
+                                        my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                                        my $class = $new_spell_line{ $tagLookup }[0];
 
                                         if ( exists $new_spell_line{'ITEMCREATE'} ) {
 
@@ -13529,7 +11747,7 @@ BEGIN {
                                                 'CSKILL'                => ["CSKILL:$newskills"]
                                                 },
                                                 $line_no, $class,
-                                                $master_file_type{CLASS}[1],
+                                                $masterFileType{CLASS}[1],
                                                 ];
                                         delete $class_skill{$dir}{$class};
 
@@ -13555,7 +11773,7 @@ BEGIN {
                                                 },
                                                 scalar(@$lines_ref),
                                                 "$_.MOD",
-                                                $master_file_type{CLASS}[1],
+                                                $masterFileType{CLASS}[1],
                                                 ];
 
                                         delete $class_skill{$dir}{$_};
@@ -13866,209 +12084,6 @@ sub embedded_coma_split {
         return map { s/&coma;/,/xmsg; $_ } split $separator, $newlist;
 }
 
-###############################################################
-# parse_system_files
-# ------------------
-#
-# Parameter: $system_file_path  Path where the game mode folders
-#                                               can be found.
-
-{
-        # Needed for the Find function
-        my @system_files;
-
-        sub parse_system_files {
-                my ($system_file_path) = @_;
-                my $original_system_file_path = $system_file_path;
-
-                my @verified_allowed_modes      = ();
-                my @verified_stats              = ();
-                my @verified_alignments = ();
-                my @verified_var_names  = ();
-                my @verified_check_names        = ();
-
-                # Set the header for the error messages
-                $log->header(LstTidy::LogHeader::getHeader('System'));
-
-                # Get the Unix direcroty separator even in a Windows environment
-                $system_file_path =~ tr{\\}{/};
-
-                # Verify if the gameModes directory is present
-                if ( !-d "$system_file_path/gameModes" ) {
-                die qq{No gameModes directory found in "$original_system_file_path"};
-                }
-
-                # We will now find all of the miscinfo.lst and statsandchecks.lst files
-                @system_files = ();
-
-                File::Find::find( \&want_system_info, $system_file_path );
-
-                # Did we find anything (hopefuly yes)
-                if ( scalar @system_files == 0 ) {
-                   $log->error(
-                      qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
-                      getOption('systempath')
-                   );
-                }
-
-                # We only keep the files that correspond to the selected
-                # game mode
-                if (getOption('gamemode')) {
-                   my $gamemode = getOption('gamemode') ;
-                   @system_files = grep { m{ \A $system_file_path [/] gameModes [/] (?: ${gamemode} ) [/] }xmsi; }
-                   @system_files;
-                }
-
-                # Anything left?
-                if ( scalar @system_files == 0 ) {
-                   my $gamemode = getOption('gamemode') ;
-                   $log->error(
-                      qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/${gamemode}/ directory},
-                      getOption('systempath')
-                   );
-                }
-
-                # Now we search for the interesting part in the miscinfo.lst files
-                for my $system_file (@system_files) {
-                open my $system_file_fh, '<', $system_file;
-
-                LINE:
-                while ( my $line = <$system_file_fh> ) {
-                        chomp $line;
-
-                        # Skip comment lines
-                        next LINE if $line =~ / \A [#] /xms;
-
-                        # ex. ALLOWEDMODES:35e|DnD
-                        if ( my ($modes) = ( $line =~ / ALLOWEDMODES: ( [^\t]* )/xms ) ) {
-                                push @verified_allowed_modes, split /[|]/, $modes;
-                                next LINE;
-                        }
-                        # ex. STATNAME:Strength ABB:STR DEFINE:MAXLEVELSTAT=STR|STRSCORE-10
-                        elsif ( $line =~ / \A STATNAME: /xms ) {
-                                LINE_TAG:
-                                for my $line_tag (split /\t+/, $line) {
-                                        # STATNAME lines have more then one interesting tags
-                                        if ( my ($stat) = ( $line_tag =~ / \A ABB: ( .* ) /xms ) ) {
-                                                push @verified_stats, $stat;
-                                        }
-                                        elsif ( my ($define_expression) = ( $line_tag =~ / \A DEFINE: ( .* ) /xms ) ) {
-                                                if ( my ($var_name) = ( $define_expression =~ / \A ( [\t=|]* ) /xms ) ) {
-                                                        push @verified_var_names, $var_name;
-                                                }
-                                                else {
-                                                        $log->error(
-                                                                qq{Cannot find the variable name in "$define_expression"},
-                                                                $system_file,
-                                                                $INPUT_LINE_NUMBER
-                                                        );
-                                                }
-                                        }
-                                }
-                        }
-                        # ex. ALIGNMENTNAME:Lawful Good ABB:LG
-                        elsif ( my ($alignment) = ( $line =~ / \A ALIGNMENTNAME: .* ABB: ( [^\t]* ) /xms ) ) {
-                                push @verified_alignments, $alignment;
-                        }
-                        # ex. CHECKNAME:Fortitude   BONUS:CHECKS|Fortitude|CON
-                        elsif ( my ($check_name) = ( $line =~ / \A CHECKNAME: .* BONUS:CHECKS [|] ( [^\t|]* ) /xms ) ) {
-                                # The check name used by PCGen is actually the one defined with the first BONUS:CHECKS.
-                                # CHECKNAME:Sagesse     BONUS:CHECKS|Will|WIS would display Sagesse but use Will internaly.
-                                push @verified_check_names, $check_name;
-                        }
-                }
-
-                close $system_file_fh;
-                }
-
-                # We keep only the first instance of every list items and replace
-                # the default values with the result.
-                # The order of elements must be preserved
-                my %seen = ();
-                @valid_system_alignments = grep { !$seen{$_}++ } @verified_alignments;
-
-                %seen = ();
-                @valid_system_game_modes = grep { !$seen{$_}++ } @verified_allowed_modes;
-
-                %seen = ();
-                @valid_system_stats = grep { !$seen{$_}++ } @verified_stats;
-
-                %seen = ();
-                @valid_system_var_names = grep { !$seen{$_}++ } @verified_var_names;
-
-                %seen = ();
-                @valid_system_check_names = grep { !$seen{$_}++ } @verified_check_names;
-
-                # Now we bitch if we are not happy
-                if ( scalar @verified_stats == 0 ) {
-                        $log->error(
-                                q{Could not find any STATNAME: tag in the system files},
-                                $original_system_file_path
-                        );
-                }
-
-                if ( scalar @valid_system_game_modes == 0 ) {
-                        $log->error(
-                                q{Could not find any ALLOWEDMODES: tag in the system files},
-                                $original_system_file_path
-                        );
-                }
-
-                if ( scalar @valid_system_check_names == 0 ) {
-                        $log->error(
-                                q{Could not find any valid CHECKNAME: tag in the system files},
-                                $original_system_file_path
-                        );
-                }
-
-                # If the -exportlist option was used, we generate a system.csv file
-                if ( getOption('exportlist') ) {
-
-                open my $csv_file, '>', 'system.csv';
-
-                print {$csv_file} qq{"System Directory","$original_system_file_path"\n};
-
-                if ( getOption('gamemode') ) {
-                   my $gamemode = getOption('gamemode') ;
-                   print {$csv_file} qq{"Game Mode Selected","${gamemode}"\n};
-                }
-                print {$csv_file} qq{\n};
-
-                print {$csv_file} qq{"Alignments"\n};
-                for my $alignment (@valid_system_alignments) {
-                        print {$csv_file} qq{"$alignment"\n};
-                }
-                print {$csv_file} qq{\n};
-
-                print {$csv_file} qq{"Allowed Modes"\n};
-                for my $mode (sort @valid_system_game_modes) {
-                        print {$csv_file} qq{"$mode"\n};
-                }
-                print {$csv_file} qq{\n};
-
-                print {$csv_file} qq{"Stats Abbreviations"\n};
-                for my $stat (@valid_system_stats) {
-                        print {$csv_file} qq{"$stat"\n};
-                }
-                print {$csv_file} qq{\n};
-
-                print {$csv_file} qq{"Variable Names"\n};
-                for my $var_name (sort @valid_system_var_names) {
-                        print {$csv_file} qq{"$var_name"\n};
-                }
-                print {$csv_file} qq{\n};
-
-                close $csv_file;
-                }
-
-                return;
-        }
-
-        sub want_system_info {
-                push @system_files, $File::Find::name
-                if lc $_ eq 'miscinfo.lst' || lc $_ eq 'statsandchecks.lst';
-        };
-}
 
 
 ###############################################################

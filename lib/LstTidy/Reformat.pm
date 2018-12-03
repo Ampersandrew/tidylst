@@ -2008,3 +2008,173 @@ our %masterOrder = (
    ],
 
 );
+
+my %master_mult;        # Will hold the tags that can be there more then once
+
+my %valid_tags;         # Will hold the valid tags for each type of file.
+
+=head2 getValidLineTypes
+
+   Return a list of valid line types (i.e. types with an entry in %masterOrder).
+
+=cut
+
+sub getValidLineTypes {
+   return keys %masterOrder;
+}
+
+
+=head2 getLineTypeOrder
+
+   Returns an array ref of the order of tags on the line type.
+
+=cut
+
+sub getLineTypeOrder {
+   my ($lineType) = @_;
+
+   return $masterOrder{$lineType};
+};
+
+
+=head2 constructValidTags
+
+   Construct the valid tags for all file types. Also populate the data
+   structure that allows a tag to appear more than once on a line.
+
+=cut
+
+sub constructValidTags {
+
+   #################################################
+   # We populate %valid_tags for all file types.
+
+   for my $line_type ( LstTidy::Reformat::getValidLineTypes() ) {
+      for my $tag ( @{ LstTidy::Reformat::getLineTypeOrder() } ) {
+         if ( $tag =~ / ( .* ) [:][*] \z /xms ) {
+
+            # Tag that end by :* are allowed
+            # to be present more then once on the same line
+
+            $tag = $1;
+            $master_mult{$line_type}{$tag} = 1;
+         }
+
+         if ( exists $valid_tags{$line_type}{$tag} ) {
+            die "Tag $tag found more then once for $line_type";
+         } else {
+            $valid_tags{$line_type}{$tag} = 1;
+         }
+      }
+   }
+}
+
+=head2 isValidMultiTag
+
+   C<isValidMultiTag(linetype, tag)>
+
+   Returns true if linetype may contain multiple instance of tag 
+
+=cut
+
+sub isValidMultiTag {
+   my ($lineType, $tag) = @_;
+            
+   return exists $master_mult{$lineType}{$tag};
+};
+
+=head2 isValidTag
+
+   C<isValidTag(linetype, tag)>
+
+   Returns true if tag is valid on linetype
+
+=cut
+
+sub isValidTag {
+   my ($lineType, $tag) = @_;
+            
+   return exists $masterOrder{$lineType}{$tag};
+};
+
+#################################################################
+######################## Conversion #############################
+# Tags that must be seen as valid to allow conversion.
+
+=head2 addTagsForConversions
+
+   Some of the conversions need tags to be accepted as valid in order to change
+   them. This operation updates the masterOrder, which controls validity.
+
+=cut
+sub addTagsForConversions {
+
+   if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
+      push @{ $masterOrder{'CLASS'} },          'ADD:SA';
+      push @{ $masterOrder{'CLASS Level'} },    'ADD:SA';
+      push @{ $masterOrder{'COMPANIONMOD'} },   'ADD:SA';
+      push @{ $masterOrder{'DEITY'} },          'ADD:SA';
+      push @{ $masterOrder{'DOMAIN'} },         'ADD:SA';
+      push @{ $masterOrder{'EQUIPMENT'} },      'ADD:SA';
+      push @{ $masterOrder{'EQUIPMOD'} },       'ADD:SA';
+      push @{ $masterOrder{'FEAT'} },           'ADD:SA';
+      push @{ $masterOrder{'RACE'} },           'ADD:SA';
+      push @{ $masterOrder{'SKILL'} },          'ADD:SA';
+      push @{ $masterOrder{'SUBCLASSLEVEL'} },  'ADD:SA';
+      push @{ $masterOrder{'TEMPLATE'} },       'ADD:SA';
+      push @{ $masterOrder{'WEAPONPROF'} },     'ADD:SA';
+   }
+   if ( LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
+      push @{ $masterOrder{'EQUIPMENT'} },      'ALTCRITICAL';
+   }
+
+   if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
+      push @{ $masterOrder{'RACE'} },           'AGE', 'HEIGHT', 'WEIGHT';
+   }
+
+   if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS') ) {
+      push @{ $masterOrder{'EQUIPMENT'} },      'ATTACKS';
+   }
+
+   if ( LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+      push @{ $masterOrder{'PCC'} },            'GAME';
+   }
+
+   if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') ) {
+      push @{ $masterOrder{'CLASS'} },          'BONUS:MOVE:*';
+      push @{ $masterOrder{'CLASS Level'} },    'BONUS:MOVE:*';
+      push @{ $masterOrder{'COMPANIONMOD'} },   'BONUS:MOVE:*';
+      push @{ $masterOrder{'DEITY'} },          'BONUS:MOVE:*';
+      push @{ $masterOrder{'DOMAIN'} },         'BONUS:MOVE:*';
+      push @{ $masterOrder{'EQUIPMENT'} },      'BONUS:MOVE:*';
+      push @{ $masterOrder{'EQUIPMOD'} },       'BONUS:MOVE:*';
+      push @{ $masterOrder{'FEAT'} },           'BONUS:MOVE:*';
+      push @{ $masterOrder{'RACE'} },           'BONUS:MOVE:*';
+      push @{ $masterOrder{'SKILL'} },          'BONUS:MOVE:*';
+      push @{ $masterOrder{'SUBCLASSLEVEL'} },  'BONUS:MOVE:*';
+      push @{ $masterOrder{'TEMPLATE'} },       'BONUS:MOVE:*';
+      push @{ $masterOrder{'WEAPONPROF'} },     'BONUS:MOVE:*';
+   }
+
+   if ( LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE') ) {
+      push @{ $masterOrder{'WEAPONPROF'} },     'SIZE';
+   }
+
+   if ( LstTidy::Options::isConversionActive('EQUIP:no more MOVE') ) {
+      push @{ $masterOrder{'EQUIPMENT'} },      'MOVE';
+   }
+
+   # vvvvvv This one is disactivated
+   if ( 0 && LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS') ) {
+      push @{ $masterOrder{'CLASS Level'} },    'SPELL:*';
+      push @{ $masterOrder{'DOMAIN'} },         'SPELL:*';
+      push @{ $masterOrder{'EQUIPMOD'} },       'SPELL:*';
+      push @{ $masterOrder{'SUBCLASSLEVEL'} },  'SPELL:*';
+   }
+
+   # vvvvvv This one is disactivated
+   if ( 0 && LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
+      push @{ $masterOrder{'TEMPLATE'} },       'HITDICESIZE';
+   }
+}
+

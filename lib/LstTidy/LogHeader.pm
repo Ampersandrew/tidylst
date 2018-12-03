@@ -3,11 +3,6 @@ package LstTidy::LogHeader;
 use strict;
 use warnings;
 
-# expand library path so we can find LstTidy modules
-use File::Basename qw(dirname);
-use Cwd  qw(abs_path);
-use lib dirname(abs_path $0) . '/lib';
-
 our %headings = (
    'Category CrossRef'  => "Category cross-reference problems found\n",
    'Created'            => "List of files that were created in the directory\n",

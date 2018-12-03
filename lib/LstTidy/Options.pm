@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 use Scalar::Util qw(reftype);
-use Getopt::Long qw(GetOptionsFromArray);
+use Getopt::Long;
 use Exporter qw(import);
 
 our (@ISA, @EXPORT_OK);
@@ -13,7 +13,9 @@ our (@ISA, @EXPORT_OK);
 @EXPORT_OK = qw(getOption setOption isConversionActive);
 
 # Default command line options
-our (%clOptions, %activate, %conversionEnabled, %numeric_warning_level);
+my (%clOptions, %activate, %conversionEnabled, %numeric_warning_level);
+
+our $error;
 
 %activate = (
   'ADD:SAB'          => 'ALL:Convert ADD:SA to ADD:SAB',
@@ -256,6 +258,10 @@ sub parseOptions {
          'warninglevel'    =>  $warningLevel,
          'xcheck'          =>  $xCheck);
    }
+
+   # Grab any errors from Getopt::Long so users of this module don't have to
+   # use Getopt::Long
+   $error = $Getopt::Long::error;
    return $errorMessage;
 }
 
