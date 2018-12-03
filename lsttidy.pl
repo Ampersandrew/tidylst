@@ -4575,10 +4575,7 @@ if (getOption('inputpath')) {
         }
         File::Find::find( \&mywanted, getOption('inputpath') );
 
-        $logging->set_ewarn_header("================================================================\n"
-                                . "Messages generated while parsing the .PCC files\n"
-                                . "----------------------------------------------------------------\n"
-        );
+        $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('PCC'));
 
         # Second we parse every .PCC and look for filetypes
         for my $pcc_file_name ( sort @filelist ) {
@@ -4884,25 +4881,19 @@ if (getOption('inputpath')) {
 
         # Missing .lst files must be printed
         if ( keys %filelist_missing ) {
-                $logging->set_ewarn_header("================================================================\n"
-                                . "List of files used in a .PCC that do not exist\n"
-                                . "----------------------------------------------------------------\n"
-                );
-                for my $lstfile ( sort keys %filelist_missing ) {
-                        $logging->ewarn( NOTICE,
-                                "Can't find the file: $lstfile",
-                                $filelist_missing{$lstfile}[0],
-                                $filelist_missing{$lstfile}[1]
-                        );
-                }
+           $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('Missing'));
+           for my $lstfile ( sort keys %filelist_missing ) {
+              $logging->ewarn( NOTICE,
+                 "Can't find the file: $lstfile",
+                 $filelist_missing{$lstfile}[0],
+                 $filelist_missing{$lstfile}[1]
+              );
+           }
         }
 
         # If the gamemode filter is active, we do not report files not refered to.
         if ( keys %filelist_notpcc && !getOption('gamemode') ) {
-                $logging->set_ewarn_header("================================================================\n"
-                                . "List of files that are not referenced by any .PCC files\n"
-                                . "----------------------------------------------------------------\n"
-                );
+                $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('Unreferenced')
                 for my $file ( sort keys %filelist_notpcc ) {
                         $file =~ s/$cl_options{basepath}//i;
                         $file =~ tr{/}{\\} if $^O eq "MSWin32";
@@ -4914,10 +4905,7 @@ else {
         $files_to_parse{'STDIN'} = getOption('filetype');
 }
 
-$logging->set_ewarn_header("================================================================\n"
-                        . "Messages generated while parsing the .LST files\n"
-                        . "----------------------------------------------------------------\n"
-);
+$logging->set_ewarn_header(LstTidy::LogHeader::getHeader('LST'));
 
 my @files_to_parse_sorted = ();
 my %temp_files_to_parse   = %files_to_parse;
@@ -5154,11 +5142,7 @@ if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
 if ( getOption('outputpath') && scalar(@modified_files) ) {
         $cl_options{outputpath} =~ tr{/}{\\} if $^O eq "MSWin32";
 
-        $logging->set_ewarn_header("================================================================\n"
-                                . "List of files that were created in the directory\n"
-                                . "$cl_options{outputpath}\n"
-                                . "----------------------------------------------------------------\n"
-        );
+        $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('Created'), LstTidy::Options:getOption('outputpath'));
 
         for my $file (@modified_files) {
                 $file =~ s{ $cl_options{inputpath} }{}xmsi;
@@ -5366,10 +5350,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the report sorted by file name and line number.
-        $logging->set_ewarn_header("================================================================\n"
-                                . "Cross-reference problems found\n"
-                                . "----------------------------------------------------------------\n"
-        );
+        $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('CrossRef'));
 
         # This will add a message for every message in to_report - which should be every message
         # that was added to to_report.
@@ -5399,10 +5380,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the type report sorted by file name and line number.
-        $logging->set_ewarn_header("================================================================\n"
-                                . "Type cross-reference problems found\n"
-                                . "----------------------------------------------------------------\n"
-        );
+        $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('Type CrossRef'));
 
         for my $file ( sort keys %to_report ) {
                 for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
@@ -5430,10 +5408,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the category report sorted by file name and line number.
-        $logging->set_ewarn_header("================================================================\n"
-                                . "Category cross-reference problems found\n"
-                                . "----------------------------------------------------------------\n"
-        );
+        $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('Category CrossRef'));
 
         for my $file ( sort keys %to_report ) {
                 for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
@@ -13978,10 +13953,7 @@ sub embedded_coma_split {
                 my @verified_check_names        = ();
 
                 # Set the header for the error messages
-                $logging->set_ewarn_header( "================================================================\n"
-                                . "Messages generated while parsing the system files\n"
-                                . "----------------------------------------------------------------\n"
-                );
+                $logging->set_ewarn_header(LstTidy::LogHeader::getHeader('System'));
 
                 # Get the Unix direcroty separator even in a Windows environment
                 $system_file_path =~ tr{\\}{/};
