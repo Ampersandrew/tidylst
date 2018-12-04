@@ -146,7 +146,7 @@ my @system_files;
 
 # Valid filetype are the only ones that will be parsed
 # Some filetype are valid but not parsed yet (no function name)
-my %validfiletype = (
+my %parsableFileType = (
    'ABILITY'         => \&parseFile,
    'ABILITYCATEGORY' => \&parseFile,
    'BIOSET'          => \&parseFile,
@@ -737,7 +737,7 @@ our %masterFileType = (
 sub isParseableFileType {
    my ($fileType) = @_;
 
-   return $validfiletype{$fileType};
+   return $parsableFileType{$fileType};
 }
 
 =head2 isWriteableFileType 
@@ -772,9 +772,9 @@ sub setParseRoutine {
    my ($ref) = @_;
 
    # Replace the placeholder routines with the routine from the script
-   for my $key (keys %validfiletype) {
-      if (ref $validfiletype{$key} eq 'CODE') {
-         $validfiletype{$key} = $ref;
+   for my $key (keys %parsableFileType) {
+      if (ref $parsableFileType{$key} eq 'CODE') {
+         $parsableFileType{$key} = $ref;
       }
    }
 }
