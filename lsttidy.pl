@@ -59,7 +59,6 @@ sub warn_deprecate;
 sub record_bioset_tags;
 sub generate_bioset_files;
 sub generate_css;
-sub normalize_file;
 
 # File handles for the Export Lists
 my %filehandle_for;
@@ -532,18 +531,18 @@ use constant YES => 1;
 
 # The SOURCE line is use in nearly all file type
 my %SOURCE_file_type_def = (
-                Linetype        => 'SOURCE',
-                RegEx           => qr(^SOURCE\w*:([^\t]*)),
-                Mode            => SINGLE,
-                Format  => LINE,
-                Header  => NO_HEADER,
-#               Sep             => q{|},                                        # use | instead of [tab] to split
-                SepRegEx        => qr{ (?: [|] ) | (?: \t+ ) }xms,  # Catch both | and tab
+   Linetype => 'SOURCE',
+   RegEx    => qr(^SOURCE\w*:([^\t]*)),
+   Mode     => SINGLE,
+   Format   => LINE,
+   Header   => NO_HEADER,
+#  Sep      => q{|},                            # use | instead of [tab] to split
+   SepRegEx => qr{ (?: [|] ) | (?: \t+ ) }xms,  # Catch both | and tab
 );
 
 # Some ppl may still want to use the old ways (for PCGen v5.9.5 and older)
 if( getOption('oldsourcetag') ) {
-        $SOURCE_file_type_def{Sep} = q{|};  # use | instead of [tab] to split
+   $SOURCE_file_type_def{Sep} = q{|};  # use | instead of [tab] to split
 }
 
 # Information needed to parse the line type
@@ -3163,7 +3162,7 @@ for my $file (@files_to_parse_sorted) {
                 local $/ = undef; # read all from buffer
                 my $buffer = <>;
 
-                (my $lines, $filetype) = normalize_file($buffer);
+                (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
                 @lines = @$lines;
 
         } else {
@@ -3188,7 +3187,7 @@ for my $file (@files_to_parse_sorted) {
                         my $buffer = <$lst_fh>;
                         close $lst_fh;
 
-                        (my $lines, $filetype) = normalize_file($buffer);
+                        (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
                         @lines = @$lines;
                 };
 
@@ -3639,63 +3638,12 @@ if (getOption('outputerror')) {
 
 ###############################################################################
 ###############################################################################
-####                                                                                            ####
-####                            Subroutine Definitions                                  ####
-####                                                                                            ####
+####                                                                       ####
+####                            Subroutine Definitions                     ####
+####                                                                       ####
 ###############################################################################
 ###############################################################################
 
-###
-# henkslaaf
-# Detect filetype and normalize lines
-#
-# Parameters: $buffer => raw file data in a single buffer
-#
-# Returns: $filetype => either 'tab-based' or 'multi-line'
-#          $lines => arrayref containing logical lines normalized to tab-based format
-###
-
-sub normalize_file($) {
-   # TODO: handle empty buffers, other corner-cases
-   my $buffer = shift || "";     # default to empty line when passed undef
-   my $filetype;
-   my @lines;
-
-   # first, we clean out empty lines that contain only white-space. Otherwise,
-   # we could have false positives on the filetype
-
-   $buffer =~ s/^\s*$//g;        # simply remove all whitespace that is alone on its line
-
-   # detect file-type multi-line
-
-   # having a tab as a first character on a non-whitespace line is a sign of a
-   # multi-line file
-
-   if ($buffer =~ /^\t+\S/m) {
-      # This is a multi-line file
-
-      $filetype = "multi-line";
-
-      # Normalize to tab-based
-      # 1) All lines that start with a tab belong to the previous line.
-      # 2) Copy the lines as-is to the end of the previous line
-      #
-      # We use a regexp that just removes the newlines, which is easier than copying
-
-      $buffer =~ s/\n\t/\t/mg;
-
-      @lines = split /\n/, $buffer;
-
-   } else {
-      $filetype = "tab-based";
-   }
-
-   # The buffer is not normalized. Split on newline
-   @lines = split /\n/, $buffer;
-
-   # return a arrayref so we are a little more efficient
-   return (\@lines, $filetype);
-}
 
 
 ###############################################################
@@ -3705,135 +3653,106 @@ sub normalize_file($) {
 # This function uses the information of masterFileType to
 # identify the curent line type and parse it.
 #
-# Parameters: $fileType        = The type of the file has defined by
-#                                               the .PCC file
-#                       $lines_ref      = Reference to an array containing all
-#                                               the lines of the file
-#                       $file_for_error = File name to use with ewarn
+# Parameters: $fileType       = The type of the file has defined by the .PCC file
+#             $lines_ref      = Reference to an array containing all the lines of the file
+#             $file_for_error = File name to use with ewarn
 
 sub FILETYPE_parse {
-        my $fileType   = shift;
-        my $lines_ref   = shift;
-        my $file_for_error = shift;
+   my ($fileType, $lines_ref, $file_for_error) = @_;
 
-        ##################################################
-        # Working variables
+   ##################################################
+   # Working variables
 
-        my $curent_linetype = "";
-        my $last_main_line  = -1;
+   my $curent_linetype = "";
+   my $last_main_line  = -1;
 
-        my $curent_entity;
+   my $curent_entity;
 
-        my @newlines;   # New line generated
+   my @newlines;   # New line generated
 
-        ##################################################
-        ##################################################
-        # Phase I - Split line in tokens and parse
-        #               the tokens
+   ##################################################
+   ##################################################
+   # Phase I - Split line in tokens and parse
+   #               the tokens
 
-        my $line_for_error = 1;
-        LINE:
-        for my $line (@ {$lines_ref} ) {
-                my $line_info;
-                my $new_line = $line;   # We work on a copy
-        study $new_line;                # Make the substitution work.
+   my $line_for_error = 1;
+   LINE:
+   for my $line (@ {$lines_ref} ) {
 
-                # Remove spaces at the end of the line
-                $new_line =~ s/\s+$//;
+      my $line_info;
+     
+      # Convert the line if that conversion is active, otherwise just copy it. 
+      my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
+                        ? LstTidy::Convert::convertEntities($line)
+                        : $line;
 
-                # Remove spaces at the begining of the line
-                $new_line =~ s/^\s+//;
+      # Remove spaces at the end of the line
+      $new_line =~ s/\s+$//;
 
-        ## Gawaine42
-        ## [ 1324519 ] ASCII characters
-        ## Start by replacing the smart quotes and other similar characters.
-        if (LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')) {
-                $new_line =~ s/\x82/,/g;
-                $new_line =~ s/\x84/,,/g;
-                $new_line =~ s/\x85/.../g;
-                $new_line =~ s/\x88/^/g;
-                $new_line =~ s/\x8B/</g;
-                $new_line =~ s/\x8C/Oe/g;
-                $new_line =~ s/\x91/\'/g;
-                $new_line =~ s/\x92/\'/g;
-                $new_line =~ s/\x93/\"/g;
-                $new_line =~ s/\x94/\"/g;
-                $new_line =~ s/\x95/*/g;
-                $new_line =~ s/\x96/-/g;
-                $new_line =~ s/\x97/-/g;
-                $new_line =~ s-\x98-<sup>~</sup>-g;
-                $new_line =~ s-\x99-<sup>TM</sup>-g;
-                $new_line =~ s/\x9B/>/g;
-                $new_line =~ s/\x9C/oe/g;
-        }
+      # Remove spaces at the begining of the line
+      $new_line =~ s/^\s+//;
 
-                # Skip comments and empty lines
-                if ( length($new_line) == 0 || $new_line =~ /^\#/ ) {
+      # Skip comments and empty lines
+      if ( length($new_line) == 0 || $new_line =~ /^\#/ ) {
 
-                # We push the line as is.
-                push @newlines,
-                        [
-                        $curent_linetype,
-                        $new_line,
-                        $last_main_line,
-                        undef,
-                        undef,
-                        ];
-                next LINE;
-                }
+         # We push the line as is.
+         push @newlines,
+         [
+            $curent_linetype,
+            $new_line,
+            $last_main_line,
+            undef,
+            undef,
+         ];
+         next LINE;
+      }
+            
+      ($line_info, $curent_entity) = LstTidy::Parse::matchLineType($new_line, $fileType); 
 
-                # Find the line type
-                my $index = 0;
-                LINE_SPEC:
-                for my $line_spec ( @{ $masterFileType{$fileType} } ) {
-                if ( $new_line =~ $line_spec->{RegEx} ) {
+      # If we didn't find a record with info how to parse this line
+      if ( ! defined $line_info ) {
+         $log->warning(
+            qq(Can\'t find the line type for "$new_line"),
+            $file_for_error,
+            $line_for_error
+         );
 
-                        # Found it !!!
-                        $line_info      = $line_spec;
-                        $curent_entity = $1;
-                        last LINE_SPEC;
-                }
-                }
-                continue { $index++ }
+         # We push the line as is.
+         push @newlines,
+         [
+            $curent_linetype,
+            $new_line,
+            $last_main_line,
+            undef,
+            undef,
+         ];
+         next LINE;
+      }
 
-                # Did we find anything?
-                if ( $index >= @{ $masterFileType{$fileType} } ) {
-                $log->warning(
-                        qq(Can\'t find the line type for "$new_line"),
-                        $file_for_error,
-                        $line_for_error
-                );
+      # What type of line is it?
+      $curent_linetype = $line_info->{Linetype};
+      if ( $line_info->{Mode} == MAIN ) {
 
-                # We push the line as is.
-                push @newlines,
-                        [
-                        $curent_linetype,
-                        $new_line,
-                        $last_main_line,
-                        undef,
-                        undef,
-                        ];
-                next LINE;
-                }
+         $last_main_line = $line_for_error - 1;
 
-                # What type of line is it?
-                $curent_linetype = $line_info->{Linetype};
-                if ( $line_info->{Mode} == MAIN ) {
-                        $last_main_line = $line_for_error - 1;
-                }
-                elsif ( $line_info->{Mode} == SUB ) {
-                        $log->warning(
-                                qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
-                                $file_for_error,
-                                $line_for_error
-                        ) if $last_main_line == -1;
-                }
-                elsif ( $line_info->{Mode} == SINGLE ) {
-                        $last_main_line = -1;
-                }
-                else {
-                        die qq(Invalid type for $curent_linetype);
-                }
+      } elsif ( $line_info->{Mode} == SUB ) {
+
+         if ($last_main_line == -1) {
+            $log->warning(
+               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
+               $file_for_error,
+               $line_for_error
+            )
+         }
+
+      } elsif ( $line_info->{Mode} == SINGLE ) {
+
+         $last_main_line = -1;
+
+      } else {
+
+         die qq(Invalid type for $curent_linetype);
+      }
 
                 # Identify the deprecated tags.
                 &scan_for_deprecated_tags( $new_line, $curent_linetype, $file_for_error, $line_for_error );

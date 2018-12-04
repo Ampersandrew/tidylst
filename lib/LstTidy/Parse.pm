@@ -232,7 +232,7 @@ if( getOption('oldsourcetag') ) {
 }
 
 # Information needed to parse the line type
-our %masterFileType = (
+our %parseControl = (
 
    ABILITY => [
       \%SourceLineDef,
@@ -1021,5 +1021,84 @@ sub updateValidity {
       'Traveller20',
    );
 };
+
+=head2 normaliseFile
+
+   Detect filetype and normalize lines
+   
+   Parameters: $buffer => raw file data in a single buffer
+   
+   Returns: $filetype => either 'tab-based' or 'multi-line'
+            $lines => arrayref containing logical lines normalized to tab-based format
+
+=cut
+
+sub normaliseFile {
+
+   # TODO: handle empty buffers, other corner-cases
+   my $buffer = shift || "";     # default to empty line when passed undef
+
+   my $filetype;
+   my @lines;
+
+   # First, we clean out empty lines that contain only white-space. Otherwise,
+   # we could have false positives on the filetype.  Simply remove all
+   # whitespace that is alone on its line.
+
+   $buffer =~ s/^\s*$//g;
+
+   # having a tab as a first character on a non-whitespace line is a sign of a
+   # multi-line file
+
+   if ($buffer =~ /^\t+\S/m) {
+
+      $filetype = "multi-line";
+
+      # Normalize to tab-based
+      # 1) All lines that start with a tab belong to the previous line.
+      # 2) Copy the lines as-is to the end of the previous line
+
+      # We use a regexp that just removes the newlines, which is easier than
+      # copying
+
+      $buffer =~ s/\n\t/\t/mg;
+
+      @lines = split /\n/, $buffer;
+
+   } else {
+      $filetype = "tab-based";
+   }
+
+   # Split into an array of lines.
+   @lines = split /\n/, $buffer;
+
+   # return a arrayref so we are a little more efficient
+   return (\@lines, $filetype);
+}
+
+=head2 matchLineType
+
+   Match the given line, and return the line definition.
+
+=cut
+
+sub matchLineType {
+   my ($line, $fileType) = @_;
+
+   # Try each of the line types for this file type until we get a match or
+   # exhaust the types.
+
+   my ($lineSpec, $entity);
+   for my $rec ( @{ $parseControl{$fileType} } ) {
+      if ( $line =~ $rec->{RegEx} ) {
+
+         $lineSpec = $rec;
+         $entity   = $1;
+         last;
+      }
+   }
+
+   return($lineSpec, $entity);
+}
 
 1;
