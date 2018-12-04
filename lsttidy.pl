@@ -3656,41 +3656,45 @@ if (getOption('outputerror')) {
 ###
 
 sub normalize_file($) {
-        # TODO: handle empty buffers, other corner-cases
-        my $buffer = shift || "";    # default to empty line when passed undef
-        my $filetype;
-        my @lines;
+   # TODO: handle empty buffers, other corner-cases
+   my $buffer = shift || "";     # default to empty line when passed undef
+   my $filetype;
+   my @lines;
 
-        # first, we clean out empty lines that contain only white-space. Otherwise, we could have
-        # false positives on the filetype
-        $buffer =~ s/^\s*$//g;    # simply remove all whitespace that is alone on its line
+   # first, we clean out empty lines that contain only white-space. Otherwise,
+   # we could have false positives on the filetype
 
-        # detect file-type multi-line
+   $buffer =~ s/^\s*$//g;        # simply remove all whitespace that is alone on its line
 
-        if ($buffer =~ /^\t+\S/m) {   # having a tab as a first character on a non-whitespace line is a sign of a multi-line file
-                # This is a multi-line file
+   # detect file-type multi-line
 
-                $filetype = "multi-line";
+   # having a tab as a first character on a non-whitespace line is a sign of a
+   # multi-line file
 
-                # Normalize to tab-based
-                # 1) All lines that start with a tab belong to the previous line.
-                # 2) Copy the lines as-is to the end of the previous line
-                #
-                # We use a regexp that just removes the newlines, which is easier than copying
+   if ($buffer =~ /^\t+\S/m) {
+      # This is a multi-line file
 
-                $buffer =~ s/\n\t/\t/mg;
+      $filetype = "multi-line";
 
-                @lines = split /\n/, $buffer;
-        }
-        else {
-                $filetype = "tab-based";
-        }
+      # Normalize to tab-based
+      # 1) All lines that start with a tab belong to the previous line.
+      # 2) Copy the lines as-is to the end of the previous line
+      #
+      # We use a regexp that just removes the newlines, which is easier than copying
 
-        # The buffer iw not normalized. Split on newline
-        @lines = split /\n/, $buffer;
+      $buffer =~ s/\n\t/\t/mg;
 
-        # return a arrayref so we are a little more efficient
-        return (\@lines, $filetype);
+      @lines = split /\n/, $buffer;
+
+   } else {
+      $filetype = "tab-based";
+   }
+
+   # The buffer is not normalized. Split on newline
+   @lines = split /\n/, $buffer;
+
+   # return a arrayref so we are a little more efficient
+   return (\@lines, $filetype);
 }
 
 
