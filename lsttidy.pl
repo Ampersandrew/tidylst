@@ -31,6 +31,7 @@ use lib dirname(abs_path $0) . '/lib';
 use LstTidy::Parse;
 use LstTidy::Log;
 use LstTidy::LogHeader;
+use LstTidy::Reformat;
 use LstTidy::Options qw(getOption setOption isConversionActive);
 
 # Subroutines
@@ -71,9 +72,14 @@ print STDERR "$VERSION_LONG\n";
 # -------------------------------------------------------------
 
 # Parse the command line options and set the error message if there are any issues.
-my $error_message = "\n" . LstTidy::Options::ParseOptions(\@ARGV);
+my $error_message = "\n" . LstTidy::Options::parseOptions(@ARGV);
 
-#####################################
+# The command line has been processed, if conversions have been requested, make
+# sure the tag validity data in Reformat.pm is updated. In order to convert a
+# tag it must be recognised as valid. 
+
+LstTidy::Reformat::addTagsForConversions(); 
+
 # Test function or display variables
 # or anything else I need.
 
@@ -83,20 +89,22 @@ if ( getOption('test') ) {
    exit;
 }
 
-#####################################
 # Warning Level
+
+# Check the warning level passed on the command line to ensure it is valid.
+# Whether the check passes or fals, a valid level is returned. If the level we
+# gave it was invalid, an error string is also returned. If it returned an
+# error string it also set an options to ensure the error string is printed.
 
 my ($level, $mess) = LstTidy::Log::checkWarningLevel(getOption('warninglevel'));
 
 setOption('warninglevel', $level);
 $error_message .= $mess if defined $mess;
 
-#####################################
-# No-warning option
+# Create the logging object, using the warning level verified above.
 
 my $log = LstTidy::Log->new( warningLevel=>getOption('warninglevel'));
 
-#####################################
 # Path options
 
 if (!getOption('inputpath') && !getOption('filetype') && !(getOption('man') || getOption('htmlhelp')))
@@ -114,9 +122,6 @@ if (getOption('outputerror')) {
    print STDERR "At ", $today, " on the data files in the \'", getOption('inputpath') , "\' directory\n";
 }
 
-
-LstTidy::Reformat::addTagsForConversions(); 
-
 #####################################
 # -systempath option
 #
@@ -125,14 +130,15 @@ LstTidy::Reformat::addTagsForConversions();
 
 if ( getOption('systempath') ne q{} ) {
    LstTidy::Parse::parse_system_files(getOption('systempath'), $log);
-}
+} 
+
+LstTidy::Parse::updateValidity();
+
 
 # Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
 my @valid_system_alignments  = LstTidy::Parse::getValidSystemArr('alignments');
 my @valid_system_stats       = LstTidy::Parse::getValidSystemArr('stats');
 my @valid_system_var_names   = LstTidy::Parse::getValidSystemArr('vars');
-
-
 
 # Limited choice tags
 my %tag_fix_value = (
@@ -2751,7 +2757,7 @@ if (getOption('inputpath')) {
         }
         File::Find::find( \&mywanted, getOption('inputpath') );
 
-        $log->header(LstTidy::LogHeader::getHeader('PCC'));
+        $log->header(LstTidy::LogHeader::get('PCC'));
 
         # Second we parse every .PCC and look for filetypes
         for my $pcc_file_name ( sort @filelist ) {
@@ -3056,7 +3062,7 @@ if (getOption('inputpath')) {
 
         # Missing .lst files must be printed
         if ( keys %filelist_missing ) {
-           $log->header(LstTidy::LogHeader::getHeader('Missing'));
+           $log->header(LstTidy::LogHeader::get('Missing'));
            for my $lstfile ( sort keys %filelist_missing ) {
               $log->notice(
                  "Can't find the file: $lstfile",
@@ -3068,7 +3074,7 @@ if (getOption('inputpath')) {
 
         # If the gamemode filter is active, we do not report files not refered to.
         if ( keys %filelist_notpcc && !getOption('gamemode') ) {
-                $log->header(LstTidy::LogHeader::getHeader('Unreferenced'));
+                $log->header(LstTidy::LogHeader::get('Unreferenced'));
                 for my $file ( sort keys %filelist_notpcc ) {
                         my $basepath = getOption('basepath');
                         $file =~ s/${basepath}//i;
@@ -3081,7 +3087,7 @@ else {
         $files_to_parse{'STDIN'} = getOption('filetype');
 }
 
-$log->header(LstTidy::LogHeader::getHeader('LST'));
+$log->header(LstTidy::LogHeader::get('LST'));
 
 my @files_to_parse_sorted = ();
 my %temp_files_to_parse   = %files_to_parse;
@@ -3321,7 +3327,7 @@ if ( getOption('outputpath') && scalar(@modified_files) ) {
         my $outputpath = getOption('outputpath');
         $outputpath =~ tr{/}{\\} if $^O eq "MSWin32";
 
-        $log->header(LstTidy::LogHeader::getHeader('Created'), getOption('outputpath'));
+        $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
 
         my $inputpath = getOption('inputpath');
         for my $file (@modified_files) {
@@ -3514,7 +3520,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::getHeader('CrossRef'));
+        $log->header(LstTidy::LogHeader::get('CrossRef'));
 
         # This will add a message for every message in to_report - which should be every message
         # that was added to to_report.
@@ -3547,7 +3553,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the type report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::getHeader('Type CrossRef'));
+        $log->header(LstTidy::LogHeader::get('Type CrossRef'));
 
         for my $file ( sort keys %to_report ) {
                 for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
@@ -3575,7 +3581,7 @@ if ( getOption('xcheck') ) {
         }
 
         # Print the category report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::getHeader('Category CrossRef'));
+        $log->header(LstTidy::LogHeader::get('Category CrossRef'));
 
         for my $file ( sort keys %to_report ) {
                 for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {

@@ -774,7 +774,7 @@ sub setParseRoutine {
    # Replace the placeholder routines with the routine from the script
    for my $key (keys %validfiletype) {
       if (ref $validfiletype{$key} eq 'CODE') {
-         $validfiletype{$key} = ref;
+         $validfiletype{$key} = $ref;
       }
    }
 }
@@ -968,6 +968,14 @@ sub parse_system_files {
       close $csv_file;
    }
 
+   return;
+}
+
+=head2 updateValidity
+
+
+=cut 
+sub updateValidity {
    %valid_check_name = map { $_ => 1} @valid_system_check_names, '%LIST', '%CHOICE';
 
    %valid_game_modes = map { $_ => 1 } (
@@ -1003,6 +1011,6 @@ sub parse_system_files {
       'T20',
       'Traveller20',
    );
+};
 
-   return;
-}
+1;

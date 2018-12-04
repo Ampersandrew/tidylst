@@ -2011,7 +2011,7 @@ our %masterOrder = (
 
 my %master_mult;        # Will hold the tags that can be there more then once
 
-my %valid_tags;         # Will hold the valid tags for each type of file.
+my %validTags;         # Will hold the valid tags for each type of file.
 
 =head2 getValidLineTypes
 
@@ -2047,10 +2047,10 @@ sub getLineTypeOrder {
 sub constructValidTags {
 
    #################################################
-   # We populate %valid_tags for all file types.
+   # We populate %validTags for all file types.
 
    for my $line_type ( LstTidy::Reformat::getValidLineTypes() ) {
-      for my $tag ( @{ LstTidy::Reformat::getLineTypeOrder() } ) {
+      for my $tag ( @{ LstTidy::Reformat::getLineTypeOrder($line_type) } ) {
          if ( $tag =~ / ( .* ) [:][*] \z /xms ) {
 
             # Tag that end by :* are allowed
@@ -2060,10 +2060,10 @@ sub constructValidTags {
             $master_mult{$line_type}{$tag} = 1;
          }
 
-         if ( exists $valid_tags{$line_type}{$tag} ) {
+         if ( exists $validTags{$line_type}{$tag} ) {
             die "Tag $tag found more then once for $line_type";
          } else {
-            $valid_tags{$line_type}{$tag} = 1;
+            $validTags{$line_type}{$tag} = 1;
          }
       }
    }
@@ -2094,7 +2094,7 @@ sub isValidMultiTag {
 sub isValidTag {
    my ($lineType, $tag) = @_;
             
-   return exists $masterOrder{$lineType}{$tag};
+   return exists $validTags{$lineType}{$tag};
 };
 
 #################################################################
@@ -2107,6 +2107,7 @@ sub isValidTag {
    them. This operation updates the masterOrder, which controls validity.
 
 =cut
+
 sub addTagsForConversions {
 
    if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
@@ -2178,3 +2179,4 @@ sub addTagsForConversions {
    }
 }
 
+1;
