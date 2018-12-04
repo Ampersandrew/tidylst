@@ -3696,14 +3696,7 @@ sub FILETYPE_parse {
       if ( length($new_line) == 0 || $new_line =~ /^\#/ ) {
 
          # We push the line as is.
-         push @newlines,
-         [
-            $curent_linetype,
-            $new_line,
-            $last_main_line,
-            undef,
-            undef,
-         ];
+         push @newlines, [ $curent_linetype, $new_line, $last_main_line, undef, undef, ];
          next LINE;
       }
             
@@ -3718,14 +3711,7 @@ sub FILETYPE_parse {
          );
 
          # We push the line as is.
-         push @newlines,
-         [
-            $curent_linetype,
-            $new_line,
-            $last_main_line,
-            undef,
-            undef,
-         ];
+         push @newlines, [ $curent_linetype, $new_line, $last_main_line, undef, undef, ];
          next LINE;
       }
 
