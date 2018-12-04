@@ -38,11 +38,11 @@ use constant {
 };
 
 # List of default for values defined in system files
-my @valid_system_alignments = qw(LG LN LE NG TN NE CG CN CE NONE Deity);
+my @validSystemAlignments = qw(LG LN LE NG TN NE CG CN CE NONE Deity);
 
-my @valid_system_check_names = qw(Fortitude Reflex Will);
+my @validSystemCheckNames = qw(Fortitude Reflex Will);
 
-my @valid_system_game_modes  = ( 
+my @validSystemGameModes = ( 
    # Main PCGen Release
    qw(35e 3e Deadlands Darwins_World_2 FantasyCraft Gaslight Killshot LoE Modern
    Pathfinder Sidewinder Spycraft Xcrawl OSRIC),
@@ -55,13 +55,13 @@ my @valid_system_game_modes  = (
    SovereignStoneD20) );
 
 # This meeds replaced, we should be getting this information from the STATS file.
-my @valid_system_stats          = qw(
+my @validSystemStats = qw(
    STR DEX CON INT WIS CHA NOB FAM PFM
    
    DVR WEA AGI QUI SDI REA INS PRE
 );
 
-my @valid_system_var_names      = qw(
+my @validSystemVarNames = qw(
    ACTIONDICE                    ACTIONDIEBONUS          ACTIONDIETYPE
    Action                        ActionLVL               BUDGETPOINTS
    CURRENTVEHICLEMODS            ClassDefense            DamageThreshold
@@ -95,9 +95,9 @@ my @valid_system_var_names      = qw(
    MASTERVAR                     APPLIEDAS
 );
 
-# These are populated at the end of parse_system_files 
-my %valid_check_name = ();
-my %valid_game_modes = ();
+# These are populated at the end of parseSystemFiles 
+my %validCheckName = ();
+my %validGameModes = ();
 
 =head2  getValidSystemArr
 
@@ -109,11 +109,11 @@ sub getValidSystemArr {
    my ($type) = @_;
 
    my $arr = {
-      'alignments' => \@valid_system_alignments,
-      'checks'     => \@valid_system_check_names,
-      'gamemodes'  => \@valid_system_game_modes,
-      'stats'      => \@valid_system_stats,
-      'vars'       => \@valid_system_var_names
+      'alignments' => \@validSystemAlignments,
+      'checks'     => \@validSystemCheckNames,
+      'gamemodes'  => \@validSystemGameModes,
+      'stats'      => \@validSystemStats,
+      'vars'       => \@validSystemVarNames
    }->{$type};
 
    defined $arr ? @{$arr} : ();
@@ -127,7 +127,7 @@ sub getValidSystemArr {
 
 sub isValidCheck{
    my ($check) = @_;
-   return exists $valid_check_name{$check};
+   return exists $validCheckName{$check};
 }
 
 =head2 isValidGamemode
@@ -138,11 +138,8 @@ sub isValidCheck{
 
 sub isValidGamemode {
    my ($Gamemode) = @_;
-   return exists $valid_game_modes{$Gamemode};
+   return exists $validGameModes{$Gamemode};
 }
-
-# Needed for the Find function
-my @system_files;
 
 # Valid filetype are the only ones that will be parsed
 # Some filetype are valid but not parsed yet (no function name)
@@ -779,39 +776,47 @@ sub setParseRoutine {
    }
 }
 
-sub parse_system_files {
-   my ($system_file_path, $log) = @_;
-   my $original_system_file_path = $system_file_path;
+=head2 parseSystemFiles
 
-   my @verified_allowed_modes = ();
-   my @verified_stats         = ();
-   my @verified_alignments    = ();
-   my @verified_var_names     = ();
-   my @verified_check_names   = ();
+   This operation searches the given gamemode directory and parses out
+   Allowable game modes, Stats, alignments, variable names and check names. These
+   are then used to populate the valid data for later parses of LST files.
+
+=cut
+
+sub parseSystemFiles {
+   my ($systemFilePath, $log) = @_;
+   my $originalSystemFilePath = $systemFilePath;
+
+   my @verifiedAllowedModes = ();
+   my @verifiedStats        = ();
+   my @verifiedAlignments   = ();
+   my @verifiedVarNames     = ();
+   my @verifiedCheckNames   = ();
 
    # Set the header for the error messages
-   $log->header(LstTidy::LogHeader::getHeader('System'));
+   $log->header(LstTidy::LogHeader::get('System'));
 
    # Get the Unix direcroty separator even in a Windows environment
-   $system_file_path =~ tr{\\}{/};
+   $systemFilePath =~ tr{\\}{/};
 
    # Verify if the gameModes directory is present
-   if ( !-d "$system_file_path/gameModes" ) {
-      die qq{No gameModes directory found in "$original_system_file_path"};
+   if ( !-d "$systemFilePath/gameModes" ) {
+      die qq{No gameModes directory found in "$originalSystemFilePath"};
    }
 
    # We will now find all of the miscinfo.lst and statsandchecks.lst files
-   @system_files = ();;
+   my @systemFiles = ();;
 
    my $getSystem = sub {
-      push @system_files, $File::Find::name
+      push @systemFiles, $File::Find::name
       if lc $_ eq 'miscinfo.lst' || lc $_ eq 'statsandchecks.lst';
    };
 
-   File::Find::find( $getSystem, $system_file_path );
+   File::Find::find( $getSystem, $systemFilePath );
 
    # Did we find anything (hopefuly yes)
-   if ( scalar @system_files == 0 ) {
+   if ( scalar @systemFiles == 0 ) {
       $log->error(
          qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
          getOption('systempath')
@@ -822,12 +827,11 @@ sub parse_system_files {
    # game mode
    if (getOption('gamemode')) {
       my $gamemode = getOption('gamemode') ;
-      @system_files = grep { m{ \A $system_file_path [/] gameModes [/] (?: ${gamemode} ) [/] }xmsi; }
-      @system_files;
+      @systemFiles = grep { m{ \A $systemFilePath [/] gameModes [/] (?: ${gamemode} ) [/] }xmsi; } @systemFiles;
    }
 
    # Anything left?
-   if ( scalar @system_files == 0 ) {
+   if ( scalar @systemFiles == 0 ) {
       my $gamemode = getOption('gamemode') ;
       $log->error(
          qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/${gamemode}/ directory},
@@ -836,11 +840,11 @@ sub parse_system_files {
    }
 
    # Now we search for the interesting part in the miscinfo.lst files
-   for my $system_file (@system_files) {
-      open my $system_file_fh, '<', $system_file;
+   for my $systemFile (@systemFiles) {
+      open my $systemFileFh, '<', $systemFile;
 
       LINE:
-      while ( my $line = <$system_file_fh> ) {
+      while ( my $line = <$systemFileFh> ) {
          chomp $line;
 
          # Skip comment lines
@@ -848,124 +852,126 @@ sub parse_system_files {
 
          # ex. ALLOWEDMODES:35e|DnD
          if ( my ($modes) = ( $line =~ / ALLOWEDMODES: ( [^\t]* )/xms ) ) {
-            push @verified_allowed_modes, split /[|]/, $modes;
+            push @verifiedAllowedModes, split /[|]/, $modes;
             next LINE;
-         }
-         # ex. STATNAME:Strength ABB:STR DEFINE:MAXLEVELSTAT=STR|STRSCORE-10
-         elsif ( $line =~ / \A STATNAME: /xms ) {
+
+            # ex. STATNAME:Strength ABB:STR DEFINE:MAXLEVELSTAT=STR|STRSCORE-10
+         } elsif ( $line =~ / \A STATNAME: /xms ) {
+
             LINE_TAG:
-            for my $line_tag (split /\t+/, $line) {
+            for my $tag (split /\t+/, $line) {
+
                # STATNAME lines have more then one interesting tags
-               if ( my ($stat) = ( $line_tag =~ / \A ABB: ( .* ) /xms ) ) {
-                  push @verified_stats, $stat;
-               }
-               elsif ( my ($define_expression) = ( $line_tag =~ / \A DEFINE: ( .* ) /xms ) ) {
-                  if ( my ($var_name) = ( $define_expression =~ / \A ( [\t=|]* ) /xms ) ) {
-                     push @verified_var_names, $var_name;
-                  }
-                  else {
+               if ( my ($stat) = ( $tag =~ / \A ABB: ( .* ) /xms ) ) {
+                  push @verifiedStats, $stat;
+
+               } elsif ( my ($defineExpression) = ( $tag =~ / \A DEFINE: ( .* ) /xms ) ) {
+
+                  if ( my ($varName) = ( $defineExpression =~ / \A ( [\t=|]* ) /xms ) ) {
+                     push @verifiedVarNames, $varName;
+                  } else {
                      $log->error(
-                        qq{Cannot find the variable name in "$define_expression"},
-                        $system_file,
+                        qq{Cannot find the variable name in "$defineExpression"},
+                        $systemFile,
                         $INPUT_LINE_NUMBER
                      );
                   }
                }
             }
-         }
-         # ex. ALIGNMENTNAME:Lawful Good ABB:LG
-         elsif ( my ($alignment) = ( $line =~ / \A ALIGNMENTNAME: .* ABB: ( [^\t]* ) /xms ) ) {
-            push @verified_alignments, $alignment;
-         }
-         # ex. CHECKNAME:Fortitude   BONUS:CHECKS|Fortitude|CON
-         elsif ( my ($check_name) = ( $line =~ / \A CHECKNAME: .* BONUS:CHECKS [|] ( [^\t|]* ) /xms ) ) {
+
+            # ex. ALIGNMENTNAME:Lawful Good ABB:LG
+         } elsif ( my ($alignment) = ( $line =~ / \A ALIGNMENTNAME: .* ABB: ( [^\t]* ) /xms ) ) {
+            push @verifiedAlignments, $alignment;
+
+            # ex. CHECKNAME:Fortitude   BONUS:CHECKS|Fortitude|CON
+         } elsif ( my ($checkName) = ( $line =~ / \A CHECKNAME: .* BONUS:CHECKS [|] ( [^\t|]* ) /xms ) ) {
             # The check name used by PCGen is actually the one defined with the first BONUS:CHECKS.
             # CHECKNAME:Sagesse     BONUS:CHECKS|Will|WIS would display Sagesse but use Will internaly.
-            push @verified_check_names, $check_name;
+            push @verifiedCheckNames, $checkName;
          }
       }
 
-      close $system_file_fh;
+      close $systemFileFh;
    }
 
    # We keep only the first instance of every list items and replace
    # the default values with the result.
    # The order of elements must be preserved
    my %seen = ();
-   @valid_system_alignments = grep { !$seen{$_}++ } @verified_alignments;
+   @validSystemAlignments = grep { !$seen{$_}++ } @verifiedAlignments;
 
    %seen = ();
-   @valid_system_check_names = grep { !$seen{$_}++ } @verified_check_names;
+   @validSystemCheckNames = grep { !$seen{$_}++ } @verifiedCheckNames;
 
    %seen = ();
-   @valid_system_game_modes = grep { !$seen{$_}++ } @verified_allowed_modes;
+   @validSystemGameModes = grep { !$seen{$_}++ } @verifiedAllowedModes;
 
    %seen = ();
-   @valid_system_stats = grep { !$seen{$_}++ } @verified_stats;
+   @validSystemStats = grep { !$seen{$_}++ } @verifiedStats;
 
    %seen = ();
-   @valid_system_var_names = grep { !$seen{$_}++ } @verified_var_names;
+   @validSystemVarNames = grep { !$seen{$_}++ } @verifiedVarNames;
 
    # Now we bitch if we are not happy
-   if ( scalar @verified_stats == 0 ) {
+   if ( scalar @verifiedStats == 0 ) {
       $log->error(
          q{Could not find any STATNAME: tag in the system files},
-         $original_system_file_path
+         $originalSystemFilePath
       );
    }
 
-   if ( scalar @valid_system_game_modes == 0 ) {
+   if ( scalar @validSystemGameModes == 0 ) {
       $log->error(
          q{Could not find any ALLOWEDMODES: tag in the system files},
-         $original_system_file_path
+         $originalSystemFilePath
       );
    }
 
-   if ( scalar @valid_system_check_names == 0 ) {
+   if ( scalar @validSystemCheckNames == 0 ) {
       $log->error(
          q{Could not find any valid CHECKNAME: tag in the system files},
-         $original_system_file_path
+         $originalSystemFilePath
       );
    }
 
    # If the -exportlist option was used, we generate a system.csv file
    if ( getOption('exportlist') ) {
 
-      open my $csv_file, '>', 'system.csv';
+      open my $csvFile, '>', 'system.csv';
 
-      print {$csv_file} qq{"System Directory","$original_system_file_path"\n};
+      print {$csvFile} qq{"System Directory","$originalSystemFilePath"\n};
 
       if ( getOption('gamemode') ) {
          my $gamemode = getOption('gamemode') ;
-         print {$csv_file} qq{"Game Mode Selected","${gamemode}"\n};
+         print {$csvFile} qq{"Game Mode Selected","${gamemode}"\n};
       }
-      print {$csv_file} qq{\n};
+      print {$csvFile} qq{\n};
 
-      print {$csv_file} qq{"Alignments"\n};
-      for my $alignment (@valid_system_alignments) {
-         print {$csv_file} qq{"$alignment"\n};
+      print {$csvFile} qq{"Alignments"\n};
+      for my $alignment (@validSystemAlignments) {
+         print {$csvFile} qq{"$alignment"\n};
       }
-      print {$csv_file} qq{\n};
+      print {$csvFile} qq{\n};
 
-      print {$csv_file} qq{"Allowed Modes"\n};
-      for my $mode (sort @valid_system_game_modes) {
-         print {$csv_file} qq{"$mode"\n};
+      print {$csvFile} qq{"Allowed Modes"\n};
+      for my $mode (sort @validSystemGameModes) {
+         print {$csvFile} qq{"$mode"\n};
       }
-      print {$csv_file} qq{\n};
+      print {$csvFile} qq{\n};
 
-      print {$csv_file} qq{"Stats Abbreviations"\n};
-      for my $stat (@valid_system_stats) {
-         print {$csv_file} qq{"$stat"\n};
+      print {$csvFile} qq{"Stats Abbreviations"\n};
+      for my $stat (@validSystemStats) {
+         print {$csvFile} qq{"$stat"\n};
       }
-      print {$csv_file} qq{\n};
+      print {$csvFile} qq{\n};
 
-      print {$csv_file} qq{"Variable Names"\n};
-      for my $var_name (sort @valid_system_var_names) {
-         print {$csv_file} qq{"$var_name"\n};
+      print {$csvFile} qq{"Variable Names"\n};
+      for my $varName (sort @validSystemVarNames) {
+         print {$csvFile} qq{"$varName"\n};
       }
-      print {$csv_file} qq{\n};
+      print {$csvFile} qq{\n};
 
-      close $csv_file;
+      close $csvFile;
    }
 
    return;
@@ -973,13 +979,16 @@ sub parse_system_files {
 
 =head2 updateValidity
 
+   This operation is intended to be called after parseSystemFiles, since that
+operation can change the value of both @validSystemCheckNames
+@validSystemGameModes,
 
 =cut 
 sub updateValidity {
-   %valid_check_name = map { $_ => 1} @valid_system_check_names, '%LIST', '%CHOICE';
+   %validCheckName = map { $_ => 1} @validSystemCheckNames, '%LIST', '%CHOICE';
 
-   %valid_game_modes = map { $_ => 1 } (
-      @valid_system_game_modes,
+   %validGameModes = map { $_ => 1 } (
+      @validSystemGameModes,
 
       # CMP game modes
       'CMP_OGL_Arcana_Unearthed',

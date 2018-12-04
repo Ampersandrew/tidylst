@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 37;
+use Test::More tests => 45;
 
 use_ok ('LstTidy::Parse');
 
@@ -62,4 +62,19 @@ for my $type ( keys %enabled ) {
 is(LstTidy::Parse::isWriteableFileType('ABILITY'), 1, "Ability files are writeable");
 is(LstTidy::Parse::isWriteableFileType('COPYRIGHT'), 0, "Copyright files are not writeable");
 
+is(LstTidy::Parse::isValidCheck('Will'), q{}, "Validity data not yet populated checks");
+is(LstTidy::Parse::isValidGamemode('Pathfinder'), q{}, "Validity data not yet populated gamemodes");
+
+LstTidy::Parse::updateValidity();
+
+is(LstTidy::Parse::isValidCheck('Will'), 1, "Valid check is valid");
+is(LstTidy::Parse::isValidGamemode('Pathfinder'), 1, "Valid gamemode is valid");
+
+is(LstTidy::Parse::isParseableFileType('Arse'), undef, "Arse is not a parsable File type");
+like(LstTidy::Parse::isParseableFileType('ABILITY'), qr{CODE}, "ABILITY is a parsable File type");
+
+is(LstTidy::Parse::isWriteableFileType('COVER'), 0, "COVER is not a writable File type");
+is(LstTidy::Parse::isWriteableFileType('EQUIPMENT'), 1, "EQUIPMENT is a writable File type");
+
+# LstTidy::Parse::parse_system_files
 

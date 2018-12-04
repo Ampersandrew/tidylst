@@ -54,7 +54,7 @@ sub get_header;
 sub create_dir;
 sub report_tag_sort;
 sub embedded_coma_split;
-sub parse_system_files;
+sub parseSystemFiles;
 sub warn_deprecate;
 sub record_bioset_tags;
 sub generate_bioset_files;
@@ -129,7 +129,7 @@ if (getOption('outputerror')) {
 # generate the "game mode" variables.
 
 if ( getOption('systempath') ne q{} ) {
-   LstTidy::Parse::parse_system_files(getOption('systempath'), $log);
+   LstTidy::Parse::parseSystemFiles(getOption('systempath'), $log);
 } 
 
 LstTidy::Parse::updateValidity();
