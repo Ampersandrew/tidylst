@@ -1101,4 +1101,224 @@ sub matchLineType {
    return($lineSpec, $entity);
 }
 
+
+=head2 scanForDeprecatedTags
+
+   This function establishes a centralized location to search
+   each line for deprecated tags.
+   
+   Parameters:   $line           = The line to be searched
+                 $linetype       = The type of line
+                 $log            = The logging object
+                 $file_for_error = File name to use with ewarn
+                 $line_for_error = The currrent line's number within the file
+
+=cut
+
+sub scanForDeprecatedTags {
+   my ( $line, $linetype, $log, $file, $lineNum ) = @_ ;
+
+   # Deprecated tags
+   if ( $line =~ /\scl\(/ ) {
+      $log->info(
+         qq{The Jep function cl() is deprecated, use classlevel() instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
+   if ( $line =~ /\sBONUS:DAMAGE\s/ ) {
+      $log->info(
+         qq{BONUS:DAMAGE is deprecated 5.5.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
+   if ( $line =~ /\sBONUS:TOHIT\s/ ) {
+      $log->info(
+         qq{BONUS:TOHIT is deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1973497 ] HASSPELLFORMULA is deprecated
+   if ( $line =~ /\sHASSPELLFORMULA/ ) {
+      $log->warning(
+         qq{HASSPELLFORMULA is no longer needed and is deprecated in PCGen 5.15},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /[\d+|\)]MAX\d+/ ) {
+      $log->info(
+         qq{The function aMAXb is deprecated, use the Jep function max(a,b) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /[\d+|\)]MIN\d+/ ) {
+      $log->info(
+         qq{The function aMINb is deprecated, use the Jep function min(a,b) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\b]TRUNC\b/ ) {
+      $log->info(
+         qq{The function TRUNC is deprecated, use the Jep function floor(a) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sHITDICESIZE\s/ ) {
+      $log->info(
+         qq{HITDICESIZE is deprecated, use HITDIE instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sSPELl\s/ && $linetype ne 'PCC' ) {
+      $log->info(
+         qq{SPELL is deprecated, use SPELLS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sWEAPONAUTO\s/ ) {
+      $log->info(
+         qq{WEAPONAUTO is deprecated, use AUTO:WEAPONPROF instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sADD:WEAPONBONUS\s/ ) {
+      $log->info(
+         qq{ADD:WEAPONBONUS is deprecated, use BONUS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sADD:LIST\s/ ) {
+      $log->info(
+         qq{ADD:LIST is deprecated, use BONUS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sFOLLOWERALIGN/) {
+      $log->info(
+         qq{FOLLOWERALIGN is deprecated, use PREALIGN on Domain instead. Use the -c=pcgen5120 command line switch to fix this problem},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1905481 ] Deprecate CompanionMod SWITCHRACE
+   if ( $line =~ /\sSWITCHRACE\s/) {
+      $log->info(
+         qq{SWITCHRACE is deprecated 5.13.11 - Remove 6.0 - Use RACETYPE:x tag instead },
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1804786 ] Deprecate SA: replace with SAB:
+   if ( $line =~ /\sSA:/) {
+      $log->info(
+         qq{SA is deprecated 5.x.x - Remove 6.0 - use SAB instead },
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
+   if ( $line =~ /\sCHOOSE:EQBUILDER\|1/) {
+      $log->info(
+         qq{CHOOSE:EQBUILDER|1 is deprecated use CHOOSE:NOCHOICE instead },
+         $file,
+         $lineNum
+      );
+   }
+
+
+   # [ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
+   if ( $line =~ /\sAUTO:ARMORPROF\|TYPE\=/) {
+      $log->info(
+         qq{AUTO:ARMORPROF|TYPE=x is deprecated Use AUTO:ARMORPROF|ARMORTYPE=x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1870482 ] AUTO:SHIELDPROF changes
+   if ( $line =~ /\sAUTO:SHIELDPROF\|TYPE\=/) {
+      $log->info(
+         qq{AUTO:SHIELDPROF|TYPE=x is deprecated Use AUTO:SHIELDPROF|SHIELDTYPE=x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-19 ] CHOOSE:ARMORPROF= is deprecated
+   if ( $line =~ /\sCHOOSE:ARMORPROF\=/) {
+      $log->info(
+         qq{CHOOSE:ARMORPROF= is deprecated 5.15 - Remove 6.0. Use CHOOSE:ARMORPROFICIENCY instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATADD= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATADD\=/) {
+      $log->info(
+         qq{CHOOSE:FEATADD= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATLIST= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATLIST\=/) {
+      $log->info(
+         qq{CHOOSE:FEATLIST= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATSELECT= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATSELECT\=/) {
+      $log->info(
+         qq{CHOOSE:FEATSELECT= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+
+   # [ 1888288 ] CHOOSE:COUNT= is deprecated
+   if ( $line =~ /\sCHOOSE:COUNT\=/) {
+      $log->info(
+         qq{CHOOSE:COUNT= is deprecated 5.13.9 - Remove 6.0. Use SELECT instead},
+         $file,
+         $lineNum
+      );
+   }
+}
+
+
+
 1;
