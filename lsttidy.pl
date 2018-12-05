@@ -529,512 +529,6 @@ use constant BLOCK_HEADER       => 3;   # One header for the block
 use constant NO  => 0;
 use constant YES => 1;
 
-# The SOURCE line is use in nearly all file type
-my %SOURCE_file_type_def = (
-   Linetype => 'SOURCE',
-   RegEx    => qr(^SOURCE\w*:([^\t]*)),
-   Mode     => SINGLE,
-   Format   => LINE,
-   Header   => NO_HEADER,
-#  Sep      => q{|},                            # use | instead of [tab] to split
-   SepRegEx => qr{ (?: [|] ) | (?: \t+ ) }xms,  # Catch both | and tab
-);
-
-# Some ppl may still want to use the old ways (for PCGen v5.9.5 and older)
-if( getOption('oldsourcetag') ) {
-   $SOURCE_file_type_def{Sep} = q{|};  # use | instead of [tab] to split
-}
-
-# Information needed to parse the line type
-my %masterFileType = (
-
-        ABILITY => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'ABILITY',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        ABILITYCATEGORY => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'ABILITYCATEGORY',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        BIOSET => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'BIOSET AGESET',
-                        RegEx                   => qr(^AGESET:([^\t]*)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => NO_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(AGESET:(.*)\.([^\t]+)),
-                        RegExGetEntry   => qr(AGESET:(.*)),
-                },
-                { Linetype      => 'BIOSET RACENAME',
-                        RegEx           => qr(^RACENAME:([^\t]*)),
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-        ],
-
-        CLASS => [
-                { Linetype      => 'CLASS Level',
-                        RegEx           => qr(^(\d+)($|\t|:REPEATLEVEL:\d+)),
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'CLASS',
-                        RegEx                   => qr(^CLASS:([^\t]*)),
-                        Mode                    => MAIN,
-                        Format          => LINE,
-                        Header          => LINE_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(CLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-                        RegExGetEntry   => qr(CLASS:(.*)),
-                },
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SUBCLASS',
-                        RegEx                   => qr(^SUBCLASS:([^\t]*)),
-                        Mode                    => SUB,
-                        Format          => BLOCK,
-                        Header          => NO_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(SUBCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-                        RegExGetEntry   => qr(SUBCLASS:(.*)),
-                        # SUBCLASS can be refered to anywhere CLASS works.
-                        OtherValidEntries => ['CLASS'],
-                },
-                { Linetype      => 'SUBSTITUTIONCLASS',
-                        RegEx                   => qr(^SUBSTITUTIONCLASS:([^\t]*)),
-                        Mode                    => SUB,
-                        Format          => BLOCK,
-                        Header          => NO_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(SUBSTITUTIONCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-                        RegExGetEntry   => qr(SUBSTITUTIONCLASS:(.*)),
-                        # SUBSTITUTIONCLASS can be refered to anywhere CLASS works.
-                        OtherValidEntries       => ['CLASS'],
-                },
-                { Linetype      => 'SUBCLASSLEVEL',
-                        RegEx           => qr(^SUBCLASSLEVEL:([^\t]*)),
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'SUBSTITUTIONLEVEL',
-                        RegEx           => qr(^SUBSTITUTIONLEVEL:([^\t]*)),
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-        ],
-
-        COMPANIONMOD => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SWITCHRACE',
-                        RegEx           => qr(^SWITCHRACE:([^\t]*)),
-                        Mode            => SINGLE,
-                        Format  => LINE,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'COMPANIONMOD',
-                        RegEx                   => qr(^FOLLOWER:([^\t]*)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(FOLLOWER:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-                        RegExGetEntry   => qr(FOLLOWER:(.*)),
-
-                        # Identifier that refer to other entry type
-                        IdentRefType    => 'CLASS,DEFINE Variable',
-                        IdentRefTag             => 'FOLLOWER',  # Tag name for the reference check
-                                                                        # Get the list of reference identifiers
-                                                                        # The syntax is FOLLOWER:class1,class2=level
-                                                                        # We need to extract the class names.
-                        GetRefList              => sub { split q{,}, ( $_[0] =~ / \A ( [^=]* ) /xms )[0]  },
-                },
-                { Linetype      => 'MASTERBONUSRACE',
-                        RegEx                   => qr(^MASTERBONUSRACE:([^\t]*)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                        RegExIsMod              => qr(MASTERBONUSRACE:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-                        RegExGetEntry   => qr(MASTERBONUSRACE:(.*)),
-                        IdentRefType    => 'RACE',                      # Identifier that refer to other entry type
-                        IdentRefTag             => 'MASTERBONUSRACE',   # Tag name for the reference check
-                                                                                # Get the list of reference identifiers
-                                                                                # The syntax is MASTERBONUSRACE:race
-                                                                                # We need to extract the race name.
-                        GetRefList      => sub { return @_ },
-                },
-        ],
-
-        DEITY => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'DEITY',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        DOMAIN => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'DOMAIN',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        EQUIPMENT => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'EQUIPMENT',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        EQUIPMOD => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'EQUIPMOD',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        FEAT => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'FEAT',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        KIT => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'KIT REGION',                                # Kits are grouped by Region.
-                        RegEx           => qr{^REGION:([^\t]*)},        # So REGION has a line of its own.
-                        Mode            => SINGLE,
-                        Format  => LINE,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT STARTPACK',                     # The KIT name is defined here
-                        RegEx                   => qr{^STARTPACK:([^\t]*)},
-                        Mode                    => MAIN,
-                        Format          => LINE,
-                        Header          => NO_HEADER,
-                        ValidateKeep    => YES,
-                },
-                { Linetype      => 'KIT ABILITY',
-                        RegEx           => qr{^ABILITY:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT ALIGN',
-                        RegEx           => qr{^ALIGN:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT CLASS',
-                        RegEx           => qr{^CLASS:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT DEITY',
-                        RegEx           => qr{^DEITY:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT FEAT',
-                        RegEx           => qr{^FEAT:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT FUNDS',
-                        RegEx           => qr{^FUNDS:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT GEAR',
-                        RegEx           => qr{^GEAR:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT GENDER',
-                        RegEx           => qr{^GENDER:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT KIT',
-                        RegEx           => qr{^KIT:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT LANGAUTO',
-                        RegEx           => qr{^LANGAUTO:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT LANGBONUS',
-                        RegEx           => qr{^LANGBONUS:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT LEVELABILITY',
-                        RegEx           => qr{^LEVELABILITY:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT NAME',
-                        RegEx           => qr{^NAME:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT PROF',
-                        RegEx           => qr{^PROF:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT RACE',
-                        RegEx           => qr{^RACE:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT SELECT',
-                        RegEx           => qr{^SELECT:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT SKILL',
-                        RegEx           => qr{^SKILL:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT STAT',
-                        RegEx           => qr{^STAT:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT SPELLS',
-                        RegEx           => qr{^SPELLS:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => BLOCK,
-                        Header  => NO_HEADER,
-                },
-                { Linetype      => 'KIT TABLE',
-                        RegEx                   => qr{^TABLE:([^\t]*)},
-                        Mode                    => SUB,
-                        Format          => FIRST_COLUMN,
-                        Header          => NO_HEADER,
-                        ValidateKeep    => YES,
-                },
-                { Linetype      => 'KIT TEMPLATE',
-                        RegEx           => qr{^TEMPLATE:([^\t]*)},
-                        Mode            => SUB,
-                        Format  => FIRST_COLUMN,
-                        Header  => NO_HEADER,
-                },
-        ],
-
-        LANGUAGE => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'LANGUAGE',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        RACE => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'RACE',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        SKILL => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SKILL',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        SPELL => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SPELL',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        TEMPLATE => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'TEMPLATE',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        WEAPONPROF => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'WEAPONPROF',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        ARMORPROF => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'ARMORPROF',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        SHIELDPROF => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SHIELDPROF',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        VARIABLE => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'VARIABLE',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        DATACONTROL => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'DATACONTROL',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-        GLOBALMOD => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'GLOBALMOD',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-        SAVE => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'SAVE',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-        STAT => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'STAT',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-        ALIGNMENT => [
-                \%SOURCE_file_type_def,
-                { Linetype      => 'ALIGNMENT',
-                        RegEx                   => qr(^([^\t:]+)),
-                        Mode                    => MAIN,
-                        Format          => BLOCK,
-                        Header          => BLOCK_HEADER,
-                        ValidateKeep    => YES,
-                },
-        ],
-
-);
 
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
@@ -1453,78 +947,6 @@ my @double_PCC_tags = (
 my %masterOrder = (
 
 );
-
-#################################################################
-######################## Conversion #############################
-# Tags that must be seen as valid to allow conversion.
-
-if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
-        push @{ $masterOrder{'CLASS'} },               'ADD:SA';
-        push @{ $masterOrder{'CLASS Level'} },   'ADD:SA';
-        push @{ $masterOrder{'COMPANIONMOD'} },  'ADD:SA';
-        push @{ $masterOrder{'DEITY'} },               'ADD:SA';
-        push @{ $masterOrder{'DOMAIN'} },              'ADD:SA';
-        push @{ $masterOrder{'EQUIPMENT'} },   'ADD:SA';
-        push @{ $masterOrder{'EQUIPMOD'} },    'ADD:SA';
-        push @{ $masterOrder{'FEAT'} },                'ADD:SA';
-        push @{ $masterOrder{'RACE'} },                'ADD:SA';
-        push @{ $masterOrder{'SKILL'} },               'ADD:SA';
-        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'ADD:SA';
-        push @{ $masterOrder{'TEMPLATE'} },    'ADD:SA';
-        push @{ $masterOrder{'WEAPONPROF'} },  'ADD:SA';
-}
-if ( LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
-        push @{ $masterOrder{'EQUIPMENT'} }, 'ALTCRITICAL';
-}
-
-if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
-        push @{ $masterOrder{'RACE'} }, 'AGE', 'HEIGHT', 'WEIGHT';
-}
-
-if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS') ) {
-        push @{ $masterOrder{'EQUIPMENT'} }, 'ATTACKS';
-}
-
-if ( LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
-        push @{ $masterOrder{'PCC'} }, 'GAME';
-}
-
-if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') ) {
-        push @{ $masterOrder{'CLASS'} },               'BONUS:MOVE:*';
-        push @{ $masterOrder{'CLASS Level'} }, 'BONUS:MOVE:*';
-        push @{ $masterOrder{'COMPANIONMOD'} },        'BONUS:MOVE:*';
-        push @{ $masterOrder{'DEITY'} },               'BONUS:MOVE:*';
-        push @{ $masterOrder{'DOMAIN'} },              'BONUS:MOVE:*';
-        push @{ $masterOrder{'EQUIPMENT'} },   'BONUS:MOVE:*';
-        push @{ $masterOrder{'EQUIPMOD'} },    'BONUS:MOVE:*';
-        push @{ $masterOrder{'FEAT'} },                'BONUS:MOVE:*';
-        push @{ $masterOrder{'RACE'} },                'BONUS:MOVE:*';
-        push @{ $masterOrder{'SKILL'} },               'BONUS:MOVE:*';
-        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'BONUS:MOVE:*';
-        push @{ $masterOrder{'TEMPLATE'} },    'BONUS:MOVE:*';
-        push @{ $masterOrder{'WEAPONPROF'} },  'BONUS:MOVE:*';
-}
-
-if ( LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE') ) {
-        push @{ $masterOrder{'WEAPONPROF'} }, 'SIZE';
-}
-
-if ( LstTidy::Options::isConversionActive('EQUIP:no more MOVE') ) {
-        push @{ $masterOrder{'EQUIPMENT'} }, 'MOVE';
-}
-
-#   vvvvvv This one is disactivated
-if ( 0 && LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS') ) {
-        push @{ $masterOrder{'CLASS Level'} },   'SPELL:*';
-        push @{ $masterOrder{'DOMAIN'} },              'SPELL:*';
-        push @{ $masterOrder{'EQUIPMOD'} },    'SPELL:*';
-        push @{ $masterOrder{'SUBCLASSLEVEL'} }, 'SPELL:*';
-}
-
-#   vvvvvv This one is disactivated
-if ( 0 && LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
-        push @{ $masterOrder{'TEMPLATE'} }, 'HITDICESIZE';
-}
 
 # Working variables
 my %column_with_no_tag = (
@@ -3650,7 +3072,7 @@ if (getOption('outputerror')) {
 # FILETYPE_parse
 # --------------
 #
-# This function uses the information of masterFileType to
+# This function uses the information of LstTidy::Parse::parseControl to
 # identify the curent line type and parse it.
 #
 # Parameters: $fileType       = The type of the file has defined by the .PCC file
@@ -4170,7 +3592,7 @@ sub FILETYPE_parse {
                 else {
 
                         # Invalid option
-                        die "Invalid \%masterFileType options: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%LstTidy::Parse::parseControl options: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == MAIN ) {
@@ -4337,7 +3759,7 @@ sub FILETYPE_parse {
                         }
                 }
                 else {
-                        die "Invalid \%masterFileType format: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%LstTidy::Parse::parseControl format: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == SUB ) {
@@ -4542,15 +3964,15 @@ sub FILETYPE_parse {
 
                         }
                         else {
-                                die "Invalid \%masterFileType: $curent_linetype:$mode:$format:$header";
+                                die "Invalid \%LstTidy::Parse::parseControl $curent_linetype:$mode:$format:$header";
                         }
                 }
                 else {
-                        die "Invalid \%masterFileType: $curent_linetype:$mode:$format:$header";
+                        die "Invalid \%LstTidy::Parse::parseControl $curent_linetype:$mode:$format:$header";
                 }
                 }
                 else {
-                die "Invalid \%masterFileType mode: $fileType:$curent_linetype:$mode";
+                die "Invalid \%LstTidy::Parse::parseControl mode: $fileType:$curent_linetype:$mode";
                 }
 
         }
@@ -11109,7 +10531,7 @@ BEGIN {
                                                 \%newline,
                                                 1 + @$lines_ref,
                                                 $spellname,
-                                                $masterFileType{SPELL}[1],    # Watch for the 1
+                                                LstTidy::Parse::getParseControl('SPELL'),
                                         ];
 
                                 }
@@ -11445,7 +10867,7 @@ BEGIN {
                                                 'CSKILL'                => ["CSKILL:$newskills"]
                                                 },
                                                 $line_no, $class,
-                                                $masterFileType{CLASS}[1],
+                                                LstTidy::Parse::getParseControl('CLASS'),
                                                 ];
                                         delete $class_skill{$dir}{$class};
 
@@ -11471,7 +10893,7 @@ BEGIN {
                                                 },
                                                 scalar(@$lines_ref),
                                                 "$_.MOD",
-                                                $masterFileType{CLASS}[1],
+                                                LstTidy::Parse::getParseControl('CLASS'),
                                                 ];
 
                                         delete $class_skill{$dir}{$_};

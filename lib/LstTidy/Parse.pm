@@ -1101,6 +1101,25 @@ sub matchLineType {
    return($lineSpec, $entity);
 }
 
+=head2 getParseControl
+
+   Get the Parse control record where the lineType field of the record matches
+   the key used to look it up. This ensure we get the main record for the line
+   type as lines can multiple linetype records.
+
+=cut
+
+sub getParseControl {
+   my ($fileType) = @_;
+
+   for my $rec ( @{ $parseControl{$fileType} } ) {
+      return $rec if $rec->{ lineType } = $fileType;
+   }
+
+   # didn't find the record
+   return undef; 
+}
+
 
 =head2 scanForDeprecatedTags
 
