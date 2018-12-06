@@ -28,18 +28,19 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
-use LstTidy::Parse;
 use LstTidy::Log;
 use LstTidy::LogHeader;
-use LstTidy::Reformat;
 use LstTidy::Options qw(getOption setOption isConversionActive);
+use LstTidy::Parse;
+use LstTidy::Reformat;
+use LstTidy::Report;
+use LstTidy::Validate;
 
 # Subroutines
 sub FILETYPE_parse;
 sub parse_ADD_tag;
 sub parse_tag;
 sub validate_tag;
-sub validate_pre_tag;
 sub add_to_xcheck_tables;
 sub extract_var_name;
 sub parse_jep;
@@ -52,7 +53,6 @@ sub check_clear_tag_order;
 sub find_full_path;
 sub get_header;
 sub create_dir;
-sub report_tag_sort;
 sub embedded_coma_split;
 sub parseSystemFiles;
 sub warn_deprecate;
@@ -137,7 +137,6 @@ LstTidy::Parse::updateValidity();
 # Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
 my @valid_system_alignments  = LstTidy::Parse::getValidSystemArr('alignments');
 my @valid_system_stats       = LstTidy::Parse::getValidSystemArr('stats');
-my @valid_system_var_names   = LstTidy::Parse::getValidSystemArr('vars');
 
 # Limited choice tags
 my %tag_fix_value = (
@@ -529,253 +528,6 @@ use constant BLOCK_HEADER       => 3;   # One header for the block
 use constant NO  => 0;
 use constant YES => 1;
 
-
-# The PRExxx tags. They are used in many of the line types.
-# From now on, they are defined in only one place and every
-# line type will get the same sort order.
-my @PRE_Tags = (
-        'PRE:.CLEAR',
-        'PREABILITY:*',
-        '!PREABILITY',
-        'PREAGESET',
-        '!PREAGESET',
-        'PREALIGN:*',
-        '!PREALIGN:*',
-        'PREARMORPROF:*',
-        '!PREARMORPROF',
-        'PREARMORTYPE',
-        '!PREARMORTYPE',
-        'PREATT',
-        '!PREATT',
-        'PREBASESIZEEQ',
-        '!PREBASESIZEEQ',
-        'PREBASESIZEGT',
-        '!PREBASESIZEGT',
-        'PREBASESIZEGTEQ',
-        '!PREBASESIZEGTEQ',
-        'PREBASESIZELT',
-        '!PREBASESIZELT',
-        'PREBASESIZELTEQ',
-        '!PREBASESIZELTEQ',
-        'PREBASESIZENEQ',
-        'PREBIRTHPLACE',
-        '!PREBIRTHPLACE',
-        'PRECAMPAIGN',
-        '!PRECAMPAIGN',
-        'PRECHECK',
-        '!PRECHECK',
-        'PRECHECKBASE',
-        '!PRECHECKBASE',
-        'PRECITY',
-        '!PRECITY',
-        'PRECHARACTERTYPE',
-        '!PRECHARACTERTYPE',
-        'PRECLASS',
-        '!PRECLASS',
-        'PRECLASSLEVELMAX',
-        '!PRECLASSLEVELMAX',
-        'PRECSKILL',
-        '!PRECSKILL',
-        'PREDEITY',
-        '!PREDEITY',
-        'PREDEITYALIGN',
-        '!PREDEITYALIGN',
-        'PREDEITYDOMAIN',
-        '!PREDEITYDOMAIN',
-        'PREDOMAIN',
-        '!PREDOMAIN',
-        'PREDR',
-        '!PREDR',
-        'PREEQUIP',
-        '!PREEQUIP',
-        'PREEQUIPBOTH',
-        '!PREEQUIPBOTH',
-        'PREEQUIPPRIMARY',
-        '!PREEQUIPPRIMARY',
-        'PREEQUIPSECONDARY',
-        '!PREEQUIPSECONDARY',
-        'PREEQUIPTWOWEAPON',
-        '!PREEQUIPTWOWEAPON',
-        'PREFEAT:*',
-        '!PREFEAT',
-        'PREFACT:*',
-        '!PREFACT',
-        'PREGENDER',
-        '!PREGENDER',
-        'PREHANDSEQ',
-        '!PREHANDSEQ',
-        'PREHANDSGT',
-        '!PREHANDSGT',
-        'PREHANDSGTEQ',
-        '!PREHANDSGTEQ',
-        'PREHANDSLT',
-        '!PREHANDSLT',
-        'PREHANDSLTEQ',
-        '!PREHANDSLTEQ',
-        'PREHANDSNEQ',
-        'PREHD',
-        '!PREHD',
-        'PREHP',
-        '!PREHP',
-        'PREITEM',
-        '!PREITEM',
-        'PRELANG',
-        '!PRELANG',
-        'PRELEGSEQ',
-        '!PRELEGSEQ',
-        'PRELEGSGT',
-        '!PRELEGSGT',
-        'PRELEGSGTEQ',
-        '!PRELEGSGTEQ',
-        'PRELEGSLT',
-        '!PRELEGSLT',
-        'PRELEGSLTEQ',
-        '!PRELEGSLTEQ',
-        'PRELEGSNEQ',
-        'PRELEVEL',
-        '!PRELEVEL',
-        'PRELEVELMAX',
-        '!PRELEVELMAX',
-        'PREKIT',
-        '!PREKIT',
-        'PREMOVE',
-        '!PREMOVE',
-        'PREMULT:*',
-        '!PREMULT:*',
-        'PREPCLEVEL',
-        '!PREPCLEVEL',
-        'PREPROFWITHARMOR',
-        '!PREPROFWITHARMOR',
-        'PREPROFWITHSHIELD',
-        '!PREPROFWITHSHIELD',
-        'PRERACE:*',
-        '!PRERACE:*',
-        'PREREACH',
-        '!PREREACH',
-        'PREREACHEQ',
-        '!PREREACHEQ',
-        'PREREACHGT',
-        '!PREREACHGT',
-        'PREREACHGTEQ',
-        '!PREREACHGTEQ',
-        'PREREACHLT',
-        '!PREREACHLT',
-        'PREREACHLTEQ',
-        '!PREREACHLTEQ',
-        'PREREACHNEQ',
-        'PREREGION',
-        '!PREREGION',
-        'PRERULE',
-        '!PRERULE',
-        'PRESA',
-        '!PRESA',
-        'PRESITUATION',
-        '!PRESITUATION',
-        'PRESHIELDPROF',
-        '!PRESHIELDPROF',
-        'PRESIZEEQ',
-        '!PRESIZEEQ',
-        'PRESIZEGT',
-        '!PRESIZEGT',
-        'PRESIZEGTEQ',
-        '!PRESIZEGTEQ',
-        'PRESIZELT',
-        '!PRESIZELT',
-        'PRESIZELTEQ',
-        '!PRESIZELTEQ',
-        'PRESIZENEQ',
-        'PRESKILL:*',
-        '!PRESKILL',
-        'PRESKILLMULT',
-        '!PRESKILLMULT',
-        'PRESKILLTOT',
-        '!PRESKILLTOT',
-        'PRESPELL:*',
-        '!PRESPELL',
-        'PRESPELLBOOK',
-        '!PRESPELLBOOK',
-        'PRESPELLCAST:*',
-        '!PRESPELLCAST:*',
-        'PRESPELLDESCRIPTOR',
-        'PRESPELLSCHOOL:*',
-        '!PRESPELLSCHOOL',
-        'PRESPELLSCHOOLSUB',
-        '!PRESPELLSCHOOLSUB',
-        'PRESPELLTYPE:*',
-        '!PRESPELLTYPE',
-        'PRESREQ',
-        '!PRESREQ',
-        'PRESRGT',
-        '!PRESRGT',
-        'PRESRGTEQ',
-        '!PRESRGTEQ',
-        'PRESRLT',
-        '!PRESRLT',
-        'PRESRLTEQ',
-        '!PRESRLTEQ',
-        'PRESRNEQ',
-        'PRESTAT:*',
-        '!PRESTAT',
-        'PRESTATEQ',
-        '!PRESTATEQ',
-        'PRESTATGT',
-        '!PRESTATGT',
-        'PRESTATGTEQ',
-        '!PRESTATGTEQ',
-        'PRESTATLT',
-        '!PRESTATLT',
-        'PRESTATLTEQ',
-        '!PRESTATLTEQ',
-        'PRESTATNEQ',
-        'PRESUBCLASS',
-        '!PRESUBCLASS',
-        'PRETEMPLATE:*',
-        '!PRETEMPLATE:*',
-        'PRETEXT',
-        '!PRETEXT',
-        'PRETYPE:*',
-        '!PRETYPE:*',
-        'PRETOTALAB:*',
-        '!PRETOTALAB:*',
-        'PREUATT',
-        '!PREUATT',
-        'PREVAREQ:*',
-        '!PREVAREQ:*',
-        'PREVARGT:*',
-        '!PREVARGT:*',
-        'PREVARGTEQ:*',
-        '!PREVARGTEQ:*',
-        'PREVARLT:*',
-        '!PREVARLT:*',
-        'PREVARLTEQ:*',
-        '!PREVARLTEQ:*',
-        'PREVARNEQ:*',
-        'PREVISION',
-        '!PREVISION',
-        'PREWEAPONPROF:*',
-        '!PREWEAPONPROF:*',
-        'PREWIELD',
-        '!PREWIELD',
-
-        # Removed tags
-        #       'PREVAR',
-);
-
-# Hash used by validate_pre_tag to verify if a PRExxx tag exists
-my %PRE_Tags = (
-   'PREAPPLY'          => 1,   # Only valid when embeded - THIS IS DEPRECATED
-   'PREDEFAULTMONSTER' => 1,   # Only valid when embeded
-);
-
-for my $pre_tag (@PRE_Tags) {
-        # We need a copy since we don't want to modify the original
-        my $pre_tag_name = $pre_tag;
-
-        # We strip the :* at the end to get the real name for the lookup table
-        $pre_tag_name =~ s/ [:][*] \z//xms;
-
-        $PRE_Tags{$pre_tag_name} = 1;
-}
 
 my %double_PCC_tags = (
         'BONUS:ABILITYPOOL',    => 1,
@@ -1276,21 +1028,16 @@ my %token_CHOOSE_tag = map { $_ => 1 } (
 );
 
 
-my %count_tags;         # Will hold the number of each tag found (by linetype)
+
 
 my %missing_headers;    # Will hold the tags that do not have defined headers for each linetype.
 
 ################################################################################
 # Global variables used by the validation code
 
-my %race_partial_match; # Will hold the portions of a race that have been matched with wildcards.
-                                # For example, if Elf% has been matched (given no default Elf races).
-
-my %valid_entities;     # Will hold the entries that may be refered
-                                # by other tags
-                                # Format $valid_entities{$entitytype}{$entityname}
-                                # We initialise the hash with global system values
-                                # that are valid but never defined in the .lst files.
+# Will hold the portions of a race that have been matched with wildcards.
+# For example, if Elf% has been matched (given no default Elf races).
+my %race_partial_match; 
 
 my %valid_types;                # Will hold the valid types for the TYPE. or TYPE=
                                 # found in different tags.
@@ -1320,7 +1067,8 @@ my %valid_sub_entities; # Will hold the entities that are allowed to include
                                 #               = $sub_entity_type;
                                 # e.g. :  $valid_sub_entities{'FEAT'}{'Skill Focus'} = 'SKILL';
 
-my @xcheck_to_process;  # Will hold the information for the entries that must
+my @xcheck_to_process;  
+# Will hold the information for the entries that must
                                 # be added in %referer or %referer_types. The array
                                 # is needed because all the files must have been
                                 # parsed before processing the information to be added.
@@ -1328,18 +1076,20 @@ my @xcheck_to_process;  # Will hold the information for the entries that must
                                 # each line of the array.
 
 # Add pre-defined valid entities
-for my $var_name (@valid_system_var_names) {
-        $valid_entities{'DEFINE Variable'}{$var_name}++;
+for my $var_name (LstTidy::Parse::getValidSystemArr('vars')) {
+   LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
 }
 
 for my $stat (@valid_system_stats) {
-        $valid_entities{'DEFINE Variable'}{ $stat               }++;
-        $valid_entities{'DEFINE Variable'}{ $stat . 'SCORE' }++;
+   LstTidy::Validate::setEntityValid('DEFINE Variable', $stat);
+   LstTidy::Validate::setEntityValid('DEFINE Variable', $stat . 'SCORE');
 }
 # Add the magical values 'ATWILL' fot the SPELLS tag's TIMES= component.
-        $valid_entities{'DEFINE Variable'}{ 'ATWILL' }++;
+LstTidy::Validate::setEntityValid('DEFINE Variable', 'ATWILL');
+
 # Add the magical values 'UNLIM' fot the CONTAINS tag.
-        $valid_entities{'DEFINE Variable'}{ 'UNLIM'  }++;
+LstTidy::Validate::setEntityValid('DEFINE Variable', 'UNLIM');
+
 
 
 ################################################################################
@@ -2782,74 +2532,12 @@ if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) 
         print STDERR "================================================================\n";
 }
 
-if ( getOption('report') ) {
-        ###########################################
-        # Print a report for the number of tag
-        # found.
-
-        print STDERR "\n================================================================\n";
-        print STDERR "Valid tags found\n";
-        print STDERR "----------------------------------------------------------------\n";
-
-        my $first = 1;
-        REPORT_LINE_TYPE:
-        for my $line_type ( sort keys %{ $count_tags{"Valid"} } ) {
-                next REPORT_LINE_TYPE if $line_type eq "Total";
-
-                print STDERR "\n" unless $first;
-                print STDERR "Line Type: $line_type\n";
-
-                for my $tag ( sort report_tag_sort keys %{ $count_tags{"Valid"}{$line_type} } ) {
-                   my $tagdisplay = $tag;
-                   $tagdisplay .= "*" if LstTidy::Reformat::isValidMultiTag($line_type, $tag);
-                   my $line = "    $tagdisplay";
-                   $line .= ( " " x ( 26 - length($tagdisplay) ) ) . $count_tags{"Valid"}{$line_type}{$tag};
-                   print STDERR "$line\n";
-                }
-
-                $first = 0;
-        }
-
-        print STDERR "\nTotal:\n";
-
-        for my $tag ( sort report_tag_sort keys %{ $count_tags{"Valid"}{"Total"} } ) {
-                my $line = "    $tag";
-                $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Valid"}{"Total"}{$tag};
-                print STDERR "$line\n";
-        }
+if (getOption('report')) {
+   LstTidy::Report::reportValid();
 }
 
-if ( exists $count_tags{"Invalid"} ) {
-
-        print STDERR "\n================================================================\n";
-        print STDERR "Invalid tags found\n";
-        print STDERR "----------------------------------------------------------------\n";
-
-        my $first = 1;
-        INVALID_LINE_TYPE:
-        for my $linetype ( sort keys %{ $count_tags{"Invalid"} } ) {
-                next INVALID_LINE_TYPE if $linetype eq "Total";
-
-                print STDERR "\n" unless $first;
-                print STDERR "Line Type: $linetype\n";
-
-                for my $tag ( sort report_tag_sort keys %{ $count_tags{"Invalid"}{$linetype} } ) {
-
-                my $line = "    $tag";
-                $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{$linetype}{$tag};
-                print STDERR "$line\n";
-                }
-
-                $first = 0;
-        }
-
-        print STDERR "\nTotal:\n";
-
-        for my $tag ( sort report_tag_sort keys %{ $count_tags{"Invalid"}{"Total"} } ) {
-                my $line = "    $tag";
-                $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{"Total"}{$tag};
-                print STDERR "$line\n";
-        }
+if (LstTidy::Report::foundInvalidTags()) {
+   LstTidy::Report::reportValid();
 }
 
 if ( getOption('xcheck') ) {
@@ -2858,7 +2546,7 @@ if ( getOption('xcheck') ) {
         # First we process the information that must be added
         # to the %referer and %referer_types;
         for my $parameter_ref (@xcheck_to_process) {
-                add_to_xcheck_tables( @{$parameter_ref} );
+           add_to_xcheck_tables( @{$parameter_ref} );
         }
 
         #####################################################
@@ -2875,10 +2563,12 @@ if ( getOption('xcheck') ) {
                 # If an EQUIPMOD Key entry doesn't exists, we can use the
                 # EQUIPMOD name but we have to throw a warning.
                 if ( $linetype eq 'EQUIPMOD Key' ) {
-                        if ( !exists $valid_entities{'EQUIPMOD Key'}{$entry} ) {
+
+
+                        if (!LstTidy::Validate::isEntityValid('EQUIPMOD Key', $entry)) {
 
                                 # There is no key but it might be just a warning
-                                if ( exists $valid_entities{'EQUIPMOD'}{$entry} ) {
+                                if (LstTidy::Validate::isEntityValid('EQUIPMOD', $entry)) {
 
                                         # It's a warning
                                         for my $array ( @{ $referer{$linetype}{$entry} } ) {
@@ -2907,7 +2597,8 @@ if ( getOption('xcheck') ) {
 
                         ITEM:
                         for my $item ( split ',', $linetype ) {
-                                if ( exists $valid_entities{$item}{$entry} ) {
+
+                                if (LstTidy::Validate::isEntityValid($item, $entry)) {
                                 $found = 1;
                                 last ITEM;
                                 }
@@ -2930,7 +2621,7 @@ if ( getOption('xcheck') ) {
                         }
                 }
                 else {
-                        unless ( exists $valid_entities{$linetype}{$entry} ) {
+                        unless (LstTidy::Validate::isEntityValid($linetype, $entry)) {
                                 for my $array ( @{ $referer{$linetype}{$entry} } ) {
                                         push @{ $to_report{ $array->[1] } },
                                                 [ $array->[2], $linetype, $array->[0] ];
@@ -3197,8 +2888,7 @@ sub FILETYPE_parse {
                         $line_tokens{$column} = [$curent_token];
 
                         # Statistic gathering
-                        $count_tags{"Valid"}{"Total"}{$column}++;
-                        $count_tags{"Valid"}{$curent_linetype}{$column}++;
+                        incCountValidTags($curent_linetype, $column);
 
                         # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
                         if ( index( $column, '000' ) == 0 ) {
@@ -3216,7 +2906,7 @@ sub FILETYPE_parse {
                                                 # Special case for .COPY=<new name>
                                                 # <new name> is a valid entity
                                                 if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
-                                                        $valid_entities{$curent_linetype}{$new_name}++;
+                                                   LstTidy::Validate::setEntityValid($curent_linetype, $new_name);
                                                 }
 
                                                 last COLUMN;
@@ -3254,13 +2944,13 @@ sub FILETYPE_parse {
                                                                         );
                                                                 }
                                                         }
-                                                        $valid_entities{$curent_linetype}{$entry}++;
+                                                        LstTidy::Validate::setEntityValid($curent_linetype, $entry);
 
                                                         # Check to see if the entry must be recorded for other
                                                         # entry types.
                                                         if ( exists $line_info->{OtherValidEntries} ) {
                                                                 for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
-                                                                        $valid_entities{$entry_type}{$entry}++;
+                                                                   LstTidy::Validate::setEntityValid($entry_type, $entry);
                                                                 }
                                                         }
                                                 }
@@ -4120,8 +3810,8 @@ sub parse_tag {
         # cause a spurious error. I've added them to valid entities to prevent
         # that.
         if ($tag eq 'STARTPACK') {
-                $valid_entities{'KIT STARTPACK'}{"KIT:$value"}++;
-                $valid_entities{'KIT STARTPACK'}{"$value"}++;
+           LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$value");
+           LstTidy::Validate::setEntityValid('KIT STARTPACK', "$value");
         }
 
         # [ 1678570 ] Correct PRESPELLTYPE syntax
@@ -4191,8 +3881,7 @@ sub parse_tag {
                                         $file_for_error,
                                         $line_for_error
                                 );
-                                $count_tags{"Invalid"}{"Total"}{$addtag}++;
-                                $count_tags{"Invalid"}{$linetype}{$addtag}++;
+                                incCountInvalidTags($linetype, $addtag); 
                                 $no_more_error = 1;
                         }
                 }
@@ -4206,8 +3895,7 @@ sub parse_tag {
                 }
                 elsif ($qualify_type) {
                         # No valid Qualify type found
-                        $count_tags{"Invalid"}{"Total"}{"$tag:$qualify_type"}++;
-                        $count_tags{"Invalid"}{$linetype}{"$tag:$qualify_type"}++;
+                        incCountInvalidTags($linetype, "$tag:$qualify_type"); 
                         $log->notice(
                                 qq{Invalid QUALIFY:$qualify_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -4216,8 +3904,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        $count_tags{"Invalid"}{"Total"}{"QUALIFY"}++;
-                        $count_tags{"Invalid"}{$linetype}{"QUALIFY"}++;
+                        incCountInvalidTags($linetype, "QUALIFY"); 
                         $log->notice(
                                 qq{Invalid QUALIFY tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -4239,8 +3926,7 @@ sub parse_tag {
                 elsif ($bonus_type) {
 
                         # No valid bonus type was found
-                        $count_tags{"Invalid"}{"Total"}{"$tag:$bonus_type"}++;
-                        $count_tags{"Invalid"}{$linetype}{"$tag:$bonus_type"}++;
+                        incCountInvalidTags($linetype, "$tag:$bonus_type"); 
                         $log->notice(
                                 qq{Invalid BONUS:$bonus_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -4249,8 +3935,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        $count_tags{"Invalid"}{"Total"}{"BONUS"}++;
-                        $count_tags{"Invalid"}{$linetype}{"BONUS"}++;
+                        incCountInvalidTags($linetype, "BONUS"); 
                         $log->notice(
                                 qq{Invalid BONUS tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -4272,8 +3957,7 @@ sub parse_tag {
                 elsif ($prof_type) {
 
                         # No valid bonus type was found
-                        $count_tags{"Invalid"}{"Total"}{"$tag:$prof_type"}++;
-                        $count_tags{"Invalid"}{$linetype}{"$tag:$prof_type"}++;
+                        incCountInvalidTags($linetype, "$tag:$prof_type"); 
                         $log->notice(
                                 qq{Invalid PROFICIENCY:$prof_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -4282,8 +3966,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        $count_tags{"Invalid"}{"Total"}{"PROFICIENCY"}++;
-                        $count_tags{"Invalid"}{$linetype}{"PROFICIENCY"}++;
+                        incCountInvalidTags($linetype, "PROFICIENCY"); 
                         $log->notice(
                                 qq{Invalid PROFICIENCY tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -4313,8 +3996,7 @@ sub parse_tag {
 
                         # No valid auto type was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                                $count_tags{"Invalid"}{"Total"}{"$tag:$1"}++;
-                                $count_tags{"Invalid"}{$linetype}{"$tag:$1"}++;
+                           incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid $tag:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4322,8 +4004,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                $count_tags{"Invalid"}{"Total"}{"AUTO"}++;
-                                $count_tags{"Invalid"}{$linetype}{"AUTO"}++;
+                                incCountInvalidTags($linetype, "AUTO"); 
                                 $log->notice(
                                         qq{Invalid AUTO tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4350,8 +4031,7 @@ sub parse_tag {
                 else {
                         # No valid SPELLLEVEL subtag was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                                $count_tags{"Invalid"}{"Total"}{"$tag:$1"}++;
-                                $count_tags{"Invalid"}{$linetype}{"$tag:$1"}++;
+                                incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid SPELLLEVEL:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4359,8 +4039,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                $count_tags{"Invalid"}{"Total"}{"SPELLLEVEL"}++;
-                                $count_tags{"Invalid"}{$linetype}{"SPELLLEVEL"}++;
+                                incCountInvalidTags($linetype, "SPELLLEVEL"); 
                                 $log->notice(
                                         qq{Invalid SPELLLEVEL tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4385,8 +4064,7 @@ sub parse_tag {
                 else {
                         # No valid SPELLKNOWN subtag was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                                $count_tags{"Invalid"}{"Total"}{"$tag:$1"}++;
-                                $count_tags{"Invalid"}{$linetype}{"$tag:$1"}++;
+                                incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid SPELLKNOWN:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4394,8 +4072,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                $count_tags{"Invalid"}{"Total"}{"SPELLKNOWN"}++;
-                                $count_tags{"Invalid"}{$linetype}{"SPELLKNOWN"}++;
+                                incCountInvalidTags($linetype, "SPELLKNOWN"); 
                                 $log->notice(
                                         qq{Invalid SPELLKNOWN tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4420,8 +4097,7 @@ sub parse_tag {
                                 $file_for_error,
                                 $line_for_error
                         );
-                        $count_tags{"Invalid"}{"Total"}{"$tag:.CLEAR"}++;
-                        $count_tags{"Invalid"}{$linetype}{"$tag:.CLEAR"}++;
+                        incCountInvalidTags($linetype, "$tag:.CLEAR"); 
                         $no_more_error = 1;
                 }
                 else {
@@ -4449,17 +4125,15 @@ sub parse_tag {
                                 $file_for_error,
                                 $line_for_error
                                 );
-                        $count_tags{"Invalid"}{"Total"}{$real_tag}++;
-                        $count_tags{"Invalid"}{$linetype}{$real_tag}++;
+                        incCountInvalidTags($linetype, $real_tag); 
                 }
         }
 
 
         elsif (LstTidy::Reformat::isValidTag($linetype, $tag)) {
 
-                # Statistic gathering
-                $count_tags{"Valid"}{"Total"}{$real_tag}++;
-                $count_tags{"Valid"}{$linetype}{$real_tag}++;
+           # Statistic gathering
+           incCountValidTags($linetype, $real_tag);
         }
 
         # Check and reformat the values for the tags with
@@ -4636,14 +4310,14 @@ BEGIN {
 
                 if ($tag_name eq 'STARTPACK')
                 {
-                        $valid_entities{'KIT STARTPACK'}{"KIT:$tag_value"}++;
-                        $valid_entities{'KIT'}{"KIT:$tag_value"}++;
+                   LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$tag_value");
+                   LstTidy::Validate::setEntityValid('KIT', "KIT:$tag_value"          );
                 }
 
                 elsif ( $tag_name =~ /^\!?PRE/ ) {
 
                         # It's a PRExxx tag, we delegate
-                        return validate_pre_tag( $tag_name,
+                        return LstTidy::Validate::validatePreTag( $tag_name,
                                 $tag_value,
                                 "",
                                 $linetype,
@@ -4660,7 +4334,7 @@ BEGIN {
                 if ( $tag_value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
 
                         # A PRExxx tag is present
-                        validate_pre_tag($1,
+                        LstTidy::Validate::validatePreTag($1,
                                                 $2,
                                                 "$tag_name$tag_value",
                                                 $linetype,
@@ -4772,7 +4446,7 @@ BEGIN {
                                 if ( $param =~ /^(!?PRE[A-Z]+):(.*)/ ) {
 
                                 # It's a PRExxx tag, we delegate the validation
-                                validate_pre_tag($1,
+                                LstTidy::Validate::validatePreTag($1,
                                                         $2,
                                                         "$tag_name$tag_value",
                                                         $linetype,
@@ -5325,7 +4999,7 @@ BEGIN {
 
                         # If it is a PRExxx tag section, we validate teh PRExxx tag.
                         if ( $tag_name eq 'VFEAT' && $feat =~ /^(!?PRE[A-Z]+):(.*)/ ) {
-                                validate_pre_tag($1,
+                                LstTidy::Validate::validatePreTag($1,
                                                         $2,
                                                         "$tag_name:$tag_value",
                                                         $linetype,
@@ -5339,7 +5013,7 @@ BEGIN {
                         # We strip the embeded [PRExxx ...] tags
                         if ( $feat =~ /([^[]+)\[(!?PRE[A-Z]*):(.*)\]$/ ) {
                                 $feat = $1;
-                                validate_pre_tag($2,
+                                LstTidy::Validate::validatePreTag($2,
                                                         $3,
                                                         "$tag_name:$tag_value",
                                                         $linetype,
@@ -5432,7 +5106,7 @@ BEGIN {
                                 else {
 
                                         # We keep the move type for future validation
-                                        $valid_entities{'MOVE Type'}{$type}++;
+                                        LstTidy::Validate::setEntityValid('MOVE Type', $type);
                                 }
 
                                 unless ( $value =~ /^\d+$/ ) {
@@ -5630,7 +5304,7 @@ BEGIN {
                                 elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
 
                                 # Embeded PRExxx tags
-                                validate_pre_tag($1,
+                                LstTidy::Validate::validatePreTag($1,
                                                         $2,
                                                         "$tag_name:$tag_value",
                                                         $linetype,
@@ -6026,7 +5700,7 @@ BEGIN {
                                         ];
                                 }
                                 else {
-                                $valid_entities{'RACESUBTYPE'}{$race_subtype}++
+                                   LstTidy::Validate::setEntityValid('RACESUBTYPE', $race_subtype);
                                 }
                         }
                         else {
@@ -6060,7 +5734,7 @@ BEGIN {
                                         ];
                                 }
                                 else {
-                                $valid_entities{'RACETYPE'}{$race_type}++
+                                   LstTidy::Validate::setEntityValid('RACETYPE', $race_type);
                                 }
                         }
                         else {
@@ -6113,7 +5787,7 @@ BEGIN {
                         # First we store the DEFINE variable name
                         if ($var_name) {
                                 if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
-                                        $valid_entities{'DEFINE Variable'}{$var_name}++;
+                                   LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
 
                                         #####################################################
                                         # Export a list of variable names if requested
@@ -6170,7 +5844,7 @@ BEGIN {
                                         if ( $formula =~ /(^!?PRE[A-Z]*):(.*)/ ) {
 
                                                 # A PRExxx tag is present
-                                                validate_pre_tag($1,
+                                                LstTidy::Validate::validatePreTag($1,
                                                         $2,
                                                         "$tag_name:$tag_value",
                                                         $linetype,
@@ -6327,16 +6001,14 @@ BEGIN {
 ##      }
 ##      else
 ##      {
-##              $count_tags{"Invalid"}{"Total"}{"$tag_name:$choose_type"}++;
-##              $count_tags{"Invalid"}{$linetype}{"$tag_name:$choose_type"}++;
+##              incCountInvalidTags($linetype, "$tag_name:$choose_type"); 
 ##              $log->notice(  "Invalid CHOOSE:$choose_type tag \"$tag_name:$tag_value\" found in $linetype.",
 ##                      $file_for_error, $line_for_error );
 ##      }
 ##      }
 ##      elsif(!$choose_type)
 ##      {
-##      $count_tags{"Invalid"}{"Total"}{"CHOOSE"}++;
-##      $count_tags{"Invalid"}{$linetype}{"CHOOSE"}++;
+##      incCountInvalidTags($linetype, "CHOOSE"); 
 ##      $log->notice(  "Invalid CHOOSE tag \"$tag_name:$tag_value\" found in $linetype",
 ##              $file_for_error, $line_for_error );
 ##      }
@@ -6346,516 +6018,6 @@ BEGIN {
 
 }       # BEGIN End
 
-###############################################################
-# validate_pre_tag
-# ----------------
-#
-# Validate the PRExxx tags. This function is reentrant and can
-# be called recursivly.
-
-sub validate_pre_tag {
-        my ($tag_name,                  # Name of the tag (before the :)
-                $tag_value,                     # Value of the tag (after the :)
-                $enclosing_tag,         # When the PRExxx tag is used in another tag
-                $linetype,                      # Type for the current file
-                $file_for_error,                # Name of the current file
-                $line_for_error         # Number of the current line
-        ) = @_;
-
-        if ( !length($tag_value) && $tag_name ne "PRE:.CLEAR" ) {
-
-                # No value found
-                my $message = qq{Check for missing ":", no value for "$tag_name"};
-                $message .= qq{ found in "$enclosing_tag"} if $enclosing_tag;
-
-                $log->warning( $message, $file_for_error, $line_for_error );
-
-                return;
-        }
-
-        $log->debug(
-                qq{validate_pre_tag: $tag_name; $tag_value; $enclosing_tag; $linetype;},
-                $file_for_error,
-                $line_for_error
-        );
-
-        my $pretag = $tag_name;
-        my $is_neg = 1 if $pretag =~ s/^!(.*)/$1/;
-        my $comp_op;
-
-        # Special treatment for tags ending in MULT because of PREMULT and
-        # PRESKILLMULT
-        ($comp_op) = ( $pretag =~ s/(.*)(EQ|GT|GTEQ|LT|LTEQ|NEQ)$/$1/ )[1]
-                unless $pretag =~ /MULT$/;
-
-        if ( $pretag eq 'PRECLASS' || $pretag eq 'PRECLASSLEVELMAX' ) {
-
-                #PRECLASS:number,Class,Class=ClassLevel
-                my @classes = split ',', $tag_value;
-
-                if ( $classes[0] =~ /^\d+$/ ) {
-                        shift @classes; # We drop the number at the beginning
-                }
-                else {
-
-                # The PREtag doesn't begin by a number
-                warn_deprecate( "$tag_name:$tag_value",
-                        $file_for_error,
-                        $line_for_error,
-                        $enclosing_tag
-                );
-                }
-
-                push @xcheck_to_process, [ 'CLASS', $tag_name, $file_for_error, $line_for_error, @classes ];
-        }
-        elsif ( $pretag eq 'PRECHECK' || $pretag eq 'PRECHECKBASE') {
-                # PRECHECK:<number>,<check equal value list>
-                # PRECHECKBASE:<number>,<check equal value list>
-                # <check equal value list> := <check name> "=" <number>
-                my @items = split q{,}, $tag_value;
-
-                if ( $items[0] =~ / \A \d+ \z /xms ) {
-                shift @items;   # We drop the number at the beginning
-                }
-                else {
-
-                # The PREtag doesn't begin by a number
-                warn_deprecate( "$tag_name:$tag_value",
-                        $file_for_error,
-                        $line_for_error,
-                        $enclosing_tag
-                );
-                }
-
-                for my $item ( @items ) {
-                if ( my ($check_name,$value) = ( $item =~ / \A ( \w+ ) = ( \d+ ) \z /xms ) ) {
-                   if ( ! LstTidy::Parse::isValidCheck($check_name) ) {
-                      $log->notice(
-                         qq{Invalid save check name "$check_name" found in "$tag_name:$tag_value"},
-                         $file_for_error,
-                         $line_for_error
-                      );
-                   }
-                }
-                else {
-                        $log->notice(
-                                qq{$pretag syntax error in "$item" found in "$tag_name:$tag_value"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                }
-
-        }
-        elsif ( $pretag eq 'PRECSKILL' ) {
-
-                # We get the list of skills and skill types
-                my @skills = split ',', $tag_value;
-
-                if ( $skills[0] =~ / \A \d+ \z /xms ) {
-                shift @skills;  # We drop the number at the beginning
-                }
-                else {
-
-                # The PREtag doesn't begin by a number
-                warn_deprecate( "$tag_name:$tag_value",
-                        $file_for_error,
-                        $line_for_error,
-                        $enclosing_tag
-                );
-                }
-
-                push @xcheck_to_process, [ 'SKILL', $tag_name, $file_for_error, $line_for_error, @skills ];
-        }
-        elsif ( $pretag eq 'PREDEITY' ) {
-                #PREDEITY:Y
-                #PREDEITY:YES
-                #PREDEITY:N
-                #PREDEITY:NO
-                #PREDEITY:1,<deity name>,<deity name>,etc.
-                if ( $tag_value !~ / \A (?: Y(?:ES)? | N[O]? ) \z /xms ) {
-                #We ignore the single yes or no
-                push @xcheck_to_process,
-                        [
-                                'DEITY',
-                                $tag_name,
-                                $file_for_error,
-                                $line_for_error,
-                                # Pull off the first number.
-                                # [ 1776500 ] PREDEITY needs updated
-                                (split /[,]/, $tag_value)[1,-1],
-                        ];
-                }
-        }
-        elsif ( $pretag eq 'PREDEITYDOMAIN' || $pretag eq 'PREDOMAIN' ) {
-
-                #PREDOMAIN:number,Domain,Domain
-                my @domains = split ',', $tag_value;
-
-                if ( $domains[0] =~ /^\d+$/ ) {
-                        shift @domains; # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process,
-                        [ 'DOMAIN', $tag_name, $file_for_error, $line_for_error, @domains ];
-        }
-        elsif ( $pretag eq 'PREFEAT' ) {
-
-                # PREFEAT:number,feat,feat,TYPE=type
-
-                # We get the list of feats and feat types
-                my @feats = embedded_coma_split($tag_value);
-
-                if ( $feats[0] =~ / \A \d+ \z /xms ) {
-                        shift @feats;   # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process, [ 'FEAT', $tag_name, $file_for_error, $line_for_error, @feats ];
-        }
-        elsif ( $pretag eq 'PREABILITY' ) {
-
-                # [ 1671407 ] xcheck PREABILITY tag
-                # Shamelessly copied from the above FEAT code.
-                # PREABILITY:number,feat,feat,TYPE=type,CATEGORY=category
-
-                # We get the list of abilities and ability types
-                my @abilities = embedded_coma_split($tag_value);
-
-                if ( $abilities[0] =~ / \A \d+ \z /xms ) {
-                        shift @abilities;       # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process, [ 'ABILITY', $tag_name, $file_for_error, $line_for_error, @abilities ];
-        }
-        elsif ( $pretag eq 'PREITEM' ) {
-
-                # PRETIEM:number,item,TYPE=itemtype
-                # The list of items may include () with embeded coma
-                my @items = embedded_coma_split($tag_value);
-
-                if ( $items[0] =~ / \A \d+ \z /xms ) {
-                        shift @items;   # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process,
-                        [ 'EQUIPMENT', $tag_name, $file_for_error, $line_for_error, @items ];
-        }
-        elsif ( $pretag eq 'PRELANG' ) {
-
-                # PRELANG:number,language,language,TYPE=type
-
-                # We get the list of feats and feat types
-                my @languages = split ',', $tag_value;
-
-                if ( $languages[0] =~ / \A \d+ \z /xms ) {
-                        shift @languages;       # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process,
-                        [
-                                'LANGUAGE', $tag_name, $file_for_error, $line_for_error,
-                                grep { $_ ne 'ANY' } @languages
-                        ];
-        }
-        elsif ( $pretag eq 'PREMOVE' ) {
-
-                # PREMOVE:[<number>,]<move>=<number>,<move>=<number>,...
-
-                my @moves = split ',', $tag_value;
-
-                if ( $moves[0] =~ / \A \d+ \z /xms ) {
-                        shift @moves;   # We drop the number at the beginning
-                }
-                else {
-
-                        # We don't print the warning because the tag has not been converted yet
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                for my $move (@moves) {
-
-                        # Verify that the =<number> is there
-                        if ( $move =~ /^([^=]*)=([^=]*)$/ ) {
-                                push @xcheck_to_process,
-                                        [
-                                                'MOVE Type', $tag_name, $file_for_error, $line_for_error,
-                                                $1
-                                        ];
-
-                                # The value should be a number
-                                my $value = $2;
-                                unless ( $value =~ /^\d+$/ ) {
-                                        my $message
-                                                = qq{Not a number after the = for "$move" in "$tag_name:$tag_value"};
-                                        $message .= qq{ found in "$enclosing_tag"} if $enclosing_tag;
-                                        $log->notice( $message, $file_for_error, $line_for_error );
-                                }
-                        }
-                        else {
-                                my $message = qq{Invalid "$move" in "$tag_name:$tag_value"};
-                                $message .= qq{ found in "$enclosing_tag"} if $enclosing_tag;
-                                $log->notice( $message, $file_for_error, $line_for_error );
-                        }
-                }
-        }
-        elsif ( $pretag eq 'PREMULT' ) {
-
-                # This tag is the reason why validate_pre_tag exists
-                # PREMULT:x,[PRExxx 1],[PRExxx 2]
-                # We need for find all the [] and call validate_pre_tag with the content
-
-                my $working_value = $tag_value;
-                my $inside;
-
-                # We add only one level of PREMULT to the error message.
-                my $emb_tag_name;
-                if ($enclosing_tag) {
-                        $emb_tag_name = $enclosing_tag;
-                        $emb_tag_name .= ':PREMULT' unless $emb_tag_name =~ /PREMULT$/;
-                }
-                else {
-                        $emb_tag_name .= 'PREMULT';
-                }
-
-                #       while($inside = Text::Balanced::extract_bracketed($working_value, '[]', qr([^[]*)))
-                FIND_BRACE:
-                while ($working_value) {
-                        ( $inside, $working_value )
-                                = Text::Balanced::extract_bracketed( $working_value, '[]', qr{[^[]*} );
-
-                        last FIND_BRACE if !$inside;
-
-                        # We extract what we need
-                        my ( $tag, $value ) = ( $inside =~ /^\[(!?PRE[A-Z]+):(.*)\]$/ );
-                        if ($tag) {
-                                validate_pre_tag($tag,
-                                        $value,
-                                        $emb_tag_name,
-                                        $linetype,
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        else {
-
-                                # No PRExxx tag found inside the PREMULT
-                                $log->warning(
-                                        qq{No valid PRExxx tag found in "$inside" inside "PREMULT:$tag_value"},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                }
-        }
-        elsif ( $pretag eq 'PRERACE' ) {
-                # We get the list of races
-                my @races_tmp = split ',', $tag_value;
-
-                # Validate that the first entry is a number
-                if ( $races_tmp[0] =~ / \A \d+ \z /xms ) {
-                        shift @races_tmp;       # We drop the number at the beginning
-                }
-                else {
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                my ( @races, @races_wild );
-
-                for my $race (@races_tmp)
-                {
-                        if ( $race =~ / (.*?) [%] (.*?) /xms ) {
-                                # Special case for PRERACE:xxx%
-                                my $race_wild  = $1;
-                                my $after_wild = $2;
-
-                                push @races_wild, $race_wild;
-
-                                if ( $after_wild ne q{} ) {
-                                        $log->notice(
-                                                qq{% used in wild card context should end the race name in "$race"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                                else {
-                                        # Don't bother warning if it matches everything.
-                                        # For now, we warn and do nothing else.
-                                        if ($race_wild eq '') {
-                                                ## Matches everything, no reason to warn.
-                                        }
-                                        elsif ($valid_entities{'RACE'}{$race_wild}) {
-                                                ## Matches an existing race, no reason to warn.
-                                        }
-                                        elsif ($race_partial_match{$race_wild}) {
-                                                ## Partial match already confirmed, no need to confirm.
-                                        }
-                                        else {
-                                                my $found = 0;
-
-                                                while (($found == 0)
-                                                        && ((my $check_race,my $val) = each(%{$valid_entities{'RACE'}})))
-                                                {
-                                                        if ( $check_race =~ m/^\Q$race_wild/) {
-                                                                $found=1;
-                                                                $race_partial_match{$race_wild} = 1;
-                                                        }
-                                                }
-                                                if ($found == 0) {
-                                                        $log->info(
-                                                                qq{Not able to validate "$race" in "PRERACE:$tag_value." This warning is order dependent. If the race is defined in a later file, this warning may not be accurate.},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-                                                }
-                                        }
-                                }
-                        }
-                        else {
-                                push @races, $race;
-                        }
-                }
-
-                push @xcheck_to_process, [ 'RACE', $tag_name, $file_for_error, $line_for_error, @races ];
-#               push @xcheck_to_process, [ 'RACE%;PRERACE', $tag_name, $file_for_error, $line_for_error, @races_wild ];
-        }
-        elsif ( $pretag eq 'PRESKILL' ) {
-
-                # We get the list of skills and skill types
-                my @skills = split ',', $tag_value;
-
-                if ( $skills[0] =~ / \A \d+ \z /xms ) {
-                        shift @skills;  # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process, [ 'SKILL', $tag_name, $file_for_error, $line_for_error, @skills ];
-        }
-        elsif ( $pretag eq 'PRESPELL' ) {
-
-                # We get the list of skills and skill types
-                my @spells = split ',', $tag_value;
-
-                if ( $spells[0] =~ / \A \d+ \z /xms ) {
-                        shift @spells;  # We drop the number at the beginning
-                }
-                else {
-
-                        # The PREtag doesn't begin by a number
-                        warn_deprecate( "$tag_name:$tag_value",
-                                $file_for_error,
-                                $line_for_error,
-                                $enclosing_tag
-                        );
-                }
-
-                push @xcheck_to_process,
-                [ 'SPELL', "$tag_name:@@", $file_for_error, $line_for_error, @spells ];
-        }
-        elsif ( $pretag eq 'PREVAR' ) {
-                my ( $var_name, @formulas ) = split ',', $tag_value;
-
-                push @xcheck_to_process,
-                        [
-                                'DEFINE Variable',
-                                qq(@@" in "$tag_name:$tag_value),
-                                $file_for_error,
-                                $line_for_error,
-                                $var_name,
-                        ];
-
-                for my $formula (@formulas) {
-                push @xcheck_to_process,
-                        [
-                                'DEFINE Variable',
-                                qq(@@" in "$tag_name:$tag_value),
-                                $file_for_error,
-                                $line_for_error,
-                                parse_jep(
-                                        $formula,
-                                        "$tag_name:$tag_value",
-                                        $file_for_error,
-                                        $line_for_error
-                                ),
-                        ];
-                }
-        }
-
-        # No Check for Variable File #
-
-        # Check for PRExxx that do not exist. We only check the
-        # tags that are embeded since parse_tag already took care
-        # of the PRExxx tags on the entry lines.
-        elsif ( $enclosing_tag && !exists $PRE_Tags{$tag_name} ) {
-                $log->notice(
-                        qq{Unknown PRExxx tag "$tag_name" found in "$enclosing_tag"},
-                        $file_for_error,
-                        $line_for_error
-                );
-        }
-}
 
 ###############################################################
 # add_to_xcheck_tables
@@ -8594,10 +7756,8 @@ sub validate_line {
                                 # valid sub-entities.
                                 # We do this when we find a CHOOSE but we do not
                                 # know what it is for.
-                                for my $sub_type ( split '\|', $1 ) {
-                                        $valid_entities{'ABILITY'}{"$ability_name($sub_type)"}  = $1;
-                                        $valid_entities{'ABILITY'}{"$ability_name ($sub_type)"} = $1;
-                                }
+
+                                LstTidy::Validate::splitAndAddToValidEntities('ABILITY', $ability_name, $1);
                         }
                 }
         }
@@ -8701,15 +7861,7 @@ sub validate_line {
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
 
-                                # ad-hod/special list of thingy
-                                # It adds to the valid entities instead of the
-                                # valid sub-entities.
-                                # We do this when we find a CHOOSE but we do not
-                                # know what it is for.
-                                for my $sub_type ( split '\|', $1 ) {
-                                        $valid_entities{'FEAT'}{"$feat_name($sub_type)"}  = $1;
-                                        $valid_entities{'FEAT'}{"$feat_name ($sub_type)"} = $1;
-                                }
+                           LstTidy::Validate::splitAndAddToValidEntities('FEAT', $feat_name, $1);
                         }
                 }
         }
@@ -8725,7 +7877,7 @@ sub validate_line {
                         my ($key) = ( $line_ref->{'KEY'}[0] =~ /KEY:(.*)/ );
 
                         if ($key) {
-                                $valid_entities{"EQUIPMOD Key"}{$key}++;
+                           LstTidy::Validate::setEntityValid("EQUIPMOD Key", $key);
                         }
                         else {
                                 $log->warning(
@@ -10355,10 +9507,12 @@ BEGIN {
                                 $curent_name = ( $line->{'CLASS'}[0] =~ /CLASS:(.*)/ )[0];
 
                                 # Is it a CLASS or a DOMAIN ?
-                                if ( exists $valid_entities{'CLASS'}{$curent_name} ) {
+
+
+                                if (LstTidy::Validate::isEntityValid('CLASS', $curent_name)) {
                                         $curent_type = 0;
                                 }
-                                elsif ( exists $valid_entities{'DOMAIN'}{$curent_name} ) {
+                                elsif (LstTidy::Validate::isEntityValid('DOMAIN', $curent_name)) {
                                         $curent_type = 1;
                                 }
                                 else {
@@ -11127,27 +10281,6 @@ sub create_dir {
                 # Create the curent level directory
                 mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
         }
-}
-
-###############################################################
-# report_tag_sort
-# ---------------
-#
-# Sort used for the tag when reporting them.
-#
-# Basicaly, it's a normal ASCII sort except that the ! are removed
-# when found (the PRExxx and !PRExxx are sorted one after the orther).
-
-sub report_tag_sort {
-        my ( $left, $right ) = ( $a, $b );      # We need a copy in order to modify
-
-        # Remove the !. $not_xxx contains 1 if there was a !, otherwise
-        # it contains 0.
-        my $not_left  = $left  =~ s{^!}{}xms;
-        my $not_right = $right =~ s{^!}{}xms;
-
-        $left cmp $right || $not_left <=> $not_right;
-
 }
 
 ###############################################################
