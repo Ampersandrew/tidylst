@@ -1,4 +1,4 @@
-package LstTidy::Convert;
+package LstTidy::Validate;
 
 use strict;
 use warnings;
@@ -266,6 +266,40 @@ my %race_partial_match;
 # system values that are valid but never defined in the .lst files.
 my %valid_entities;     
 
+# Will hold the valid types for the TYPE. or TYPE= found in different tags.
+# Format valid_types{$entitytype}{$typename}
+my %valid_types;
+
+# Will hold the valid categories for CATEGORY= found in abilities.
+# Format valid_categories{$entitytype}{$categoryname}
+my %valid_categories;   
+
+=head2 getValidTypes
+
+   Return a reference to the has of valid types for cross checking.
+
+   Format valid_types{$entitytype}{$typename}
+
+=cut
+
+sub getValidTypes {
+   return \%valid_types;
+}
+
+=head2 getValidCategories
+
+   Return a reference to the hash of valid categories for cross checking.
+
+   Format valid_categories{$entitytype}{$categoryname}
+
+=cut
+
+sub getValidCategories {
+   return \%valid_categories;
+}
+
+
+
 =head2 isEntityValid
 
    Returns true if the entity is valid.
@@ -327,7 +361,30 @@ sub searchRace {
 }
 
 
+=head2 warnDeprecate
 
+   Generate a warning message about a deprecated tag.
+   
+   Parameters: $bad_tag         Tag that has been deprecated
+               $files_for_error File name when the error is found
+               $line_for_error  Line number where the error is found
+               $enclosing_tag   (Optionnal) tag into which the deprecated tag is included
+
+=cut
+
+sub warnDeprecate {
+
+   my ($bad_tag, $file_for_error, $line_for_error, $enclosing_tag) = (@_, "");
+
+   my $message = qq{Deprecated syntax: "$bad_tag"};
+
+   if($enclosing_tag) {
+      $message .= qq{ found in "$enclosing_tag"};
+   }
+
+   $log->info( $message, $file_for_error, $line_for_error );
+
+}
 
 
 
@@ -367,16 +424,15 @@ sub processGenericPRE {
 
    my ($preType, $tag, $tagValue, $enclosingTag, $file, $line) = @_;
 
-   my ($valid, @values) = checkFirstValue(i$tagValue);
+   my ($valid, @values) = checkFirstValue($tagValue);
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
 
-   registerXCheck($preType, $tag, $file, $line, @values);
+   LstTidy::Report::registerXCheck($preType, $tag, $file, $line, @values);
 }
-
 
 =head2 processPRECHECK
 
@@ -399,10 +455,11 @@ sub processPRECHECK {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
-   
-   my $logging = getLogger();
+  
+   # Get the logger once outside the loop 
+   my $logger = LstTidy::LogFactory::getLogger();
 
    for my $item ( @values ) {
 
@@ -411,14 +468,14 @@ sub processPRECHECK {
 
          # If we don't recognise it.
          if ( ! LstTidy::Parse::isValidCheck($check_name) ) {
-            $logging->notice(
+            $logger->notice(
                qq{Invalid save check name "$check_name" found in "$tag:$tagValue"},
                $file,
                $line
             );
          }
       } else {
-         $logging->notice(
+         $logger->notice(
             qq{$tag syntax error in "$item" found in "$tag:$tagValue"},
             $file,
             $line
@@ -456,7 +513,7 @@ sub processPREDIETY {
    
    if ( $tagValue !~ / \A (?: Y(?:ES)? | N[O]? ) \z /xms ) {
       #We ignore the single yes or no
-      registerXCheck('DEITY', $tag, $file, $line, (split /[,]/, $tagValue)[1,-1],);
+      LstTidy::Report::registerXCheck('DEITY', $tag, $file, $line, (split /[,]/, $tagValue)[1,-1],);
    }
 };
 
@@ -478,10 +535,10 @@ sub processPRELANG {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
 
-   registerXCheck('LANGUAGE', $tag, $file, $line, grep { $_ ne 'ANY' } @values);
+   LstTidy::Report::registerXCheck('LANGUAGE', $tag, $file, $line, grep { $_ ne 'ANY' } @values);
 }
 
 =head2 processPREMOVE
@@ -501,7 +558,7 @@ sub processPREMOVE {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
 
    for my $move (@values) {
@@ -509,7 +566,7 @@ sub processPREMOVE {
       # Verify that the =<number> is there
       if ( $move =~ /^([^=]*)=([^=]*)$/ ) {
 
-         registerXCheck('MOVE Type', $tag, $file, $line, $1);
+         LstTidy::Report::registerXCheck('MOVE Type', $tag, $file, $line, $1);
 
          # The value should be a number
          my $value = $2;
@@ -518,8 +575,7 @@ sub processPREMOVE {
             my $message = qq{Not a number after the = for "$move" in "$tag:$tagValue"};
             $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
    
-            my $logging = getLogger();
-            $logging->notice( $message, $file, $line );
+            LstTidy::LogFactory::getLogger()->notice($message, $file, $line);
          }
 
       } else {
@@ -527,8 +583,7 @@ sub processPREMOVE {
          my $message = qq{Invalid "$move" in "$tag:$tagValue"};
          $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
    
-         my $logging = getLogger();
-         $logging->notice( $message, $file, $line );
+         LstTidy::LogFactory::getLogger()->notice($message, $file, $line);
 
       }
    }
@@ -578,10 +633,8 @@ sub processPREMULT {
       
       } else {
 
-         my $logging = getLogger();
-
          # No PRExxx tag found inside the PREMULT
-         $logging->warning(
+         LstTidy::LogFactory::getLogger()->warning(
             qq{No valid PRExxx tag found in "$inside" inside "PREMULT:$tagValue"},
             $file,
             $line
@@ -604,7 +657,7 @@ sub processPRERACE {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
 
    my ( @races, @races_wild );
@@ -620,9 +673,7 @@ sub processPRERACE {
 
          if ( $after_wild ne q{} ) {
 
-            my $logging = getLogger();
-
-            $logging->notice(
+            LstTidy::LogFactory::getLogger()->notice(
                qq{% used in wild card context should end the race name in "$race"},
                $file,
                $line
@@ -652,10 +703,9 @@ sub processPRERACE {
                   $race_partial_match{$race_wild} = 1;
                } else {
 
-                  my $logging = getLogger();
-
-                  $logging->info(
-                     qq{Not able to validate "$race" in "PRERACE:$tagValue." This warning is order dependent. If the race is defined in a later file, this warning may not be accurate.},
+                  LstTidy::LogFactory::getLogger()->info(
+                     qq{Not able to validate "$race" in "PRERACE:$tagValue." This warning is order dependent.} . 
+                     q{ If the race is defined in a later file, this warning may not be accurate.},
                      $file,
                      $line
                   )
@@ -667,7 +717,7 @@ sub processPRERACE {
       }
    }
 
-   registerXCheck('RACE', $tag, $file, $line, @races);
+   LstTidy::Report::registerXCheck('RACE', $tag, $file, $line, @races);
 }
 
 
@@ -688,10 +738,10 @@ sub processPRESPELL {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warn_deprecate("$tag:$tagValue", $file, $line, $enclosingTag);
+      warnDeprecate("$tag:$tagValue", $file, $line, $enclosingTag);
    }
 
-   registerXCheck('SPELL', "$tag:@@", $file, $line, @values);
+   LstTidy::Report::registerXCheck('SPELL', "$tag:@@", $file, $line, @values);
 }
 
 =head2 processPREVAR
@@ -704,14 +754,13 @@ sub processPREVAR {
 
    my ( $var_name, @formulas ) = split ',', $tagValue;
 
-   registerXCheck('DEFINE Variable', qq(@@" in "$tag:$tagValue), $file, $line, $var_name,);
+   LstTidy::Report::registerXCheck('DEFINE Variable', qq(@@" in "$tag:$tagValue), $file, $line, $var_name,);
 
    for my $formula (@formulas) {
-      registerXCheck('DEFINE Variable', qq(@@" in "$tag:$tagValue), $file, $line, parse_jep( $formula, "$tag:$tagValue", $file, $line),);
+      my @values = LstTidy::Parse::parseJep( $formula, "$tag:$tagValue", $file, $line);
+      LstTidy::Report::registerXCheck('DEFINE Variable', qq(@@" in "$tag:$tagValue), $file, $line, @values);
    }
 }
-
-
 
 =head2 validatePreTag
 
@@ -732,15 +781,12 @@ sub processPREVAR {
 sub validatePreTag {
    my ( $tag, $tagValue, $enclosingTag, $lineType, $file, $line) = @_;
 
-   # get the logger
-   my $logging = getLogger();
-
    if ( !length($tagValue) && $tag ne "PRE:.CLEAR" ) {
       missingValue();
       return;
    }
 
-   $logging->debug( 
+   LstTidy::LogFactory::getLogger()->debug( 
       qq{validatePreTag: $tag; $tagValue; $enclosingTag; $lineType;},
       $file,
       $line
@@ -830,9 +876,7 @@ sub validatePreTag {
    # of the PRExxx tags on the entry lines.
    elsif ( $enclosingTag && !exists $PRE_Tags{$tag} ) {
       
-      my $logging = getLogger();
-      
-      $logging->notice(
+      LstTidy::LogFactory::getLogger()->notice(
          qq{Unknown PRExxx tag "$tag" found in "$enclosingTag"},
          $file,
          $line

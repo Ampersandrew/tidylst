@@ -29,6 +29,7 @@ use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
 use LstTidy::Log;
+use LstTidy::LogFactory;
 use LstTidy::LogHeader;
 use LstTidy::Options qw(getOption setOption isConversionActive);
 use LstTidy::Parse;
@@ -41,21 +42,14 @@ sub FILETYPE_parse;
 sub parse_ADD_tag;
 sub parse_tag;
 sub validate_tag;
-sub add_to_xcheck_tables;
-sub extract_var_name;
-sub parse_jep;
-sub parse_jep_rec;
 sub additionnal_tag_parsing;
 sub validate_line;
 sub additionnal_line_parsing;
 sub additionnal_file_parsing;
 sub check_clear_tag_order;
 sub find_full_path;
-sub get_header;
 sub create_dir;
 sub embedded_coma_split;
-sub parseSystemFiles;
-sub warn_deprecate;
 sub record_bioset_tags;
 sub generate_bioset_files;
 sub generate_css;
@@ -100,9 +94,8 @@ my ($level, $mess) = LstTidy::Log::checkWarningLevel(getOption('warninglevel'));
 setOption('warninglevel', $level);
 $error_message .= $mess if defined $mess;
 
-# Create the logging object, using the warning level verified above.
-
-my $log = LstTidy::Log->new( warningLevel=>getOption('warninglevel'));
+# Create the singleton logging object using the warning level verified above.
+my $log = LstTidy::LogFactory::getLogger();
 
 # Path options
 
@@ -132,7 +125,6 @@ if ( getOption('systempath') ne q{} ) {
 } 
 
 LstTidy::Parse::updateValidity();
-
 
 # Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
 my @valid_system_alignments  = LstTidy::Parse::getValidSystemArr('alignments');
@@ -173,7 +165,6 @@ my %tag_fix_value = (
    TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
    USEUNTRAINED         => { YES => 1, NO => 1 },
    USEMASTERSKILL       => { YES => 1, NO => 1 },
-   #[ 1593907 ] False warning: Invalid value "CSHEET" for tag "VISIBLE"
    VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
 );
 
@@ -1030,7 +1021,6 @@ my %token_CHOOSE_tag = map { $_ => 1 } (
 
 
 
-my %missing_headers;    # Will hold the tags that do not have defined headers for each linetype.
 
 ################################################################################
 # Global variables used by the validation code
@@ -1039,13 +1029,13 @@ my %missing_headers;    # Will hold the tags that do not have defined headers fo
 # For example, if Elf% has been matched (given no default Elf races).
 my %race_partial_match; 
 
-my %valid_types;                # Will hold the valid types for the TYPE. or TYPE=
-                                # found in different tags.
-                                # Format valid_types{$entitytype}{$typename}
+# Will hold the valid types for the TYPE. or TYPE= found in different tags.
+# Format valid_types{$entitytype}{$typename}
+my %valid_types;
 
-my %valid_categories;   # Will hold the valid categories for CATEGORY=
-                                # found in abilities.
-                                # [ 1671407 ] xcheck PREABILITY tag
+# Will hold the valid categories for CATEGORY=
+# found in abilities.
+my %valid_categories;   
 
 my %referer;            # Will hold the tags that refer to other entries
                                 # Format: push @{$referer{$EntityType}{$entryname}},
@@ -1067,13 +1057,6 @@ my %valid_sub_entities; # Will hold the entities that are allowed to include
                                 #               = $sub_entity_type;
                                 # e.g. :  $valid_sub_entities{'FEAT'}{'Skill Focus'} = 'SKILL';
 
-my @xcheck_to_process;  
-# Will hold the information for the entries that must
-                                # be added in %referer or %referer_types. The array
-                                # is needed because all the files must have been
-                                # parsed before processing the information to be added.
-                                # The function add_to_xcheck_tables will be called with
-                                # each line of the array.
 
 # Add pre-defined valid entities
 for my $var_name (LstTidy::Parse::getValidSystemArr('vars')) {
@@ -1091,657 +1074,6 @@ LstTidy::Validate::setEntityValid('DEFINE Variable', 'ATWILL');
 LstTidy::Validate::setEntityValid('DEFINE Variable', 'UNLIM');
 
 
-
-################################################################################
-
-# Header use for the comment for each of the tag used in the script
-my %tagheader = (
-        default => {
-                '000ClassName'          => '# Class Name',
-                '001SkillName'          => 'Class Skills (All skills are seperated by a pipe delimiter \'|\')',
-
-                '000DomainName'         => '# Domain Name',
-                '001DomainEffect'               => 'Description',
-
-                'DESC'                  => 'Description',
-
-                '000AbilityName'                => '# Ability Name',
-                '000FeatName'           => '# Feat Name',
-
-                '000AbilityCategory',   => '# Ability Category Name',
-
-                '000LanguageName'               => '# Language',
-
-                'FAVCLASS'                      => 'Favored Class',
-                'XTRASKILLPTSPERLVL'    => 'Skills/Level',
-                'STARTFEATS'            => 'Starting Feats',
-
-                '000SkillName'          => '# Skill Name',
-
-                'KEYSTAT'                       => 'Key Stat',
-                'EXCLUSIVE'                     => 'Exclusive?',
-                'USEUNTRAINED'          => 'Untrained?',
-                'SITUATION'                     => 'Situational Skill',
-
-                '000TemplateName'               => '# Template Name',
-
-                '000WeaponName'         => '# Weapon Name',
-                '000ArmorName'          => '# Armor Name',
-                '000ShieldName'         => '# Shield Name',
-
-                '000VariableName'               => '# Name',
-                '000GlobalmodName'              => '# Name',
-                '000DatacontrolName'    => '# Name',
-                '000SaveName'   => '# Name',
-                '000StatName'   => '# Name',
-                '000AlignmentName'      => '# Name',
-                'DATAFORMAT'                    => 'Dataformat',
-                'REQUIRED'                              => 'Required',
-                'SELECTABLE'                    => 'Selectable',
-                'DISPLAYNAME'                   => 'Displayname',
-
-                'ABILITY'                                       => 'Ability',
-                'ACCHECK'                                       => 'AC Penalty Check',
-                'ACHECK'                                        => 'Skill Penalty?',
-                'ADD'                                           => 'Add',
-                'ADD:EQUIP'                                     => 'Add Equipment',
-                'ADD:FEAT'                                      => 'Add Feat',
-                'ADD:SAB'                                       => 'Add Special Ability',
-                'ADD:SKILL'                                     => 'Add Skill',
-                'ADD:TEMPLATE'                          => 'Add Template',
-                'ADDDOMAINS'                            => 'Add Divine Domain',
-                'ADDSPELLLEVEL'                         => 'Add Spell Lvl',
-                'APPLIEDNAME'                           => 'Applied Name',
-                'AGE'                                           => 'Age',
-                'AGESET'                                        => 'Age Set',
-                'ALIGN'                                         => 'Align',
-                'ALTCRITMULT'                           => 'Alt Crit Mult',
-#               'ALTCRITICAL'                           => 'Alternative Critical',
-                'ALTCRITRANGE'                          => 'Alt Crit Range',
-                'ALTDAMAGE'                                     => 'Alt Damage',
-                'ALTEQMOD'                                      => 'Alt EQModifier',
-                'ALTTYPE'                                       => 'Alt Type',
-                'ATTACKCYCLE'                           => 'Attack Cycle',
-                'ASPECT'                                        => 'Aspects',
-                'AUTO'                                          => 'Auto',
-                'AUTO:ARMORPROF'                        => 'Auto Armor Prof',
-                'AUTO:EQUIP'                            => 'Auto Equip',
-                'AUTO:FEAT'                                     => 'Auto Feat',
-                'AUTO:LANG'                                     => 'Auto Language',
-                'AUTO:SHIELDPROF'                       => 'Auto Shield Prof',
-                'AUTO:WEAPONPROF'                       => 'Auto Weapon Prof',
-                'BASEQTY'                                       => 'Base Quantity',
-                'BENEFIT'                                       => 'Benefits',
-                'BONUS'                                         => 'Bonus',
-                'BONUSSPELLSTAT'                        => 'Spell Stat Bonus',
-                'BONUS:ABILITYPOOL'                     => 'Bonus Ability Pool',
-                'BONUS:CASTERLEVEL'                     => 'Caster level',
-                'BONUS:CHECKS'                          => 'Save checks bonus',
-                'BONUS:CONCENTRATION'                           => 'Concentration bonus',
-                'BONUS:SAVE'                            => 'Save bonus',
-                'BONUS:COMBAT'                          => 'Combat bonus',
-                'BONUS:DAMAGE'                          => 'Weapon damage bonus',
-                'BONUS:DOMAIN'                          => 'Add domain number',
-                'BONUS:DC'                                      => 'Bonus DC',
-                'BONUS:DR'                                      => 'Bonus DR',
-                'BONUS:EQMARMOR'                        => 'Bonus Armor Mods',
-                'BONUS:EQM'                                     => 'Bonus Equip Mods',
-                'BONUS:EQMWEAPON'                       => 'Bonus Weapon Mods',
-                'BONUS:ESIZE'                           => 'Modify size',
-                'BONUS:FEAT'                            => 'Number of Feats',
-                'BONUS:FOLLOWERS'                       => 'Number of Followers',
-                'BONUS:HD'                                      => 'Modify HD type',
-                'BONUS:HP'                                      => 'Bonus to HP',
-                'BONUS:ITEMCOST'                        => 'Modify the item cost',
-                'BONUS:LANGUAGES'                       => 'Bonus language',
-                'BONUS:MISC'                            => 'Misc bonus',
-                'BONUS:MOVEADD'                         => 'Add to base move',
-                'BONUS:MOVEMULT'                        => 'Multiply base move',
-                'BONUS:POSTMOVEADD'                     => 'Add to magical move',
-                'BONUS:PCLEVEL'                         => 'Caster level bonus',
-                'BONUS:POSTRANGEADD'            => 'Bonus to Range',
-                'BONUS:RANGEADD'                        => 'Bonus to base range',
-                'BONUS:RANGEMULT'                       => '% bonus to range',
-                'BONUS:REPUTATION'                      => 'Bonus to Reputation',
-                'BONUS:SIZEMOD'                         => 'Adjust PC Size',
-                'BONUS:SKILL'                           => 'Bonus to skill',
-                'BONUS:SITUATION'                       => 'Bonus to Situation',
-                'BONUS:SKILLPOINTS'                     => 'Bonus to skill point/L',
-                'BONUS:SKILLPOOL'                       => 'Bonus to skill point for a level',
-                'BONUS:SKILLRANK'                       => 'Bonus to skill rank',
-                'BONUS:SLOTS'                           => 'Bonus to nb of slots',
-                'BONUS:SPELL'                           => 'Bonus to spell attribute',
-                'BONUS:SPECIALTYSPELLKNOWN'     => 'Bonus Specialty spells',
-                'BONUS:SPELLCAST'                       => 'Bonus to spell cast/day',
-                'BONUS:SPELLCASTMULT'           => 'Multiply spell cast/day',
-                'BONUS:SPELLKNOWN'                      => 'Bonus to spell known/L',
-                'BONUS:STAT'                            => 'Stat bonus',
-                'BONUS:TOHIT'                           => 'Attack roll bonus',
-                'BONUS:UDAM'                            => 'Unarmed Damage Level bonus',
-                'BONUS:VAR'                                     => 'Modify VAR',
-                'BONUS:VISION'                          => 'Add to vision',
-                'BONUS:WEAPON'                          => 'Weapon prop. bonus',
-                'BONUS:WEAPONPROF'                      => 'Weapon prof. bonus',
-                'BONUS:WIELDCATEGORY'           => 'Wield Category bonus',
-                'TEMPBONUS'                                     => 'Temporary Bonus',
-                'CAST'                                          => 'Cast',
-                'CASTAS'                                        => 'Cast As',
-                'CASTTIME:.CLEAR'                       => 'Clear Casting Time',
-                'CASTTIME'                                      => 'Casting Time',
-                'CATEGORY'                                      => 'Category of Ability',
-                'CCSKILL:.CLEAR'                        => 'Remove Cross-Class Skill',
-                'CCSKILL'                                       => 'Cross-Class Skill',
-                'CHANGEPROF'                            => 'Change Weapon Prof. Category',
-                'CHOOSE'                                        => 'Choose',
-                'CLASSES'                                       => 'Classes',
-                'COMPANIONLIST'                         => 'Allowed Companions',
-                'COMPS'                                         => 'Components',
-                'CONTAINS'                                      => 'Contains',
-                'COST'                                          => 'Cost',
-                'CR'                                            => 'Challenge Rating',
-                'CRMOD'                                         => 'CR Modifier',
-                'CRITMULT'                                      => 'Crit Mult',
-                'CRITRANGE'                                     => 'Crit Range',
-                'CSKILL:.CLEAR'                         => 'Remove Class Skill',
-                'CSKILL'                                        => 'Class Skill',
-                'CT'                                            => 'Casting Threshold',
-                'DAMAGE'                                        => 'Damage',
-                'DEF'                                           => 'Def',
-                'DEFINE'                                        => 'Define',
-                'DEFINESTAT'                            => 'Define Stat',
-                'DEITY'                                         => 'Deity',
-                'DESC'                                          => 'Description',
-                'DESC:.CLEAR'                           => 'Clear Description',
-                'DESCISPI'                                      => 'Desc is PI?',
-                'DESCRIPTOR:.CLEAR'                     => 'Clear Spell Descriptors',
-                'DESCRIPTOR'                            => 'Descriptor',
-                'DOMAIN'                                        => 'Domain',
-                'DOMAINS'                                       => 'Domains',
-                'DONOTADD'                                      => 'Do Not Add',
-                'DR:.CLEAR'                                     => 'Remove Damage Reduction',
-                'DR'                                            => 'Damage Reduction',
-                'DURATION:.CLEAR'                       => 'Clear Duration',
-                'DURATION'                                      => 'Duration',
-#               'EFFECTS'                                       => 'Description',               # Deprecated a long time ago for TARGETAREA
-                'EQMOD'                                         => 'Modifier',
-                'EXCLASS'                                       => 'Ex Class',
-                'EXPLANATION'                           => 'Explanation',
-                'FACE'                                          => 'Face/Space',
-                'FACT:Abb'                                      => 'Abbreviation',
-                'FACT:SpellType'                        => 'Spell Type',
-                'FEAT'                                          => 'Feat',
-                'FEATAUTO'                                      => 'Feat Auto',
-                'FOLLOWERS'                                     => 'Allow Follower',
-                'FREE'                                          => 'Free',
-                'FUMBLERANGE'                           => 'Fumble Range',
-                'GENDER'                                        => 'Gender',
-                'HANDS'                                         => 'Nb Hands',
-                'HASSUBCLASS'                           => 'Subclass?',
-                'ALLOWBASECLASS'                        => 'Base class as subclass?',
-                'HD'                                            => 'Hit Dice',
-                'HEIGHT'                                        => 'Height',
-                'HITDIE'                                        => 'Hit Dice Size',
-                'HITDICEADVANCEMENT'            => 'Hit Dice Advancement',
-                'HITDICESIZE'                           => 'Hit Dice Size',
-                'ITEM'                                          => 'Item',
-                'KEY'                                           => 'Unique Key',
-                'KIT'                                           => 'Apply Kit',
-                'KNOWN'                                         => 'Known',
-                'KNOWNSPELLS'                           => 'Automatically Known Spell Levels',
-                'LANGAUTO'                                      => 'Automatic Languages',                               # Deprecated
-                'LANGAUTO:.CLEAR'                       => 'Clear Automatic Languages',                 # Deprecated
-                'LANGBONUS'                                     => 'Bonus Languages',
-                'LANGBONUS:.CLEAR'                      => 'Clear Bonus Languages',
-                'LEGS'                                          => 'Nb Legs',
-                'LEVEL'                                         => 'Level',
-                'LEVELADJUSTMENT'                       => 'Level Adjustment',
-#               'LONGNAME'                                      => 'Long Name',                         # Deprecated in favor of OUTPUTNAME
-                'MAXCOST'                                       => 'Maximum Cost',
-                'MAXDEX'                                        => 'Maximum DEX Bonus',
-                'MAXLEVEL'                                      => 'Max Level',
-                'MEMORIZE'                                      => 'Memorize',
-                'MFEAT'                                         => 'Default Monster Feat',
-                'MONSKILL'                                      => 'Monster Initial Skill Points',
-                'MOVE'                                          => 'Move',
-                'MOVECLONE'                                     => 'Clone Movement',
-                'MULT'                                          => 'Multiple?',
-                'NAMEISPI'                                      => 'Product Identity?',
-                'NATURALARMOR'                          => 'Natural Armor',
-                'NATURALATTACKS'                        => 'Natural Attacks',
-                'NUMPAGES'                                      => 'Number of Pages',                   # [ 1450980 ] New Spellbook tags
-                'OUTPUTNAME'                            => 'Output Name',
-                'PAGEUSAGE'                                     => 'Page Usage',                                # [ 1450980 ] New Spellbook tags
-                'PANTHEON'                                      => 'Pantheon',
-                'PPCOST'                                        => 'Power Points',                      # [ 1814797 ] PPCOST needs to added as valid tag in SPELLS
-                'PRE:.CLEAR'                            => 'Clear Prereq.',
-                'PREABILITY'                            => 'Required Ability',
-                '!PREABILITY'                           => 'Restricted Ability',
-                'PREAGESET'                                     => 'Minimum Age',
-                '!PREAGESET'                            => 'Maximum Age',
-                'PREALIGN'                                      => 'Required AL',
-                '!PREALIGN'                                     => 'Restricted AL',
-                'PREATT'                                        => 'Req. Att.',
-                'PREARMORPROF'                          => 'Req. Armor Prof.',
-                '!PREARMORPROF'                         => 'Prohibited Armor Prof.',
-                'PREBASESIZEEQ'                         => 'Required Base Size',
-                '!PREBASESIZEEQ'                        => 'Prohibited Base Size',
-                'PREBASESIZEGT'                         => 'Minimum Base Size',
-                'PREBASESIZEGTEQ'                       => 'Minimum Size',
-                'PREBASESIZELT'                         => 'Maximum Base Size',
-                'PREBASESIZELTEQ'                       => 'Maximum Size',
-                'PREBASESIZENEQ'                        => 'Prohibited Base Size',
-                'PRECAMPAIGN'                           => 'Required Campaign(s)',
-                '!PRECAMPAIGN'                          => 'Prohibited Campaign(s)',
-                'PRECHECK'                                      => 'Required Check',
-                '!PRECHECK'                                     => 'Prohibited Check',
-                'PRECHECKBASE'                          => 'Required Check Base',
-                'PRECITY'                                       => 'Required City',
-                '!PRECITY'                                      => 'Prohibited City',
-                'PRECLASS'                                      => 'Required Class',
-                '!PRECLASS'                                     => 'Prohibited Class',
-                'PRECLASSLEVELMAX'                      => 'Maximum Level Allowed',
-                '!PRECLASSLEVELMAX'                     => 'Should use PRECLASS',
-                'PRECSKILL'                                     => 'Required Class Skill',
-                '!PRECSKILL'                            => 'Prohibited Class SKill',
-                'PREDEITY'                                      => 'Required Deity',
-                '!PREDEITY'                                     => 'Prohibited Deity',
-                'PREDEITYDOMAIN'                        => 'Required Deitys Domain',
-                'PREDOMAIN'                                     => 'Required Domain',
-                '!PREDOMAIN'                            => 'Prohibited Domain',
-                'PREDSIDEPTS'                           => 'Req. Dark Side',
-                'PREDR'                                         => 'Req. Damage Resistance',
-                '!PREDR'                                        => 'Prohibited Damage Resistance',
-                'PREEQUIP'                                      => 'Req. Equipement',
-                'PREEQMOD'                                      => 'Req. Equipment Mod.',
-                '!PREEQMOD'                                     => 'Prohibited Equipment Mod.',
-                'PREFEAT'                                       => 'Required Feat',
-                '!PREFEAT'                                      => 'Prohibited Feat',
-                'PREGENDER'                                     => 'Required Gender',
-                '!PREGENDER'                            => 'Prohibited Gender',
-                'PREHANDSEQ'                            => 'Req. nb of Hands',
-                'PREHANDSGT'                            => 'Min. nb of Hands',
-                'PREHANDSGTEQ'                          => 'Min. nb of Hands',
-                'PREHD'                                         => 'Required Hit Dice',
-                'PREHP'                                         => 'Required Hit Points',
-                'PREITEM'                                       => 'Required Item',
-                'PRELANG'                                       => 'Required Language',
-                'PRELEVEL'                                      => 'Required Lvl',
-                'PRELEVELMAX'                           => 'Maximum Level',
-                'PREKIT'                                        => 'Required Kit',
-                '!PREKIT'                                       => 'Prohibited Kit',
-                'PREMOVE'                                       => 'Required Movement Rate',
-                '!PREMOVE'                                      => 'Prohibited Movement Rate',
-                'PREMULT'                                       => 'Multiple Requirements',
-                '!PREMULT'                                      => 'Multiple Prohibitions',
-                'PREPCLEVEL'                            => 'Required Non-Monster Lvl',
-                'PREPROFWITHARMOR'                      => 'Required Armor Proficiencies',
-                '!PREPROFWITHARMOR'                     => 'Prohibited Armor Proficiencies',
-                'PREPROFWITHSHIELD'                     => 'Required Shield Proficiencies',
-                '!PREPROFWITHSHIELD'            => 'Prohbited Shield Proficiencies',
-                'PRERACE'                                       => 'Required Race',
-                '!PRERACE'                                      => 'Prohibited Race',
-                'PRERACETYPE'                           => 'Reg. Race Type',
-                'PREREACH'                                      => 'Minimum Reach',
-                'PREREACHEQ'                            => 'Required Reach',
-                'PREREACHGT'                            => 'Minimum Reach',
-                'PREREGION'                                     => 'Required Region',
-                '!PREREGION'                            => 'Prohibited Region',
-                'PRERULE'                                       => 'Req. Rule (in options)',
-                'PRESA'                                         => 'Req. Special Ability',
-                '!PRESA'                                        => 'Prohibite Special Ability',
-                'PRESHIELDPROF'                         => 'Req. Shield Prof.',
-                '!PRESHIELDPROF'                        => 'Prohibited Shield Prof.',
-                'PRESIZEEQ'                                     => 'Required Size',
-                'PRESIZEGT'                                     => 'Must be Larger',
-                'PRESIZEGTEQ'                           => 'Minimum Size',
-                'PRESIZELT'                                     => 'Must be Smaller',
-                'PRESIZELTEQ'                           => 'Maximum Size',
-                'PRESKILL'                                      => 'Required Skill',
-                '!PRESITUATION'                         => 'Prohibited Situation',
-                'PRESITUATION'                          => 'Required Situation',
-                '!PRESKILL'                                     => 'Prohibited Skill',
-                'PRESKILLMULT'                          => 'Special Required Skill',
-                'PRESKILLTOT'                           => 'Total Skill Points Req.',
-                'PRESPELL'                                      => 'Req. Known Spell',
-                'PRESPELLBOOK'                          => 'Req. Spellbook',
-                'PRESPELLBOOK'                          => 'Req. Spellbook',
-                'PRESPELLCAST'                          => 'Required Casting Type',
-                '!PRESPELLCAST'                         => 'Prohibited Casting Type',
-                'PRESPELLDESCRIPTOR'            => 'Required Spell Descriptor',
-                '!PRESPELLDESCRIPTOR'           => 'Prohibited Spell Descriptor',
-                'PRESPELLSCHOOL'                        => 'Required Spell School',
-                'PRESPELLSCHOOLSUB'                     => 'Required Sub-school',
-                '!PRESPELLSCHOOLSUB'            => 'Prohibited Sub-school',
-                'PRESPELLTYPE'                          => 'Req. Spell Type',
-                'PRESREQ'                                       => 'Req. Spell Resist',
-                'PRESRGT'                                       => 'SR Must be Greater',
-                'PRESRGTEQ'                                     => 'SR Min. Value',
-                'PRESRLT'                                       => 'SR Must be Lower',
-                'PRESRLTEQ'                                     => 'SR Max. Value',
-                'PRESRNEQ'                                      => 'Prohibited SR Value',
-                'PRESTAT'                                       => 'Required Stat',
-                '!PRESTAT',                                     => 'Prohibited Stat',
-                'PRESUBCLASS'                           => 'Required Subclass',
-                '!PRESUBCLASS'                          => 'Prohibited Subclass',
-                'PRETEMPLATE'                           => 'Required Template',
-                '!PRETEMPLATE'                          => 'Prohibited Template',
-                'PRETEXT'                                       => 'Required Text',
-                'PRETYPE'                                       => 'Required Type',
-                '!PRETYPE'                                      => 'Prohibited Type',
-                'PREVAREQ'                                      => 'Required Var. value',
-                '!PREVAREQ'                                     => 'Prohibited Var. Value',
-                'PREVARGT'                                      => 'Var. Must Be Grater',
-                'PREVARGTEQ'                            => 'Var. Min. Value',
-                'PREVARLT'                                      => 'Var. Must Be Lower',
-                'PREVARLTEQ'                            => 'Var. Max. Value',
-                'PREVARNEQ'                                     => 'Prohibited Var. Value',
-                'PREVISION'                                     => 'Required Vision',
-                '!PREVISION'                            => 'Prohibited Vision',
-                'PREWEAPONPROF'                         => 'Req. Weapond Prof.',
-                '!PREWEAPONPROF'                        => 'Prohibited Weapond Prof.',
-                'PREWIELD'                                      => 'Required Wield Category',
-                '!PREWIELD'                                     => 'Prohibited Wield Category',
-                'PROFICIENCY:WEAPON'            => 'Required Weapon Proficiency',
-                'PROFICIENCY:ARMOR'                     => 'Required Armor Proficiency',
-                'PROFICIENCY:SHIELD'            => 'Required Shield Proficiency',
-                'PROHIBITED'                            => 'Spell Scoll Prohibited',
-                'PROHIBITSPELL'                         => 'Group of Prohibited Spells',
-                'QUALIFY:CLASS'                         => 'Qualify for Class',
-                'QUALIFY:DEITY'                         => 'Qualify for Deity',
-                'QUALIFY:DOMAIN'                        => 'Qualify for Domain',
-                'QUALIFY:EQUIPMENT'                     => 'Qualify for Equipment',
-                'QUALIFY:EQMOD'                         => 'Qualify for Equip Modifier',
-                'QUALIFY:FEAT'                          => 'Qualify for Feat',
-                'QUALIFY:RACE'                          => 'Qualify for Race',
-                'QUALIFY:SPELL'                         => 'Qualify for Spell',
-                'QUALIFY:SKILL'                         => 'Qualify for Skill',
-                'QUALIFY:TEMPLATE'                      => 'Qualify for Template',
-                'QUALIFY:WEAPONPROF'            => 'Qualify for Weapon Proficiency',
-                'RACESUBTYPE:.CLEAR'            => 'Clear Racial Subtype',
-                'RACESUBTYPE'                           => 'Race Subtype',
-                'RACETYPE:.CLEAR'                       => 'Clear Main Racial Type',
-                'RACETYPE'                                      => 'Main Race Type',
-                'RANGE:.CLEAR'                          => 'Clear Range',
-                'RANGE'                                         => 'Range',
-                'RATEOFFIRE'                            => 'Rate of Fire',
-                'REACH'                                         => 'Reach',
-                'REACHMULT'                                     => 'Reach Multiplier',
-                'REGION'                                        => 'Region',
-                'REPEATLEVEL'                           => 'Repeat this Level',
-                'REMOVABLE'                                     => 'Removable?',
-                'REMOVE'                                        => 'Remove Object',
-                'REP'                                           => 'Reputation',
-                'ROLE'                                          => 'Monster Role',
-                'SA'                                            => 'Special Ability',
-                'SA:.CLEAR'                                     => 'Clear SAs',
-                'SAB:.CLEAR'                            => 'Clear Special ABility',
-                'SAB'                                           => 'Special ABility',
-                'SAVEINFO'                                      => 'Save Info',
-                'SCHOOL:.CLEAR'                         => 'Clear School',
-                'SCHOOL'                                        => 'School',
-                'SELECT'                                        => 'Selections',
-                'SERVESAS'                                      => 'Serves As',
-                'SIZE'                                          => 'Size',
-                'SKILLLIST'                                     => 'Use Class Skill List',
-                'SOURCE'                                        => 'Source Index',
-                'SOURCEPAGE:.CLEAR'                     => 'Clear Source Page',
-                'SOURCEPAGE'                            => 'Source Page',
-                'SOURCELONG'                            => 'Source, Long Desc.',
-                'SOURCESHORT'                           => 'Source, Short Desc.',
-                'SOURCEWEB'                                     => 'Source URI',
-                'SOURCEDATE'                            => 'Source Pub. Date',
-                'SOURCELINK'                            => 'Source Pub Link',
-                'SPELLBOOK'                                     => 'Spellbook',
-                'SPELLFAILURE'                          => '% of Spell Failure',
-                'SPELLLIST'                                     => 'Use Spell List',
-                'SPELLKNOWN:CLASS'                      => 'List of Known Class Spells by Level',
-                'SPELLKNOWN:DOMAIN'                     => 'List of Known Domain Spells by Level',
-                'SPELLLEVEL:CLASS'                      => 'List of Class Spells by Level',
-                'SPELLLEVEL:DOMAIN'                     => 'List of Domain Spells by Level',
-                'SPELLRES'                                      => 'Spell Resistance',
-                'SPELL'                                         => 'Deprecated Spell tag',
-                'SPELLS'                                        => 'Innate Spells',
-                'SPELLSTAT'                                     => 'Spell Stat',
-                'SPELLTYPE'                                     => 'Spell Type',
-                'SPROP:.CLEAR'                          => 'Clear Special Property',
-                'SPROP'                                         => 'Special Property',
-                'SR'                                            => 'Spell Res.',
-                'STACK'                                         => 'Stackable?',
-                'STARTSKILLPTS'                         => 'Skill Pts/Lvl',
-                'STAT'                                          => 'Key Attribute',
-                'SUBCLASSLEVEL'                         => 'Subclass Level',
-                'SUBRACE'                                       => 'Subrace',
-                'SUBREGION'                                     => 'Subregion',
-                'SUBSCHOOL'                                     => 'Sub-School',
-                'SUBSTITUTIONLEVEL'                     => 'Substitution Level',
-                'SYNERGY'                                       => 'Synergy Skill',
-                'TARGETAREA:.CLEAR'                     => 'Clear Target Area or Effect',
-                'TARGETAREA'                            => 'Target Area or Effect',
-                'TEMPDESC'                                      => 'Temporary effect description',
-                'TEMPLATE'                                      => 'Template',
-                'TEMPLATE:.CLEAR'                       => 'Clear Templates',
-                'TYPE'                                          => 'Type',
-                'TYPE:.CLEAR'                           => 'Clear Types',
-                'UDAM'                                          => 'Unarmed Damage',
-                'UMULT'                                         => 'Unarmed Multiplier',
-                'UNENCUMBEREDMOVE'                      => 'Ignore Encumberance',
-                'VARIANTS'                                      => 'Spell Variations',
-                'VFEAT'                                         => 'Virtual Feat',
-                'VFEAT:.CLEAR'                          => 'Clear Virtual Feat',
-                'VISIBLE'                                       => 'Visible',
-                'VISION'                                        => 'Vision',
-                'WEAPONBONUS'                           => 'Optionnal Weapon Prof.',
-                'WEIGHT'                                        => 'Weight',
-                'WT'                                            => 'Weight',
-                'XPCOST'                                        => 'XP Cost',
-                'XTRAFEATS'                                     => 'Extra Feats',
-        },
-
-        'ABILITYCATEGORY' => {
-                '000AbilityCategory'    => '# Ability Category',
-                'CATEGORY'                      => 'Category of Object',
-                'DISPLAYLOCATION'               => 'Display Location',
-                'DISPLAYNAME'           => 'Display where?',
-                'EDITABLE'                      => 'Editable?',
-                'EDITPOOL'                      => 'Change Pool?',
-                'FRACTIONALPOOL'                => 'Fractional values?',
-                'PLURAL'                        => 'Plural description for UI',
-                'POOL'                  => 'Base Pool number',
-                'TYPE'                  => 'Type of Object',
-                'ABILITYLIST'           => 'Specific choices list',
-                'VISIBLE'                       => 'Visible',
-        },
-
-        'BIOSET AGESET' => {
-                'AGESET' =>                     '# Age set',
-        },
-
-        'BIOSET RACENAME' => {
-                'RACENAME'                      => '# Race name',
-        },
-
-        'CLASS' => {
-                '000ClassName'          => '# Class Name',
-                'FACT:CLASSTYPE'                        => 'Class Type',
-                'CLASSTYPE'                     => 'Class Type',
-                'FACT:Abb'                              => 'Abbreviation',
-                'ABB'                           => 'Abbreviation',
-                'ALLOWBASECLASS',               => 'Base class as subclass?',
-                'HASSUBSTITUTIONLEVEL'  => 'Substitution levels?',
-#               'HASSPELLFORMULA'               => 'Spell Fomulas?',            # [ 1893279 ] HASSPELLFORMULA Class Line tag # [ 1973497 ] HASSPELLFORMULA is deprecated
-                'ITEMCREATE'            => 'Craft Level Mult.',
-                'LEVELSPERFEAT'         => 'Levels per Feat',
-                'MODTOSKILLS'           => 'Add INT to Skill Points?',
-                'MONNONSKILLHD'         => 'Extra Hit Die Skills Limit',
-                'MULTIPREREQS'          => 'MULTIPREREQS',
-                'SPECIALS'                      => 'Class Special Ability',     # Deprecated - Use SA
-                'DEITY'                 => 'Deities allowed',
-                'ROLE'                  => 'Monster Role',
-        },
-
-        'CLASS Level' => {
-                '000Level'                      => '# Level',
-        },
-
-        'COMPANIONMOD' => {
-                '000Follower'           => '# Class of the Master',
-                '000MasterBonusRace'    => '# Race of familiar',
-                'COPYMASTERBAB'         => 'Copy Masters BAB',
-                'COPYMASTERCHECK'               => 'Copy Masters Checks',
-                'COPYMASTERHP'          => 'HP formula based on Master',
-                'FOLLOWER'                      => 'Added Value',
-                'SWITCHRACE'            => 'Change Racetype',
-                'USEMASTERSKILL'        => 'Use Masters skills?',
-        },
-
-        'DEITY' => {
-                '000DeityName'          => '# Deity Name',
-                'DOMAINS'                       => 'Domains',
-                'FOLLOWERALIGN'         => 'Clergy AL',
-                'DESC'                  => 'Description of Deity/Title',
-                'FACT:SYMBOL'                   => 'Holy Item',
-                'SYMBOL'                        => 'Holy Item',
-                'DEITYWEAP'                     => 'Deity Weapon',
-                'FACT:TITLE'                    => 'Deity Title',
-                'TITLE'                 => 'Deity Title',
-                'FACTSET:WORSHIPPERS'           => 'Usual Worshippers',
-                'WORSHIPPERS'           => 'Usual Worshippers',
-                'FACT:APPEARANCE'               => 'Deity Appearance',
-                'APPEARANCE'            => 'Deity Appearance',
-                'ABILITY'                       => 'Granted Ability',
-        },
-
-        'EQUIPMENT' => {
-                '000EquipmentName'      => '# Equipment Name',
-                'BASEITEM'                      => 'Base Item for EQMOD',
-                'RESIZE'                        => 'Can be Resized',
-                'QUALITY'                       => 'Quality and value',
-                'SLOTS'                         => 'Slot Needed',
-                'WIELD'                         => 'Wield Category',
-                'MODS'                          => 'Requires Modification?',
-        },
-
-        'EQUIPMOD' => {
-                '000ModifierName'               => '# Modifier Name',
-                'ADDPROF'                       => 'Add Req. Prof.',
-                'ARMORTYPE'                     => 'Change Armor Type',
-                'ASSIGNTOALL'           => 'Apply to both heads',
-                'CHARGES'                       => 'Nb of Charges',
-                'COSTPRE'                       => 'Cost before resizing',
-                'FORMATCAT'                     => 'Naming Format',                     #[ 1594671 ] New tag: equipmod FORMATCAT
-                'IGNORES'                       => 'Keys to ignore',
-                'ITYPE'                         => 'Type granted',
-                'KEY'                           => 'Unique Key',
-                'NAMEOPT'                       => 'Naming Option',
-                'PLUS'                          => 'Plus',
-                'REPLACES'                      => 'Keys to replace',
-        },
-
-        'KIT STARTPACK' => {
-                'STARTPACK'                             => '# Kit Name',
-                'APPLY'                                 => 'Apply method to char',                      #[ 1593879 ] New Kit tag: APPLY
-        },
-
-        'KIT CLASS' => {
-                'CLASS'                                 => '# Class',
-        },
-
-        'KIT FUNDS' => {
-                'FUNDS'                                 => '# Funds',
-        },
-
-        'KIT GEAR' => {
-                'GEAR'                                  => '# Gear',
-        },
-
-        'KIT LANGBONUS' => {
-                'LANGBONUS'                             => '# Bonus Language',
-        },
-
-        'KIT NAME' => {
-                'NAME'                                  => '# Name',
-        },
-
-        'KIT RACE' => {
-                'RACE'                                  => '# Race',
-        },
-
-        'KIT SELECT' => {
-                'SELECT'                                => '# Select choice',
-        },
-
-        'KIT SKILL' => {
-                'SKILL'                                 => '# Skill',
-                'SELECTION'                             => 'Selections',
-        },
-
-        'KIT TABLE' => {
-                'TABLE'                                 => '# Table name',
-                'VALUES'                                => 'Table Values',
-        },
-
-        'MASTERBONUSRACE' => {
-                '000MasterBonusRace'    => '# Race of familiar',
-        },
-
-        'RACE' => {
-                '000RaceName'           => '# Race Name',
-                'FACT'                  => 'Base size',
-                'FAVCLASS'              => 'Favored Class',
-                'SKILLMULT'             => 'Skill Multiplier',
-                'MONCSKILL'             => 'Racial HD Class Skills',
-                'MONCCSKILL'            => 'Racial HD Cross-class Skills',
-                'MONSTERCLASS'          => 'Monster Class Name and Starting Level',
-        },
-
-        'SPELL' => {
-                '000SpellName'          => '# Spell Name',
-                'CLASSES'                       => 'Classes of caster',
-                'DOMAINS'                       => 'Domains granting the spell',
-        },
-
-        'SUBCLASS' => {
-                '000SubClassName'               => '# Subclass',
-        },
-
-        'SUBSTITUTIONCLASS' => {
-                '000SubstitutionClassName'      => '# Substitution Class',
-        },
-
-        'TEMPLATE' => {
-                '000TemplateName'               => '# Template Name',
-                'ADDLEVEL'                      => 'Add Levels',
-                'BONUS:MONSKILLPTS'     => 'Bonus Monster Skill Points',
-                'BONUSFEATS'            => 'Number of Bonus Feats',
-                'FAVOREDCLASS'          => 'Favored Class',
-                'GENDERLOCK'            => 'Lock Gender Selection',
-        },
-
-        'VARIABLE' => {
-                '000VariableName'               => '# Variable Name',
-                'EXPLANATION'                   => 'Explanation',
-        },
-
-        'GLOBALMOD' => {
-                '000GlobalmodName'              => '# Name',
-                'EXPLANATION'                   => 'Explanation',
-        },
-
-        'DATACONTROL' => {
-                '000DatacontrolName'            => '# Name',
-                'EXPLANATION'                   => 'Explanation',
-        },
-        'ALIGNMENT' => {
-                '000AlignmentName'              => '# Name',
-        },
-        'STAT' => {
-                '000StatName'           => '# Name',
-        },
-        'SAVE' => {
-                '000SaveName'           => '# Name',
-        },
-
-);
 
 # this is a temporary hack until we can move the actual parse routine into LstTidy Parse
 
@@ -2233,7 +1565,7 @@ if (getOption('inputpath')) {
 
         # Missing .lst files must be printed
         if ( keys %filelist_missing ) {
-           $log->header(LstTidy::LogHeader::get('Missing'));
+           $log->header(LstTidy::LogHeader::get('Missing LST'));
            for my $lstfile ( sort keys %filelist_missing ) {
               $log->notice(
                  "Can't find the file: $lstfile",
@@ -2540,194 +1872,8 @@ if (LstTidy::Report::foundInvalidTags()) {
    LstTidy::Report::reportValid();
 }
 
-if ( getOption('xcheck') ) {
-
-        #####################################################
-        # First we process the information that must be added
-        # to the %referer and %referer_types;
-        for my $parameter_ref (@xcheck_to_process) {
-           add_to_xcheck_tables( @{$parameter_ref} );
-        }
-
-        #####################################################
-        # Print a report with the problems found with xcheck
-
-        my %to_report;
-
-        # Find the entries that need to be reported
-        for my $linetype ( sort %referer ) {
-                for my $entry ( sort keys %{ $referer{$linetype} } ) {
-
-                # Special case for EQUIPMOD Key
-                # -----------------------------
-                # If an EQUIPMOD Key entry doesn't exists, we can use the
-                # EQUIPMOD name but we have to throw a warning.
-                if ( $linetype eq 'EQUIPMOD Key' ) {
-
-
-                        if (!LstTidy::Validate::isEntityValid('EQUIPMOD Key', $entry)) {
-
-                                # There is no key but it might be just a warning
-                                if (LstTidy::Validate::isEntityValid('EQUIPMOD', $entry)) {
-
-                                        # It's a warning
-                                        for my $array ( @{ $referer{$linetype}{$entry} } ) {
-
-                                                # It's not a warning, not EQUIPMOD were found.
-                                                push @{ $to_report{ $array->[1] } },
-                                                        [ $array->[2], 'EQUIPMOD Key', $array->[0] ];
-                                        }
-                                }
-                                else {
-                                        for my $array ( @{ $referer{$linetype}{$entry} } ) {
-
-                                                # It's not a warning, no EQUIPMOD were found.
-                                                push @{ $to_report{ $array->[1] } },
-                                                        [ $array->[2], 'EQUIPMOD Key or EQUIPMOD', $array->[0] ];
-                                        }
-                                }
-                        }
-                }
-                elsif ( $linetype =~ /,/ ) {
-
-                        # Special case if there is a , (comma) in the
-                        # entry.
-                        # We must check multiple possible linetypes.
-                        my $found = 0;
-
-                        ITEM:
-                        for my $item ( split ',', $linetype ) {
-
-                                if (LstTidy::Validate::isEntityValid($item, $entry)) {
-                                $found = 1;
-                                last ITEM;
-                                }
-                        }
-
-                        if (!$found) {
-
-                                # Let's have a cute message
-                                my @list = split ',', $linetype;
-                                my $end_of_message = $list[-2] . ' or ' . $list[-1];
-                                pop @list;
-                                pop @list;
-
-                                my $message = ( join ', ', @list ) . $end_of_message;
-
-                                for my $array ( @{ $referer{$linetype}{$entry} } ) {
-                                push @{ $to_report{ $array->[1] } },
-                                        [ $array->[2], $message, $array->[0] ];
-                                }
-                        }
-                }
-                else {
-                        unless (LstTidy::Validate::isEntityValid($linetype, $entry)) {
-                                for my $array ( @{ $referer{$linetype}{$entry} } ) {
-                                        push @{ $to_report{ $array->[1] } },
-                                                [ $array->[2], $linetype, $array->[0] ];
-                                }
-                        }
-                }
-                }
-        }
-
-        # Print the report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::get('CrossRef'));
-
-        # This will add a message for every message in to_report - which should be every message
-        # that was added to to_report.
-        for my $file ( sort keys %to_report ) {
-                for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-                        my $message = qq{No $line_ref->[1] entry for "$line_ref->[2]"};
-
-                        # If it is an EQMOD Key missing, it is less severe
-                        if ($line_ref->[1] eq 'EQUIPMOD Key') {
-                           $log->info(  $message, $file, $line_ref->[0] );
-                        } else {
-                           $log->notice(  $message, $file, $line_ref->[0] );
-                        }
-                }
-        }
-
-        ###############################################
-        # Type report
-        # This is the code used to change what types are/aren't reported.
-        # Find the type entries that need to be reported
-        %to_report = ();
-        for my $linetype ( sort %referer_types ) {
-                for my $entry ( sort keys %{ $referer_types{$linetype} } ) {
-                        unless ( exists $valid_types{$linetype}{$entry} ) {
-                                for my $array ( @{ $referer_types{$linetype}{$entry} } ) {
-                                        push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
-                                }
-                        }
-                }
-        }
-
-        # Print the type report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::get('Type CrossRef'));
-
-        for my $file ( sort keys %to_report ) {
-                for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-                $log->notice(
-                        qq{No $line_ref->[1] type found for "$line_ref->[2]"},
-                        $file,
-                        $line_ref->[0]
-                );
-                }
-        }
-
-        ###############################################
-        # Category report
-        # Needed for full support for [ 1671407 ] xcheck PREABILITY tag
-        # Find the category entries that need to be reported
-        %to_report = ();
-        for my $linetype ( sort %referer_categories ) {
-                for my $entry ( sort keys %{ $referer_categories{$linetype} } ) {
-                unless ( exists $valid_categories{$linetype}{$entry} ) {
-                        for my $array ( @{ $referer_categories{$linetype}{$entry} } ) {
-                                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
-                        }
-                }
-                }
-        }
-
-        # Print the category report sorted by file name and line number.
-        $log->header(LstTidy::LogHeader::get('Category CrossRef'));
-
-        for my $file ( sort keys %to_report ) {
-                for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-                $log->notice(
-                        qq{No $line_ref->[1] category found for "$line_ref->[2]"},
-                        $file,
-                        $line_ref->[0]
-                );
-                }
-        }
-
-
-        #################################
-        # Print the tag that do not have defined headers if requested
-        if ( getOption('missingheader') ) {
-                my $firsttime = 1;
-                for my $linetype ( sort keys %missing_headers ) {
-                if ($firsttime) {
-                        print STDERR "\n================================================================\n";
-                        print STDERR "List of TAGs without defined header in \%tagheader\n";
-                        print STDERR "----------------------------------------------------------------\n";
-                }
-
-                print STDERR "\n" unless $firsttime;
-                print STDERR "Line Type: $linetype\n";
-
-                for my $header ( sort report_tag_sort keys %{ $missing_headers{$linetype} } ) {
-                        print STDERR "  $header\n";
-                }
-
-                $firsttime = 0;
-                }
-        }
-
+if (getOption('xcheck')) {
+   LstTidy::Report::doXCheck();
 }
 
 #########################################
@@ -2888,7 +2034,7 @@ sub FILETYPE_parse {
                         $line_tokens{$column} = [$curent_token];
 
                         # Statistic gathering
-                        incCountValidTags($curent_linetype, $column);
+                        LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
                         # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
                         if ( index( $column, '000' ) == 0 ) {
@@ -2927,7 +2073,7 @@ sub FILETYPE_parse {
                                                                         # Some line types refer to other line entries directly
                                                                         # in the line identifier.
                                                                         if ( exists $line_info->{GetRefList} ) {
-                                                                                add_to_xcheck_tables(
+                                                                           LstTidy::Report::add_to_xcheck_tables(
                                                                                         $line_info->{IdentRefType},
                                                                                         $line_info->{IdentRefTag},
                                                                                         $file_for_error,
@@ -3041,13 +2187,13 @@ sub FILETYPE_parse {
                         # Curent header
                         my $this_header =
                                 $curent_linetype
-                                ? get_header( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
+                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
                                 : "";
 
                         # Next line header
                         my $next_header =
                                 $next_linetype
-                                ? get_header( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
+                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
                                 : "";
 
                         if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
@@ -3196,12 +2342,11 @@ sub FILETYPE_parse {
                                 $line_entity = $line_tokens->{$tag}[0] unless $line_entity;
 
                                 # What is the length of the column?
-                                my $header_text   = get_header( $tag, $curent_linetype );
+                                my $header_text   = LstTidy::Parse::getHeader( $tag, $curent_linetype );
                                 my $header_length = mylength($header_text);
-                                my $col_length  =
-                                        $header_length > $col_length{$tag}
-                                ? $header_length
-                                : $col_length{$tag};
+                                my $col_length    = $header_length > $col_length{$tag}
+                                                       ? $header_length
+                                                       : $col_length{$tag};
 
                                 # Round the col_length up to the next tab
                                 $col_length = $tablength * ( int( $col_length / $tablength ) + 1 );
@@ -3225,7 +2370,7 @@ sub FILETYPE_parse {
                         for my $tag ( sort keys %$line_tokens ) {
 
                                 # What is the length of the column?
-                                my $header_text   = get_header( $tag, $curent_linetype );
+                                my $header_text   = LstTidy::Parse::getHeader( $tag, $curent_linetype );
                                 my $header_length = mylength($header_text);
                                 my $col_length  =
                                         $header_length > $col_length{$tag}
@@ -3332,7 +2477,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( get_header( $tag, $fileType ) );
+                                my $length = mylength( LstTidy::Parse::getHeader( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -3413,7 +2558,7 @@ sub FILETYPE_parse {
                                 # Round the col_length up to the next tab
                                 my $col_max_length
                                         = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = get_header( $tag, $main_linetype );
+                                my $curent_header = LstTidy::Parse::getHeader( $tag, $main_linetype );
                                 my $curent_length = mylength($curent_header);
                                 my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
                                         + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
@@ -3503,7 +2648,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( get_header( $tag, $fileType ) );
+                                my $length = mylength( LstTidy::Parse::getHeader( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -3622,7 +2767,7 @@ sub FILETYPE_parse {
                                 # Round the col_length up to the next tab
                                 my $col_max_length
                                         = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = get_header( $tag, $sub_linetype );
+                                my $curent_header = LstTidy::Parse::getHeader( $tag, $sub_linetype );
                                 my $curent_length = mylength($curent_header);
                                 my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
                                         + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
@@ -3881,7 +3026,7 @@ sub parse_tag {
                                         $file_for_error,
                                         $line_for_error
                                 );
-                                incCountInvalidTags($linetype, $addtag); 
+                                LstTidy::Report::incCountInvalidTags($linetype, $addtag); 
                                 $no_more_error = 1;
                         }
                 }
@@ -3895,7 +3040,7 @@ sub parse_tag {
                 }
                 elsif ($qualify_type) {
                         # No valid Qualify type found
-                        incCountInvalidTags($linetype, "$tag:$qualify_type"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$qualify_type"); 
                         $log->notice(
                                 qq{Invalid QUALIFY:$qualify_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -3904,7 +3049,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        incCountInvalidTags($linetype, "QUALIFY"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "QUALIFY"); 
                         $log->notice(
                                 qq{Invalid QUALIFY tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -3926,7 +3071,7 @@ sub parse_tag {
                 elsif ($bonus_type) {
 
                         # No valid bonus type was found
-                        incCountInvalidTags($linetype, "$tag:$bonus_type"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$bonus_type"); 
                         $log->notice(
                                 qq{Invalid BONUS:$bonus_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -3935,7 +3080,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        incCountInvalidTags($linetype, "BONUS"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "BONUS"); 
                         $log->notice(
                                 qq{Invalid BONUS tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -3957,7 +3102,7 @@ sub parse_tag {
                 elsif ($prof_type) {
 
                         # No valid bonus type was found
-                        incCountInvalidTags($linetype, "$tag:$prof_type"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$prof_type"); 
                         $log->notice(
                                 qq{Invalid PROFICIENCY:$prof_type tag "$tag_text" found in $linetype.},
                                 $file_for_error,
@@ -3966,7 +3111,7 @@ sub parse_tag {
                         $no_more_error = 1;
                 }
                 else {
-                        incCountInvalidTags($linetype, "PROFICIENCY"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "PROFICIENCY"); 
                         $log->notice(
                                 qq{Invalid PROFICIENCY tag "$tag_text" found in $linetype},
                                 $file_for_error,
@@ -3996,7 +3141,7 @@ sub parse_tag {
 
                         # No valid auto type was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                           incCountInvalidTags($linetype, "$tag:$1"); 
+                           LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid $tag:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4004,7 +3149,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                incCountInvalidTags($linetype, "AUTO"); 
+                                LstTidy::Report::incCountInvalidTags($linetype, "AUTO"); 
                                 $log->notice(
                                         qq{Invalid AUTO tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4031,7 +3176,7 @@ sub parse_tag {
                 else {
                         # No valid SPELLLEVEL subtag was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                                incCountInvalidTags($linetype, "$tag:$1"); 
+                                LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid SPELLLEVEL:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4039,7 +3184,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                incCountInvalidTags($linetype, "SPELLLEVEL"); 
+                                LstTidy::Report::incCountInvalidTags($linetype, "SPELLLEVEL"); 
                                 $log->notice(
                                         qq{Invalid SPELLLEVEL tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4064,7 +3209,7 @@ sub parse_tag {
                 else {
                         # No valid SPELLKNOWN subtag was found
                         if ( $value =~ /^([^=:|]+)/ ) {
-                                incCountInvalidTags($linetype, "$tag:$1"); 
+                                LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
                                 $log->notice(
                                         qq{Invalid SPELLKNOWN:$1 tag "$tag_text" found in $linetype.},
                                         $file_for_error,
@@ -4072,7 +3217,7 @@ sub parse_tag {
                                 );
                         }
                         else {
-                                incCountInvalidTags($linetype, "SPELLKNOWN"); 
+                                LstTidy::Report::incCountInvalidTags($linetype, "SPELLKNOWN"); 
                                 $log->notice(
                                         qq{Invalid SPELLKNOWN tag "$tag_text" found in $linetype},
                                         $file_for_error,
@@ -4097,7 +3242,7 @@ sub parse_tag {
                                 $file_for_error,
                                 $line_for_error
                         );
-                        incCountInvalidTags($linetype, "$tag:.CLEAR"); 
+                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:.CLEAR"); 
                         $no_more_error = 1;
                 }
                 else {
@@ -4125,7 +3270,7 @@ sub parse_tag {
                                 $file_for_error,
                                 $line_for_error
                                 );
-                        incCountInvalidTags($linetype, $real_tag); 
+                        LstTidy::Report::incCountInvalidTags($linetype, $real_tag); 
                 }
         }
 
@@ -4133,7 +3278,7 @@ sub parse_tag {
         elsif (LstTidy::Reformat::isValidTag($linetype, $tag)) {
 
            # Statistic gathering
-           incCountValidTags($linetype, $real_tag);
+           LstTidy::Report::incCountValidTags($linetype, $real_tag);
         }
 
         # Check and reformat the values for the tags with
@@ -4391,13 +3536,13 @@ BEGIN {
                         }
 
                         # The formula part
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq{@@" in "$tag_name$tag_value},
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $jep,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4426,13 +3571,13 @@ BEGIN {
                         }
 
                         # The next parameter is the formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         ( shift @list_of_param ),
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4489,7 +3634,7 @@ BEGIN {
                         # We keep the move types for validation
                         for my $type ( split ',', $type_list ) {
                                 if ( $type =~ /^TYPE(=|\.)(.*)/ ) {
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'MOVE Type',    qq(TYPE$1@@" in "$tag_name$tag_value),
                                         $file_for_error, $line_for_error,
@@ -4506,13 +3651,13 @@ BEGIN {
                         }
 
                         # Then we deal with the var in formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4541,13 +3686,13 @@ BEGIN {
                         }
 
                         # Then we deal with the var in formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4567,7 +3712,7 @@ BEGIN {
                                 # LIST is filtered out as it may not be valid for the
                                 # other places were a variable name is used.
                                 if ( $var_name ne 'LIST' ) {
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'DEFINE Variable',
                                                 qq(@@" in "$tag_name$tag_value),
@@ -4590,13 +3735,13 @@ BEGIN {
                         # %CHOICE is filtered out as it may not be valid for the
                         # other places were a variable name is used.
                         for my $formula ( grep { $_ ne '%CHOICE' } @formulas ) {
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'DEFINE Variable',
                                         qq(@@" in "$tag_name$tag_value),
                                         $file_for_error,
                                         $line_for_error,
-                                        parse_jep(
+                                        LstTidy::Parse::parseJep(
                                                 $formula,
                                                 "$tag_name$tag_value",
                                                 $file_for_error,
@@ -4622,13 +3767,13 @@ BEGIN {
                         }
 
                         # Second, we deal with the formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4660,7 +3805,7 @@ BEGIN {
                                                 || $tag_to_check eq "DOMAIN"
                                                 )
                                         {
-                                                push @xcheck_to_process,
+                                                push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 $tag_to_check,   $tag_name,
                                                 $file_for_error, $line_for_error,
@@ -4700,7 +3845,7 @@ BEGIN {
                                 # ALL is valid here
                                 next CLASS_FOR_SKILL if $class eq 'ALL';
 
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'CLASS',                $tag_name,
                                 $file_for_error, $line_for_error,
@@ -4719,7 +3864,7 @@ BEGIN {
                                 # ALL is valid here
                                 next DOMAIN_FOR_DEITY if $domain eq 'ALL';
 
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DOMAIN',               $tag_name,
                                 $file_for_error, $line_for_error,
@@ -4740,7 +3885,7 @@ BEGIN {
                 my $list_of_class = $tag_value;
                 $list_of_class =~ s{ \[ BASEAGEADD: [^]]* \] }{}xmsg;
 
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                                 'CLASS',
                                 $tag_name,
@@ -4753,7 +3898,7 @@ BEGIN {
                         && $linetype ne 'PCC'
                 ) {
                 # DEITY:<deity name>|<deity name>|etc.
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DEITY',
                                 $tag_name,
@@ -4766,7 +3911,7 @@ BEGIN {
                         && $linetype ne 'PCC'
                 ) {
                 # DOMAIN:<domain name>|<domain name>|etc.
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DOMAIN',
                                 $tag_name,
@@ -4778,7 +3923,7 @@ BEGIN {
                 elsif ( $tag_name eq 'ADDDOMAINS' ) {
 
                 # ADDDOMAINS:<domain1>.<domain2>.<domain3>. etc.
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                         'DOMAIN',               $tag_name,
                         $file_for_error, $line_for_error,
@@ -4794,7 +3939,7 @@ BEGIN {
                         # First the list of classes
                         # ANY, ARCANA, DIVINE and PSIONIC are spcial hardcoded cases for
                         # the ADD:SPELLCASTER tag.
-                        push @xcheck_to_process, [
+                        push @LstTidy::Report::xcheck_to_process, [
                                 'CLASS',
                                 qq(@@" in "$tag_name$tag_value),
                                 $file_for_error,
@@ -4809,13 +3954,13 @@ BEGIN {
                         ];
 
                         # Second, we deal with the formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" from "$formula" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4843,7 +3988,7 @@ BEGIN {
 
                         # First the list of equipements
                         # ANY is a spcial hardcoded cases for ADD:EQUIP
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'EQUIPMENT',
                                 qq(@@" in "$tag_name$tag_value),
@@ -4854,13 +3999,13 @@ BEGIN {
                                 ];
 
                         # Second, we deal with the formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" from "$formula" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -4895,7 +4040,7 @@ BEGIN {
                                 if ($key) {
 
                                 # To be processed later
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'EQUIPMOD Key',  qq(@@" in "$tag_name:$tag_value),
                                         $file_for_error, $line_for_error,
@@ -4915,7 +4060,7 @@ BEGIN {
 
                         # Comma separated list of KEYs
                         # To be processed later
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'EQUIPMOD Key',  qq(@@" in "$tag_name:$tag_value),
                                 $file_for_error, $line_for_error,
@@ -4958,13 +4103,13 @@ BEGIN {
                                 #               s/&comma;/,/g for @feats;
 
                                 # Here we deal with the formula part
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'DEFINE Variable',
                                         qq(@@" in "$tag_name$tag_value),
                                         $file_for_error,
                                         $line_for_error,
-                                        parse_jep(
+                                        LstTidy::Parse::parseJep(
                                                 $formula,
                                                 "$tag_name$tag_value",
                                                 $file_for_error,
@@ -5030,7 +4175,7 @@ BEGIN {
                 }
 
                 # To be processed later
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [ 'FEAT', $message_format, $file_for_error, $line_for_error, @feats ];
                 }
                 elsif ( $tag_name eq 'KIT' && $linetype ne 'PCC' ) {
@@ -5044,7 +4189,7 @@ BEGIN {
                         shift @kit_list;
                 }
 
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                                 'KIT STARTPACK',
                                 $tag_name,
@@ -5058,7 +4203,7 @@ BEGIN {
                 # To be processed later
                 # The ALL keyword is removed here since it is not usable everywhere there are language
                 # used.
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                         'LANGUAGE', $tag_name, $file_for_error, $line_for_error,
                         grep { $_ ne 'ALL' } split ',', $tag_value
@@ -5068,7 +4213,7 @@ BEGIN {
 
                         # Syntax: ADD:LANGUAGE(<coma separated list of languages)<number>
                         if ( $tag_value =~ /\((.*)\)/ ) {
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'LANGUAGE', 'ADD:LANGUAGE(@@)', $file_for_error, $line_for_error,
                                         split ',',  $1
@@ -5132,7 +4277,7 @@ BEGIN {
                                 } 
                                 else {
                                         # Cross check for used MOVE Types.
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'MOVE Type', $tag_name, 
                                                 $file_for_error, $line_for_error,
@@ -5153,7 +4298,7 @@ BEGIN {
                 }
                 elsif ( $tag_name eq 'RACE' && $linetype ne 'PCC' ) {
                 # There is only one race per RACE tag
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [  'RACE',
                                 $tag_name,
                                 $file_for_error,
@@ -5165,7 +4310,7 @@ BEGIN {
 
                 # To be processed later
                 # Note: SWITCHRACE actually switch the race TYPE
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [   'RACE TYPE',
                                 $tag_name,
                                 $file_for_error,
@@ -5190,7 +4335,7 @@ BEGIN {
                 }
 
                 # To be processed later
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [   'SKILL',
                                 $tag_name,
                                 $file_for_error,
@@ -5206,7 +4351,7 @@ BEGIN {
 
                         # First the list of skills
                         # ANY is a spcial hardcoded cases for ADD:EQUIP
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'SKILL',
                                 qq(@@" in "$tag_name$tag_value),
@@ -5216,13 +4361,13 @@ BEGIN {
                                 ];
 
                         # Second, we deal with the formula
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
                                 qq(@@" from "$formula" in "$tag_name$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                         $formula,
                                         "$tag_name$tag_value",
                                         $file_for_error,
@@ -5258,13 +4403,13 @@ BEGIN {
 #                                               $param =~ s/TIMES=-1/TIMES=ATWILL/g;   # SPELLS:xxx|TIMES=-1 to SPELLS:xxx|TIMES=ATWILL conversion
                                                 $AtWill_Flag = $param =~ /TIMES=ATWILL/;
                                                 $nb_times++;
-                                                push @xcheck_to_process,
+                                                push @LstTidy::Report::xcheck_to_process,
                                                         [
                                                                 'DEFINE Variable',
                                                                 qq(@@" in "$tag_name:$tag_value),
                                                                 $file_for_error,
                                                                 $line_for_error,
-                                                                parse_jep(
+                                                                LstTidy::Parse::parseJep(
                                                                         $2,
                                                                         "$tag_name:$tag_value",
                                                                         $file_for_error,
@@ -5286,13 +4431,13 @@ BEGIN {
                                         }
                                         else {
                                                 $nb_casterlevel++;
-                                                                                                push @xcheck_to_process,
+                                                                                                push @LstTidy::Report::xcheck_to_process,
                                                         [
                                                                 'DEFINE Variable',
                                                                 qq(@@" in "$tag_name:$tag_value),
                                                                 $file_for_error,
                                                                 $line_for_error,
-                                                                parse_jep(
+                                                                LstTidy::Parse::parseJep(
                                                                         $2,
                                                                         "$tag_name:$tag_value",
                                                                         $file_for_error,
@@ -5320,13 +4465,13 @@ BEGIN {
                                         # Spell name must be validated with the list of spells and DC is a formula
                                         push @spells, $spellname;
 
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'DEFINE Variable',
                                                 qq(@@" in "$tag_name:$tag_value),
                                                 $file_for_error,
                                                 $line_for_error,
-                                                parse_jep(
+                                                LstTidy::Parse::parseJep(
                                                         $dc,
                                                         "$tag_name:$tag_value",
                                                         $file_for_error,
@@ -5348,7 +4493,7 @@ BEGIN {
                                 }
                         }
 
-                        push @xcheck_to_process,
+                        push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'SPELL',                $tag_name,
                                 $file_for_error, $line_for_error,
@@ -5427,7 +4572,7 @@ BEGIN {
                                 my ($param_id,$param_value) = ($1,$2);
 
                                 if ( $param_id eq 'CLASS' ) {
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'CLASS',
                                                 qq{@@" in "$tag_name:$tag_value},
@@ -5459,7 +4604,7 @@ BEGIN {
                         }
 
                         if ( scalar @spells ) {
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'SPELL',
                                         $tag_name,
@@ -5521,7 +4666,7 @@ BEGIN {
                                                         # SPELLCASTER.Arcane and SPELLCASTER.Divine are specials
                                                         # CLASS names that should not be cross-referenced.
                                                         # To be processed later
-                                                        push @xcheck_to_process, [
+                                                        push @LstTidy::Report::xcheck_to_process, [
                                                                 'CLASS', qq(@@" in "$tag_name$tag_value),
                                                                 $file_for_error, $line_for_error, $1
                                                         ];
@@ -5536,7 +4681,7 @@ BEGIN {
 
                                                 # The SPELL names
                                                 # To be processed later
-                                                push @xcheck_to_process,
+                                                push @LstTidy::Report::xcheck_to_process,
                                                         [
                                                                 'SPELL',                qq(@@" in "$tag_name$tag_value),
                                                                 $file_for_error, $line_for_error,
@@ -5585,7 +4730,7 @@ BEGIN {
 
                                         # The DOMAIN
                                         if ( $domain =~ /([^=]+)\=(\d+)/ ) {
-                                                push @xcheck_to_process,
+                                                push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'DOMAIN', qq(@@" in "$tag_name$tag_value),
                                                 $file_for_error, $line_for_error, $1
@@ -5601,7 +4746,7 @@ BEGIN {
 
                                         # The SPELL names
                                         # To be processed later
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'SPELL',                qq(@@" in "$tag_name$tag_value),
                                                 $file_for_error, $line_for_error,
@@ -5673,7 +4818,7 @@ BEGIN {
                 }
                 elsif ( $tag_name eq 'TEMPLATE' && $linetype ne 'PCC' ) {
                 # TEMPLATE:<template name>|<template name>|etc.
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [  'TEMPLATE',
                                 $tag_name,
                                 $file_for_error,
@@ -5691,7 +4836,7 @@ BEGIN {
                                 if ( $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi ) {
                                 # The presence of a remove means that we are trying
                                 # to modify existing data and not create new one
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [  'RACESUBTYPE',
                                                 $tag_name,
                                                 $file_for_error,
@@ -5708,7 +4853,7 @@ BEGIN {
                                 # get rid of the .REMOVE. part
                                 $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi;
 
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [  'RACESUBTYPE',
                                         $tag_name,
                                         $file_for_error,
@@ -5725,7 +4870,7 @@ BEGIN {
                                 if ( $race_type =~ m{ \A [.] REMOVE [.] }xmsi ) {
                                 # The presence of a remove means that we are trying
                                 # to modify existing data and not create new one
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [  'RACETYPE',
                                                 $tag_name,
                                                 $file_for_error,
@@ -5742,7 +4887,7 @@ BEGIN {
                                 # get rid of the .REMOVE. part
                                 $race_type =~ m{ \A [.] REMOVE [.] }xmsi;
 
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [  'RACETYPE',
                                         $tag_name,
                                         $file_for_error,
@@ -5757,7 +4902,7 @@ BEGIN {
                         $valid_types{$linetype}{$_}++ for ( split '\.', $tag_value );
                 }
                 elsif ( $tag_name eq 'CATEGORY' ) {
-                        # The types go into valid_types
+                        # The categories go into valid_categories
                         $valid_categories{$linetype}{$_}++ for ( split '\.', $tag_value );
                 }
                 ######################################################################
@@ -5767,13 +4912,13 @@ BEGIN {
                         ) {
 
                 # These tags should only have a numeribal value
-                push @xcheck_to_process,
+                push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DEFINE Variable',
                                 qq(@@" in "$tag_name:$tag_value),
                                 $file_for_error,
                                 $line_for_error,
-                                parse_jep(
+                                LstTidy::Parse::parseJep(
                                 $tag_value,
                                 "$tag_name:$tag_value",
                                 $file_for_error,
@@ -5819,13 +4964,13 @@ BEGIN {
 
                         # Second we deal with the formula
                         for my $formula (@formulas) {
-                                push @xcheck_to_process,
+                                push @LstTidy::Report::xcheck_to_process,
                                         [
                                                 'DEFINE Variable',
                                                 qq(@@" in "$tag_name:$tag_value),
                                                 $file_for_error,
                                                 $line_for_error,
-                                                parse_jep(
+                                                LstTidy::Parse::parseJep(
                                                         $formula,
                                                         "$tag_name:$tag_value",
                                                         $file_for_error,
@@ -5854,13 +4999,13 @@ BEGIN {
                                                 next FORMULA;
                                         }
 
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'DEFINE Variable',
                                                         qq(@@" in "$tag_name:$tag_value),
                                                         $file_for_error,
                                                         $line_for_error,
-                                                        parse_jep(
+                                                        LstTidy::Parse::parseJep(
                                                                 $formula,
                                                                 "$tag_name:$tag_value",
                                                                 $file_for_error,
@@ -5888,13 +5033,13 @@ BEGIN {
                                 ) {
                                         # Is there a CASTERLEVEL inside?
                                         if ( $result =~ / CASTERLEVEL /xmsi ) {
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'DEFINE Variable',
                                                         qq(@@" in "$tag_name:$tag_value),
                                                         $file_for_error,
                                                         $line_for_error,
-                                                        parse_jep(
+                                                        LstTidy::Parse::parseJep(
                                                         $result,
                                                         "$tag_name:$tag_value",
                                                         $file_for_error,
@@ -5940,7 +5085,7 @@ BEGIN {
                                         ) unless $parameters[2] =~ /^\*?\d+$/;
 
                                         # Are the types valid EQUIPMENT types?
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'EQUIPMENT TYPE', qq(@@" in "$tag_name:$entry),
                                                         $file_for_error,  $line_for_error,
@@ -5966,14 +5111,14 @@ BEGIN {
                                         my ( $list_of_weapons, $new_prof ) = ( $1, $2 );
 
                                         # First, the weapons (equipment)
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'EQUIPMENT', $tag_name, $file_for_error, $line_for_error,
                                                         split ',',   $list_of_weapons
                                                 ];
 
                                         # Second, the weapon prof.
-                                        push @xcheck_to_process,
+                                        push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'WEAPONPROF', $tag_name, $file_for_error, $line_for_error,
                                                         $new_prof
@@ -6001,14 +5146,14 @@ BEGIN {
 ##      }
 ##      else
 ##      {
-##              incCountInvalidTags($linetype, "$tag_name:$choose_type"); 
+##              LstTidy::Report::incCountInvalidTags($linetype, "$tag_name:$choose_type"); 
 ##              $log->notice(  "Invalid CHOOSE:$choose_type tag \"$tag_name:$tag_value\" found in $linetype.",
 ##                      $file_for_error, $line_for_error );
 ##      }
 ##      }
 ##      elsif(!$choose_type)
 ##      {
-##      incCountInvalidTags($linetype, "CHOOSE"); 
+##      LstTidy::Report::incCountInvalidTags($linetype, "CHOOSE"); 
 ##      $log->notice(  "Invalid CHOOSE tag \"$tag_name:$tag_value\" found in $linetype",
 ##              $file_for_error, $line_for_error );
 ##      }
@@ -6018,934 +5163,6 @@ BEGIN {
 
 }       # BEGIN End
 
-
-###############################################################
-# add_to_xcheck_tables
-# --------------------
-#
-# This function adds entries that will need to cross-checked
-# against existing entities.
-#
-# It also filter the global entries and other weirdness.
-#
-# Pamameter:  $entry_type               Type of the entry that must be cheacked
-#                       $tag_name               Name of the tag for message display
-#                                               If tag name contains @@, it will be replaced
-#                                               by the entry text from the list for the message.
-#                                               Otherwise, the format $tag_name:$list_entry will
-#                                               be used.
-#                       $file_for_error   Name of the current file
-#                       $line_for_error   Number of the current line
-#                       @list                   List of entries to be added
-
-BEGIN {
-
-        # Variables names that must be skiped for the DEFINE variable section
-        # entry type.
-
-        my %Hardcoded_Variables = map { $_ => 1 } (
-                # Real hardcoded variables
-                'ACCHECK',
-#               'ARMORACCHECK',
-                'BAB',
-                'BASESPELLSTAT',
-                '%CHOICE',
-                'CASTERLEVEL',
-                'CL',
-#               'CLASSLEVEL',
-                'ENCUMBERANCE',
-#               'GRAPPLESIZEMOD',
-                'HD',
-                '%LIST',
-                'MOVEBASE',
-                'SIZE',
-#               'SPELLSTAT',
-                'TL',
-
-                # Functions for the JEP parser
-                'ceil',
-                'floor',
-                'if',
-                'min',
-                'max',
-                'roll',
-                'var',
-                'mastervar',
-                'APPLIEDAS',
-        );
-
-        sub add_to_xcheck_tables {
-                my ($entry_type,                # Type of the entry that must be cheacked
-                        $tag_name,              # Name of the tag for message display
-                                                # If tag name contains @@, it will be replaced
-                                                # by the entry text from the list for the message.
-                                                # Otherwise, the format $tag_name:$list_entry will
-                                                # be used.
-                        $file_for_error,        # Name of the current file
-                        $line_for_error,        # Number of the current line
-                        @list                   # List of entries to be added
-                ) = ( @_, "" );
-
-                # If $file_for_error is not under getOption('inputpath'), we do not add
-                # it to be validated. This happens when a -basepath parameter is used
-                # with the script.
-                my $inputpath =  getOption('inputpath');
-                return if $file_for_error !~ / \A ${inputpath} /xmsi;
-
-                # We remove the empty elements in the list
-                @list = grep { $_ ne "" } @list;
-
-                # If the list of entry is empty, we retrun immediately
-                return if scalar @list == 0;
-
-                # We set $tag_name properly for the substitution
-                $tag_name .= ":@@" unless $tag_name =~ /@@/;
-
-                if ( $entry_type eq 'CLASS' ) {
-                        for my $class (@list) {
-
-                                # Remove the =level if there is one
-                                $class =~ s/(.*)=\d+$/$1/;
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$class/;
-
-                                # Spellcaster is a special PCGEN keyword, not a real class
-                                push @{ $referer{'CLASS'}{$class} },
-                                        [ $message_name, $file_for_error, $line_for_error ]
-                                        if ( uc($class) ne "SPELLCASTER"
-                                                && uc($class) ne "SPELLCASTER.ARCANE"
-                                                && uc($class) ne "SPELLCASTER.DIVINE"
-                                                && uc($class) ne "SPELLCASTER.PSIONIC" );
-                        }
-                }
-                elsif ( $entry_type eq 'DEFINE Variable' ) {
-                        VARIABLE:
-                        for my $var (@list) {
-
-                                # We skip, the COUNT[] thingy must not be validated
-                                next VARIABLE if $var =~ /^COUNT\[/;
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$var/;
-
-                                push @{ $referer{'DEFINE Variable'}{$var} },
-                                        [ $message_name, $file_for_error, $line_for_error ]
-                                        unless $Hardcoded_Variables{$var};
-                        }
-                }
-                elsif ( $entry_type eq 'DEITY' ) {
-                        for my $deity (@list) {
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$deity/;
-
-                                push @{ $referer{'DEITY'}{$deity} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                elsif ( $entry_type eq 'DOMAIN' ) {
-                        for my $domain (@list) {
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$domain/;
-
-                                push @{ $referer{'DOMAIN'}{$domain} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                elsif ( $entry_type eq 'EQUIPMENT' ) {
-                        for my $equipment (@list) {
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$equipment/;
-
-                                if ( $equipment =~ /^TYPE=(.*)/ ) {
-                                        push @{ $referer_types{'EQUIPMENT'}{$1} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                                else {
-                                        push @{ $referer{'EQUIPMENT'}{$equipment} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                        }
-                }
-                elsif ( $entry_type eq 'EQUIPMENT TYPE' ) {
-                        for my $type (@list) {
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$type/;
-
-                                push @{ $referer_types{'EQUIPMENT'}{$type} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                elsif ( $entry_type eq 'EQUIPMOD Key' ) {
-                        for my $key (@list) {
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$key/;
-
-                                push @{ $referer{'EQUIPMOD Key'}{$key} },
-                                        [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                        }
-                        elsif ( $entry_type eq 'FEAT' ) {
-                                # Note - ABILITY code is below. If you need to make changes here
-                                # to the FEAT code, please also review the ABILITY code to ensure
-                                # that your changes aren't needed there.
-                                FEAT:
-                                for my $feat (@list) {
-
-                                        # We ignore CHECKMULT if used within a PREFEAT tag
-                                        next FEAT if $feat eq 'CHECKMULT' && $tag_name =~ /PREFEAT/;
-
-                                        # We ignore LIST if used within an ADD:FEAT tag
-                                        next FEAT if $feat eq 'LIST' && $tag_name eq 'ADD:FEAT';
-
-                                        # We stript the () if any
-                                        if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
-
-                                                # We check to see if the FEAT is a compond tag
-                                                if ( $valid_sub_entities{'FEAT'}{$1} ) {
-                                                        my $original_feat = $feat;
-                                                        my $feat_to_check = $feat = $1;
-                                                        my $entity              = $2;
-                                                        my $sub_tag_name  = $tag_name;
-                                                        $sub_tag_name =~ s/@@/$feat (@@)/;
-
-                                                        # Find the real entity type in case of FEAT=
-                                                        FEAT_ENTITY:
-                                                        while ( $valid_sub_entities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
-                                                                $feat_to_check = $1;
-                                                                if ( !exists $valid_sub_entities{'FEAT'}{$feat_to_check} ) {
-                                                                        $log->notice(
-                                                                                qq{Cannot find the sub-entity for "$original_feat"},
-                                                                                $file_for_error,
-                                                                                $line_for_error
-                                                                        );
-                                                                        $feat_to_check = "";
-                                                                        last FEAT_ENTITY;
-                                                                }
-                                                        }
-
-                                                        add_to_xcheck_tables(
-                                                                $valid_sub_entities{'FEAT'}{$feat_to_check},
-                                                                $sub_tag_name,
-                                                                $file_for_error,
-                                                                $line_for_error,
-                                                                $entity
-                                                        ) if $feat_to_check && $entity ne 'Ad-Lib';
-                                                }
-                                        }
-
-                                        # Put the entry name in place
-                                        my $message_name = $tag_name;
-                                        $message_name =~ s/@@/$feat/;
-
-                                        if ( $feat =~ /^TYPE[=.](.*)/ ) {
-                                                push @{ $referer_types{'FEAT'}{$1} },
-                                                        [ $message_name, $file_for_error, $line_for_error ];
-                                        }
-                                        else {
-                                                push @{ $referer{'FEAT'}{$feat} },
-                                                        [ $message_name, $file_for_error, $line_for_error ];
-                                        }
-                                }
-                        }
-                                elsif ( $entry_type eq 'ABILITY' ) {
-                                        #[ 1671407 ] xcheck PREABILITY tag
-                                        # Note - shamelessly cut/pasting from the FEAT code, as it's
-                                        # fairly similar.
-                                        ABILITY:
-                                        for my $feat (@list) {
-
-                                                # We ignore CHECKMULT if used within a PREFEAT tag
-                                                next ABILITY if $feat eq 'CHECKMULT' && $tag_name =~ /PREABILITY/;
-
-                                                # We ignore LIST if used within an ADD:FEAT tag
-                                                next ABILITY if $feat eq 'LIST' && $tag_name eq 'ADD:ABILITY';
-
-                                                # We stript the () if any
-                                                if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
-
-                                                        # We check to see if the FEAT is a compond tag
-                                                        if ( $valid_sub_entities{'ABILITY'}{$1} ) {
-                                                                my $original_feat = $feat;
-                                                                my $feat_to_check = $feat = $1;
-                                                                my $entity              = $2;
-                                                                my $sub_tag_name  = $tag_name;
-                                                                $sub_tag_name =~ s/@@/$feat (@@)/;
-
-                                                                # Find the real entity type in case of FEAT=
-                                                                ABILITY_ENTITY:
-                                                                while ( $valid_sub_entities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
-                                                                        $feat_to_check = $1;
-                                                                        if ( !exists $valid_sub_entities{'ABILITY'}{$feat_to_check} ) {
-                                                                                $log->notice(
-                                                                                        qq{Cannot find the sub-entity for "$original_feat"},
-                                                                                        $file_for_error,
-                                                                                        $line_for_error
-                                                                                );
-                                                                        $feat_to_check = "";
-                                                                        last ABILITY_ENTITY;
-                                                                }
-                                                        }
-
-                                                        add_to_xcheck_tables(
-                                                                $valid_sub_entities{'ABILITY'}{$feat_to_check},
-                                                                $sub_tag_name,
-                                                                $file_for_error,
-                                                                $line_for_error,
-                                                                $entity
-                                                        ) if $feat_to_check && $entity ne 'Ad-Lib';
-                                                }
-                                        }
-
-                                # Put the entry name in place
-                                my $message_name = $tag_name;
-                                $message_name =~ s/@@/$feat/;
-
-                                if ( $feat =~ /^TYPE[=.](.*)/ ) {
-                                        push @{ $referer_types{'ABILITY'}{$1} },
-                                                [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                                elsif ( $feat =~ /^CATEGORY[=.](.*)/ ) {
-                                        push @{ $referer_categories{'ABILITY'}{$1} },
-                                                [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                                else {
-                                        push @{ $referer{'ABILITY'}{$feat} },
-                                                [ $message_name, $file_for_error, $line_for_error ];
-                                }
-                        }
-                }
-                elsif ( $entry_type eq 'KIT STARTPACK' ) {
-                for my $kit (@list) {
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$kit/;
-
-                        push @{ $referer{'KIT STARTPACK'}{$kit} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'LANGUAGE' ) {
-                for my $language (@list) {
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$language/;
-
-                        if ( $language =~ /^TYPE=(.*)/ ) {
-                                push @{ $referer_types{'LANGUAGE'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        else {
-                                push @{ $referer{'LANGUAGE'}{$language} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                }
-                elsif ( $entry_type eq 'MOVE Type' ) {
-                MOVE_TYPE:
-                for my $move (@list) {
-
-                        # The ALL move type is always valid
-                        next MOVE_TYPE if $move eq 'ALL';
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$move/;
-
-                        push @{ $referer{'MOVE Type'}{$move} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'RACE' ) {
-                for my $race (@list) {
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$race/;
-
-                        if ( $race =~ / \A TYPE= (.*) /xms ) {
-                                push @{ $referer_types{'RACE'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        elsif ( $race =~ / \A RACETYPE= (.*) /xms ) {
-                                push @{ $referer{'RACETYPE'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        elsif ( $race =~ / \A RACESUBTYPE= (.*) /xms ) {
-                                push @{ $referer{'RACESUBTYPE'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        else {
-                                push @{ $referer{'RACE'}{$race} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                }
-                elsif ( $entry_type eq 'RACE TYPE' ) {
-                for my $race_type (@list) {
-                        # RACE TYPE is use for TYPE tags in RACE object
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$race_type/;
-
-                        push @{ $referer_types{'RACE'}{$race_type} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'RACESUBTYPE' ) {
-                for my $race_subtype (@list) {
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$race_subtype/;
-
-                        # The RACESUBTYPE can be .REMOVE.<race subtype name>
-                        $race_subtype =~ s{ \A [.] REMOVE [.] }{}xms;
-
-                        push @{ $referer{'RACESUBTYPE'}{$race_subtype} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'RACETYPE' ) {
-                for my $race_type (@list) {
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$race_type/;
-
-                        # The RACETYPE can be .REMOVE.<race type name>
-                        $race_type =~ s{ \A [.] REMOVE [.] }{}xms;
-
-                        push @{ $referer{'RACETYPE'}{$race_type} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'SKILL' ) {
-                SKILL:
-                for my $skill (@list) {
-
-                        # LIST alone is OK, it is a special variable
-                        # used to tie in the CHOOSE result
-                        next SKILL if $skill eq 'LIST';
-
-                        # Remove the =level if there is one
-                        $skill =~ s/(.*)=\d+$/$1/;
-
-                        # If there are (), we must verify if it is
-                        # a compond skill
-                        if ( $skill =~ /(.*?[^ ]) ?\((.*)\)/ ) {
-
-                                # We check to see if the SKILL is a compond tag
-                                if ( $valid_sub_entities{'SKILL'}{$1} ) {
-                                $skill = $1;
-                                my $entity = $2;
-
-                                my $sub_tag_name = $tag_name;
-                                $sub_tag_name =~ s/@@/$skill (@@)/;
-
-                                add_to_xcheck_tables(
-                                        $valid_sub_entities{'SKILL'}{$skill},
-                                        $sub_tag_name,
-                                        $file_for_error,
-                                        $line_for_error,
-                                        $entity
-                                ) if $entity ne 'Ad-Lib';
-                                }
-                        }
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$skill/;
-
-                        if ( $skill =~ / \A TYPE [.=] (.*) /xms ) {
-                                push @{ $referer_types{'SKILL'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        else {
-                                push @{ $referer{'SKILL'}{$skill} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                }
-                elsif ( $entry_type eq 'SPELL' ) {
-                for my $spell (@list) {
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$spell/;
-
-                        if ( $spell =~ /^TYPE=(.*)/ ) {
-                                push @{ $referer_types{'SPELL'}{$1} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                        else {
-                                push @{ $referer{'SPELL'}{$spell} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                        }
-                }
-                }
-                elsif ( $entry_type eq 'TEMPLATE' ) {
-                for my $template (@list) {
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$template/;
-
-                        # We clean up the unwanted stuff
-                        my $template_copy = $template;
-                        $template_copy =~ s/ CHOOSE: //xms;
-                        $message_name =~ s/ CHOOSE: //xms;
-
-                        push @{ $referer{'TEMPLATE'}{$template_copy} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                elsif ( $entry_type eq 'WEAPONPROF' ) {
-#               for my $weaponprof (@list) {
-#
-#                       # Put the entry name in place
-#                       my $message_name = $tag_name;
-#                       $message_name =~ s/@@/$weaponprof/;
-#
-#                       if ( $spell =~ /^TYPE=(.*)/ ) {
-#                               push @{ $referer_types{'WEAPONPROF'}{$1} },
-#                               [ $message_name, $file_for_error, $line_for_error ];
-#                       }
-#                       else {
-#                               push @{ $referer{'WEAPONPROF'}{$weaponprof} },
-#                               [ $message_name, $file_for_error, $line_for_error ];
-#                       }
-#               }
-                }
-                elsif ( $entry_type eq 'SPELL_SCHOOL' || $entry_type eq 'Ad-Lib' ) {
-                # Nothing is done yet.
-                }
-                elsif ( $entry_type =~ /,/ ) {
-
-                # There is a , in the name so it is a special
-                # validation case that is defered until the validation time.
-                # In short, the entry must exists in one of the type list.
-                for my $entry (@list) {
-
-                        # Put the entry name in place
-                        my $message_name = $tag_name;
-                        $message_name =~ s/@@/$entry/;
-
-                        push @{ $referer{$entry_type}{$entry} },
-                                [ $message_name, $file_for_error, $line_for_error ];
-                }
-                }
-                else {
-                $log->error(
-                        "Invalid Entry type for $tag_name (add_to_xcheck_tables): $entry_type",
-                        $file_for_error,
-                        $line_for_error
-                );
-                }
-        }
-
-}       # BEGIN end
-
-###############################################################
-# parse_jep
-# ----------------
-#
-# Extract the variable names from a PCGEN formula
-#
-# Parameter:  $formula          : String containing the formula
-#                       $tag            : Tag containing the formula
-#                       $file_for_error : Filename to use with ewarn
-#                       $line_for_error : Line number to use with ewarn
-
-#open FORMULA, ">formula.txt" or die "Can't open formula: $OS_ERROR";
-
-sub extract_var_name {
-        my ( $formula, $tag, $file_for_error, $line_for_error ) = @_;
-
-        return () unless $formula;
-
-#       my @variables = parse_jep(@_);
-
-        #  print FORMULA "$formula\n" unless $formula =~ /^[0-9]+$/;
-
-        # Will hold the result values
-        my @variable_names = ();
-
-        # We remove the COUNT[xxx] from the formulas
-        while ( $formula =~ s/(COUNT\[[^]]*\])//g ) {
-                push @variable_names, $1;
-        }
-
-        # We have to catch all the VAR=Funky Text before anything else
-        while ( $formula =~ s/([a-z][a-z0-9_]*=[a-z0-9_ =\{\}]*)//i ) {
-                my @values = split '=', $1;
-                if ( @values > 2 ) {
-
-                        # There should only be one = per variable
-                        $log->warning(
-                                qq{Too many = in "$1" found in "$tag"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                # [ 1104117 ] BL is a valid variable, like CL
-                elsif ( $values[0] eq 'BL' || $values[0] eq 'CL' ||
-                                $values[0] eq 'CLASS' || $values[0] eq 'CLASSLEVEL' ) {
-                        # Convert {} to () for proper validation
-                        $values[1] =~ tr/{}/()/;
-                        push @xcheck_to_process,
-                                [
-                                        'CLASS',                qq(@@" in "$tag),
-                                        $file_for_error, $line_for_error,
-                                        $values[1]
-                                ];
-                }
-                elsif ($values[0] eq 'SKILLRANK' || $values[0] eq 'SKILLTOTAL' ) {
-                        # Convert {} to () for proper validation
-                        $values[1] =~ tr/{}/()/;
-                        push @xcheck_to_process,
-                                [
-                                        'SKILL',                qq(@@" in "$tag),
-                                        $file_for_error, $line_for_error,
-                                        $values[1]
-                                ];
-                }
-                else {
-                        $log->notice(
-                                qq{Invalid variable "$values[0]" before the = in "$1" found in "$tag"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-        }
-
-        # Variables begin with a letter or the % and are followed
-        # by letters, numbers, or the _
-        VAR_NAME:
-        for my $var_name ( $formula =~ /([a-z%][a-z0-9_]*)/gi ) {
-                # If it's an operator, we skip it.
-                next VAR_NAME
-                if ( index( $var_name, 'MAX'   ) != -1
-                        || index( $var_name, 'MIN'   ) != -1
-                        || index( $var_name, 'TRUNC' ) != -1
-                );
-
-                push @variable_names, $var_name;
-        }
-
-        return @variable_names;
-}
-
-###############################################################
-###############################################################
-####
-#### Start of parse_jep and related function closure
-####
-
-BEGIN {
-        # List of keywords Jep functions names. The fourth and fifth rows are for
-        # functions defined by the PCGen libraries that do not exists in
-        # the standard Jep library.
-        my %is_jep_function = map { $_ => 1 } qw(
-                sin     cos     tan     asin    acos    atan    atan2   sinh
-                cosh    tanh    asinh   acosh   atanh   ln      log     exp
-                abs     rand    mod     sqrt    sum     if      str
-
-                ceil    cl      classlevel      count   floor   min
-                max     roll    skillinfo       var     mastervar       APPLIEDAS
-        );
-
-        # Definition of a valid Jep identifiers. Note that all functions are
-        # identifiers followed by a parentesis.
-        my $is_ident = qr{ [a-z_][a-z_0-9]* }xmsi;
-
-        # Valid Jep operators
-        my $is_operators_text = join( '|', map { quotemeta } (
-                                '^', '%',  '/',  '*',  '+',  '-', '<=', '>=',
-                                '<', '>', '!=', '==', '&&', '||', '=',  '!', '.',
-                                                        )
-                                        );
-
-        my $is_operator = qr{ $is_operators_text }xms;
-
-        my $is_number = qr{ (?: \d+ (?: [.] \d* )? ) | (?: [.] \d+ ) }xms;
-
-###############################################################
-# parse_jep
-# ---------
-#
-# Parse a Jep formula expression and return a list of variables
-# found.
-#
-# parse_jep is just a stub to call parse_jep_rec the first time
-#
-# Parameter:  $formula          : String containing the formula
-#                       $tag            : Tag containing the formula
-#                       $file_for_error : Filename to use with ewarn
-#                       $line_for_error : Line number to use with ewarn
-#
-# Return a list of variables names found in the formula
-
-        sub parse_jep {
-                # We abosulutely need to be called in array context.
-                croak q{parse_jep must be called in list context}
-                if !wantarray;
-
-                # Sanity check on the number of parameters
-                croak q{Wrong number of parameters for parse_jep} if scalar @_ != 4;
-                # If the -nojep command line option was used, we
-                # call the old parser
-                if ( getOption('nojep') ) {
-                        return extract_var_name(@_);
-                }
-                else {
-                        return parse_jep_rec( @_, NO );
-                }
-        }
-
-###############################################################
-# parse_jep_rec
-# -------------
-#
-# Parse a Jep formula expression and return a list of variables
-# found.
-#
-# Parameter:  $formula          : String containing the formula
-#                       $tag            : Tag containing the formula
-#                       $file_for_error : Filename to use with ewarn
-#                       $line_for_error : Line number to use with ewarn
-#                       $is_param               : Indicate if the Jep expression
-#                                               is a function parameter
-#
-# Return a list of variables names found in the formula
-
-        sub parse_jep_rec {
-                my ($formula, $tag, $file_for_error, $line_for_error, $is_param) = @_;
-
-                return () if !defined $formula;
-
-                my @variables_found = ();       # Will contain the return values
-                my $last_token  = q{};  # Only use for error messages
-                my $last_token_type = q{};
-
-                pos $formula = 0;
-
-                while ( pos $formula < length $formula ) {
-                        # Identifiers are only valid after an operator or a separator
-                        if ( my ($ident) = ( $formula =~ / \G ( $is_ident ) /xmsgc ) ) {
-                                # It's an identifier or a function
-                                if ( $last_token_type && $last_token_type ne 'operator' && $last_token_type ne 'separator' ) {
-                                        # We "eat" the rest of the string and report an error
-                                        my ($bogus_text) = ( $formula =~ / \G (.*) /xmsgc );
-                                        $log->notice(
-                                                qq{Jep syntax error near "$ident$bogus_text" found in "$tag"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                                # Indentificator followed by bracket = function
-                                elsif ( $formula =~ / \G [(] /xmsgc ) {
-                                        # It's a function, is it valid?
-                                        if ( !$is_jep_function{$ident} ) {
-                                                $log->notice(
-                                                        qq{Not a valid Jep function: $ident() found in $tag},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );
-                                        }
-
-                                        # Reset the regex position just before the parantesis
-                                        pos $formula = pos($formula) - 1;
-
-                                        # We extract the function parameters
-                                        my ($extracted_text) = Text::Balanced::extract_bracketed( $formula, '(")' );
-
-                                        carp $formula if !$extracted_text;
-
-                                        $last_token = "$ident$extracted_text";
-                                        $last_token_type = 'function';
-
-                                        # We remove the enclosing brackets
-                                        ($extracted_text) = ( $extracted_text =~ / \A [(] ( .* ) [)] \z /xms );
-
-                                        # For the var() function, we call the old parser
-                                        if ( $ident eq 'var' ) {
-                                                my ($var_text,$reminder) = Text::Balanced::extract_delimited( $extracted_text );
-
-                                                # Verify that the values are between ""
-                                                if ( $var_text ne q{} && $reminder eq q{} ) {
-                                                        # Revove the ""
-                                                        ($var_text) = ( $var_text =~ / \A [\"] ( .* ) [\"] \z /xms );
-
-                                                        push @variables_found,
-                                                                extract_var_name(
-                                                                        $var_text,
-                                                                        $tag,
-                                                                        $file_for_error,
-                                                                        $line_for_error
-                                                                );
-                                                }
-                                                else {
-                                                        $log->notice(
-                                                                qq{Quote missing for the var() parameter in "$tag"},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-
-                                                        # We use the original extracted text with the old var parser
-                                                        push @variables_found,
-                                                                extract_var_name(
-                                                                        $extracted_text,
-                                                                        $tag,
-                                                                        $file_for_error,
-                                                                        $line_for_error
-                                                                );
-                                                }
-                                        }
-                                        else {
-                                                # Otherwise, each of the function parameters should be a valid Jep expression
-                                                push @variables_found,
-                                                parse_jep_rec( $extracted_text, $tag, $file_for_error, $line_for_error, YES );
-                                        }
-                                }
-                                else {
-                                        # It's an identifier
-                                        push @variables_found, $ident;
-                                        $last_token = $ident;
-                                        $last_token_type = 'ident';
-                                }
-                        }
-                        elsif ( my ($operator) = ( $formula =~ / \G ( $is_operator ) /xmsgc ) ) {
-                                # It's an operator
-
-                                if ( $operator eq '=' ) {
-                                        if ( $last_token_type eq 'ident' ) {
-                                                $log->notice(
-                                                        qq{Forgot to use var()? Dubious use of Jep variable assignation near }
-                                                                . qq{"$last_token$operator" in "$tag"},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );
-                                        }
-                                        else {
-                                                $log->notice(
-                                                        qq{Did you want the logical "=="? Dubious use of Jep variable assignation near }
-                                                                . qq{"$last_token$operator" in "$tag"},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );
-                                        }
-                                }
-
-                                $last_token = $operator;
-                                $last_token_type = 'operator';
-                        }
-                        elsif ( $formula =~ / \G [(] /xmsgc ) {
-                                # Reset the regex position just before the bracket
-                                pos $formula = pos($formula) - 1;
-
-                                # Extract what is between the () and call recursivly
-                                my ($extracted_text)
-                                        = Text::Balanced::extract_bracketed( $formula, '(")' );
-
-                                if ($extracted_text) {
-                                        $last_token = $extracted_text;
-                                        $last_token_type = 'expression';
-
-                                        # Remove the outside brackets
-                                        ($extracted_text) = ( $extracted_text =~ / \A [(] ( .* ) [)] \z /xms );
-
-                                        # Recursive call
-                                        push @variables_found,
-                                                parse_jep_rec( $extracted_text, $tag, $file_for_error, $line_for_error, NO );
-                                }
-                                else {
-                                        # We "eat" the rest of the string and report an error
-                                        my ($bogus_text) = ( $formula =~ / \G (.*) /xmsgc );
-                                        $log->notice(
-                                                qq{Unbalance () in "$bogus_text" found in "$tag"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                        }
-                        elsif ( my ($number) = ( $formula =~ / \G ( $is_number ) /xmsgc ) ) {
-                                # It's a number
-                                $last_token = $number;
-                                $last_token_type = 'number';
-                        }
-                        elsif ( $formula =~ / \G [\"'] /xmsgc ) {
-                                # It's a string
-                                # Reset the regex position just before the quote
-                                pos $formula = pos($formula) - 1;
-
-                                # Extract what is between the () and call recursivly
-                                my ($extracted_text)
-                                        = Text::Balanced::extract_delimited( $formula );
-
-                                if ($extracted_text) {
-                                        $last_token = $extracted_text;
-                                        $last_token_type = 'string';
-                                }
-                                else {
-                                        # We "eat" the rest of the string and report an error
-                                        my ($bogus_text) = ( $formula =~ / \G (.*) /xmsgc );
-                                        $log->notice(
-                                                qq{Unbalance quote in "$bogus_text" found in "$tag"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                        }
-                        elsif ( my ($separator) = ( $formula =~ / \G ( [,] ) /xmsgc ) ) {
-                                # It's a comma
-                                if ( $is_param == NO ) {
-                                        # Commas are allowed only as parameter separator
-                                        my ($bogus_text) = ( $formula =~ / \G (.*) /xmsgc );
-                                        $log->notice(
-                                                qq{Jep syntax error found near "$separator$bogus_text" in "$tag"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                                $last_token = $separator;
-                                $last_token_type = 'separator';
-                        }
-                        elsif ( $formula =~ / \G \s+ /xmsgc ) {
-                                # Spaces are allowed in Jep expressions, we simply ignore them
-                        }
-                        else {
-                                if ( $formula =~ /\G\[.+\]/gc ) {
-                                        # Allow COUNT[something]
-                                }
-                                else {
-                                        # If we are here, all is not well
-                                        my ($bogus_text) = ( $formula =~ / \G (.*) /xmsgc );
-                                        $log->notice(
-                                                qq{Jep syntax error found near unknown function "$bogus_text" in "$tag"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                        }
-                }
-
-                return @variables_found;
-        }
-
-}
-
-####
-#### End of parse_jep and related function closure
-####
-###############################################################
-###############################################################
 
 
 ###############################################################
@@ -10235,31 +8452,6 @@ sub find_full_path {
 }
 
 ###############################################################
-# get_header
-# ----------
-#
-# Return the correct header for a particular tag in a
-# particular file type.
-#
-# If no tag is define for the filetype, the default for the
-# tag is used. If not default, the tag name is returned.
-#
-# Parameters: $tag_name, $line_type
-
-sub get_header {
-        my ( $tag_name, $line_type ) = @_;
-        my $header = $tagheader{$line_type}{$tag_name}
-                || $tagheader{default}{$tag_name}
-                || $tag_name;
-
-        if ( getOption('missingheader') && $tag_name eq $header ) {
-                $missing_headers{$line_type}{$header}++;
-        }
-
-        $header;
-}
-
-###############################################################
 # create_dir
 # ----------
 #
@@ -10338,31 +8530,6 @@ sub embedded_coma_split {
 }
 
 
-
-###############################################################
-# warn_deprecate
-# --------------
-#
-# Generate a warning message about a deprecated tag.
-#
-# Parameters: $bad_tag          Tag that has been deprecated
-#                       $files_for_error        File name when the error is found
-#                       $line_for_error Line number where the error is found
-#                       $enclosing_tag  (Optionnal) tag into which the
-#                                       deprecated tag is included
-
-sub warn_deprecate {
-        my ($bad_tag, $file_for_error, $line_for_error, $enclosing_tag) = (@_, "");
-
-        my $message = qq{Deprecated syntax: "$bad_tag"};
-
-        if($enclosing_tag) {
-                $message .= qq{ found in "$enclosing_tag"};
-        }
-
-        $log->info( $message, $file_for_error, $line_for_error );
-
-}
 
 
 
@@ -11239,7 +9406,7 @@ missing/inconsistant values.
 
 =head2 B<-nojep>
 
-Disable the new parse_jep function for the formula. This makes the script use the
+Disable the new LstTidy::Parse::parseJep function for the formula. This makes the script use the
 old style formula parser.
 
 =head2 B<-noxcheck> or B<-nx>
@@ -11313,7 +9480,7 @@ The files generated are:
 
 =head2 B<-missingheader> or B<-mh>
 
-List all the requested headers (with the get_header function) that are not
+List all the requested headers (with the getHeader function) that are not
 defined in the %tagheader hash. When a header is not defined, the tag name
 is used as is in the generated header lines.
 
@@ -12170,7 +10337,7 @@ Code to correct the BONUS:STAT|WIL typo (should be BONUS:STAT|WIS)
 
 New NAMEISPI tag in every files
 
-New get_header function
+New getHeader function
 
 The BONUS:xxx are now considered differents tags (like the ADD:xxx)
 
