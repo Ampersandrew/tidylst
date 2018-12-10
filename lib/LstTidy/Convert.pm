@@ -34,6 +34,42 @@ sub convertEntities {
    return $line;
 };
 
+=head2 convertPreSpellType
+
+   PRESPELLTYPE was previously separated with commas, now uses =
+
+   Takes the value (following the :), the linetype, the file and the line
+   number. It returns the modified value.
+
+=cut
+
+sub convertPreSpellType {
+
+   my ($value, $linetype, $file, $line) = @_;
+
+   if ($value =~ /^([^\d]+),(\d+),(\d+)/) {
+      my ($spelltype, $num_spells, $num_levels) = ($1, $2, $3);
+
+      $value = "$num_spells";
+
+      # Common homebrew mistake is to include Arcade|Divine, since the
+      # 5.8 documentation had an example that showed this. Might
+      # as well handle it while I'm here.
+      my @spelltypes = split(/\|/,$spelltype);
+
+      foreach my $st (@spelltypes) {
+         $value .= ",$st=$num_levels";
+      }
+
+      LstTidy::LogFactory::GetLogger()->notice(
+         qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:${value}" found and converted in $linetype.},
+         $file,
+         $line
+      );
+   }
+
+   return $value;
+}
 
 1;
 

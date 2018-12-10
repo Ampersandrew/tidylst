@@ -844,78 +844,78 @@ my %token_ADD_tag = map { $_ => 1 } (
 );
 
 my %token_BONUS_tag = map { $_ => 1 } (
-        'ABILITYPOOL',
-        'CASTERLEVEL',
-        'CHECKS',               # Deprecated
-        'COMBAT',
-        'CONCENTRATION',
-        'DAMAGE',               # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
-        'DC',
-        'DOMAIN',
-        'DR',
-        'EQM',
-        'EQMARMOR',
-        'EQMWEAPON',
-        'ESIZE',                # Not listed in the Docs
-        'FEAT',         # Deprecated
-        'FOLLOWERS',
-        'HD',
-        'HP',
-        'ITEMCOST',
-        'LANGUAGES',    # Not listed in the Docs
-        'MISC',
-        'MONSKILLPTS',
-        'MOVE',         # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
-        'MOVEADD',
-        'MOVEMULT',
-        'POSTRANGEADD',
-        'POSTMOVEADD',
-        'PCLEVEL',
-        'RANGEADD',
-        'RANGEMULT',
-        'REPUTATION',   # Not listed in the Docs
-        'SIZEMOD',
-        'SAVE',
-        'SKILL',
-        'SITUATION',
-        'SKILLPOINTS',
-        'SKILLPOOL',
-        'SKILLRANK',
-        'SLOTS',
-        'SPELL',
-        'SPECIALTYSPELLKNOWN',
-        'SPELLCAST',
-        'SPELLCASTMULT',
-        'SPELLKNOWN',
-        'VISION',
-        'STAT',
-        'TOHIT',                # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
-        'UDAM',
-        'VAR',
-        'WEAPON',
-        'WEAPONPROF',
-        'WIELDCATEGORY',
+   'ABILITYPOOL',
+   'CASTERLEVEL',
+   'CHECKS',               # Deprecated
+   'COMBAT',
+   'CONCENTRATION',
+   'DAMAGE',               # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
+   'DC',
+   'DOMAIN',
+   'DR',
+   'EQM',
+   'EQMARMOR',
+   'EQMWEAPON',
+   'ESIZE',                # Not listed in the Docs
+   'FEAT',         # Deprecated
+   'FOLLOWERS',
+   'HD',
+   'HP',
+   'ITEMCOST',
+   'LANGUAGES',    # Not listed in the Docs
+   'MISC',
+   'MONSKILLPTS',
+   'MOVE',         # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
+   'MOVEADD',
+   'MOVEMULT',
+   'POSTRANGEADD',
+   'POSTMOVEADD',
+   'PCLEVEL',
+   'RANGEADD',
+   'RANGEMULT',
+   'REPUTATION',   # Not listed in the Docs
+   'SIZEMOD',
+   'SAVE',
+   'SKILL',
+   'SITUATION',
+   'SKILLPOINTS',
+   'SKILLPOOL',
+   'SKILLRANK',
+   'SLOTS',
+   'SPELL',
+   'SPECIALTYSPELLKNOWN',
+   'SPELLCAST',
+   'SPELLCASTMULT',
+   'SPELLKNOWN',
+   'VISION',
+   'STAT',
+   'TOHIT',                # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
+   'UDAM',
+   'VAR',
+   'WEAPON',
+   'WEAPONPROF',
+   'WIELDCATEGORY',
 );
 
 my %token_PROFICIENCY_tag = map { $_ => 1 } (
-        'WEAPON',
-        'ARMOR',
-        'SHIELD',
+   'WEAPON',
+   'ARMOR',
+   'SHIELD',
 );
 
 my %token_QUALIFY_tag = map { $_ => 1 } (
-        'ABILITY',
-        'CLASS',
-        'DEITY',
-        'DOMAIN',
-        'EQUIPMENT',
-        'EQMOD',
-        'FEAT',         # Deprecated
-        'RACE',
-        'SPELL',
-        'SKILL',
-        'TEMPLATE',
-        'WEAPONPROF',
+   'ABILITY',
+   'CLASS',
+   'DEITY',
+   'DOMAIN',
+   'EQUIPMENT',
+   'EQMOD',
+   'FEAT',         # Deprecated
+   'RACE',
+   'SPELL',
+   'SKILL',
+   'TEMPLATE',
+   'WEAPONPROF',
 );
 
 my %token_BONUS_MONSKILLPTS_types = map { $_ => 1 } (
@@ -954,12 +954,12 @@ my %token_BONUS_SLOTS_types = map { $_ => 1 } (
 
 # [ 832171 ] AUTO:* needs to be separate tags
 my @token_AUTO_tag = (
-        'ARMORPROF',
-        'EQUIP',
-        'FEAT',         # Deprecated
-        'LANG',
-        'SHIELDPROF',
-        'WEAPONPROF',
+   'ARMORPROF',
+   'EQUIP',
+   'FEAT',         # Deprecated
+   'LANG',
+   'SHIELDPROF',
+   'WEAPONPROF',
 );
 
 # Add the CHOOSE type.
@@ -3358,14 +3358,16 @@ sub parse_tag {
 
         ############################################################
         # We call the validating function if needed
-        validate_tag( $real_tag, $value, $linetype, $file_for_error, $line_for_error )
-                if getOption('xcheck');
+        if getOption('xcheck') {
+           validate_tag($real_tag, $value, $linetype, $file_for_error, $line_for_error);
+        }
 
         # If there is already a :  in the tag name, no need to add one more
         my $need_sep = index( $real_tag, ':' ) == -1 ? q{:} : q{};
 
-        $log->debug( qq{parse_tag: $tag_text}, $file_for_error, $line_for_error )
-                if $value eq q{};
+        if $value eq q{} {
+           $log->debug(qq{parse_tag: $tag_text}, $file_for_error, $line_for_error);
+        }
 
         # We change the tag_text value from the caller
         # This is very ugly but it gets th job done
@@ -3379,58 +3381,58 @@ sub parse_tag {
 
 BEGIN {
 
-        # EQUIPMENT types that are valid in NATURALATTACKS tags
-        my %valid_NATURALATTACKS_type = (
+   # EQUIPMENT types that are valid in NATURALATTACKS tags
+   my %valid_NATURALATTACKS_type = map { $_ => 1 } (
 
-                # WEAPONTYPE defined in miscinfo.lst
-                Bludgeoning => 1,
-                Piercing        => 1,
-                Slashing        => 1,
-                Fire            => 1,
-                Acid            => 1,
-                Electricity => 1,
-                Cold            => 1,
-                Poison  => 1,
-                Sonic           => 1,
+      # WEAPONTYPE defined in miscinfo.lst
+      'Bludgeoning',
+      'Piercing',
+      'Slashing',
+      'Fire',
+      'Acid',
+      'Electricity',
+      'Cold',
+      'Poison',
+      'Sonic',
 
-                # WEAPONCATEGORY defined in miscinfo.lst 3e and 35e
-                Simple  => 1,
-                Martial => 1,
-                Exotic  => 1,
-                Natural => 1,
+      # WEAPONCATEGORY defined in miscinfo.lst 3e and 35e
+      'Simple',
+      'Martial',
+      'Exotic',
+      'Natural',
 
-                # Additional WEAPONCATEGORY defined in miscinfo.lst Modern and Sidewinder
-                HMG                     => 1,
-                RocketLauncher  => 1,
-                GrenadeLauncher => 1,
+      # Additional WEAPONCATEGORY defined in miscinfo.lst Modern and Sidewinder
+      'HMG',
+      'RocketLauncher',
+      'GrenadeLauncher',
 
-                # Additional WEAPONCATEGORY defined in miscinfo.lst Spycraft
-                Hurled   => 1,
-                Melee   => 1,
-                Handgun  => 1,
-                Rifle   => 1,
-                Tactical => 1,
+      # Additional WEAPONCATEGORY defined in miscinfo.lst Spycraft
+      'Hurled',
+      'Melee',
+      'Handgun',
+      'Rifle',
+      'Tactical',
 
-                # Additional WEAPONCATEGORY defined in miscinfo.lst Xcrawl
-                HighTechMartial => 1,
-                HighTechSimple  => 1,
-                ShipWeapon      => 1,
-        );
+      # Additional WEAPONCATEGORY defined in miscinfo.lst Xcrawl
+      'HighTechMartial',
+      'HighTechSimple',
+      'ShipWeapon',
+   );
 
-        my %valid_WIELDCATEGORY = map { $_ => 1 } (
+   my %valid_WIELDCATEGORY = map { $_ => 1 } (
 
-                # From miscinfo.lst 35e
-                'Light',
-                'OneHanded',
-                'TwoHanded',
-                'ToSmall',
-                'ToLarge',
-                'Unusable',
-                'None',
+      # From miscinfo.lst 35e
+      'Light',
+      'OneHanded',
+      'TwoHanded',
+      'ToSmall',
+      'ToLarge',
+      'Unusable',
+      'None',
 
-                # Hardcoded
-                'ALL',
-        );
+      # Hardcoded
+      'ALL',
+   );
 
 ###############################################################
 # validate_tag
@@ -3444,51 +3446,50 @@ BEGIN {
 # $referer{$lintype}{$name} = [ $err_desc, $file_for_error, $line_for_error ]
 #
 # Paramter: $tag_name           Name of the tag (before the :)
-#               $tag_value              Value of the tag (after the :)
-#               $linetype               Type for the current file
-#               $file_for_error   Name of the current file
-#               $line_for_error   Number of the current line
+#           $tag_value              Value of the tag (after the :)
+#           $linetype               Type for the current file
+#           $file_for_error   Name of the current file
+#           $line_for_error   Number of the current line
 
-        sub validate_tag {
-                my ( $tag_name, $tag_value, $linetype, $file_for_error, $line_for_error ) = @_;
-        study $tag_value;
+   sub validate_tag {
+      my ( $tag_name, $tag_value, $linetype, $file_for_error, $line_for_error ) = @_;
+      study $tag_value;
 
-                if ($tag_name eq 'STARTPACK')
-                {
-                   LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$tag_value");
-                   LstTidy::Validate::setEntityValid('KIT', "KIT:$tag_value"          );
-                }
+      if ($tag_name eq 'STARTPACK')
+      {
+         LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$tag_value");
+         LstTidy::Validate::setEntityValid('KIT', "KIT:$tag_value"          );
 
-                elsif ( $tag_name =~ /^\!?PRE/ ) {
+      } elsif ( $tag_name =~ /^\!?PRE/ ) {
 
-                        # It's a PRExxx tag, we delegate
-                        return LstTidy::Validate::validatePreTag( $tag_name,
-                                $tag_value,
-                                "",
-                                $linetype,
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                elsif (index( $tag_name, 'PROFICIENCY' ) == 0 ) {
+         # It's a PRExxx tag, we delegate
+         return LstTidy::Validate::validatePreTag( $tag_name,
+            $tag_value,
+            "",
+            $linetype,
+            $file_for_error,
+            $line_for_error
+         );
 
-                }
-                elsif ( index( $tag_name, 'BONUS' ) == 0 ) {
+      } elsif (index( $tag_name, 'PROFICIENCY' ) == 0 ) {
 
-                # Are there any PRE tags in the BONUS tag.
-                if ( $tag_value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
+      } elsif ( index( $tag_name, 'BONUS' ) == 0 ) {
 
-                        # A PRExxx tag is present
-                        LstTidy::Validate::validatePreTag($1,
-                                                $2,
-                                                "$tag_name$tag_value",
-                                                $linetype,
-                                                $file_for_error,
-                                                $line_for_error
-                        );
-                }
+         # Are there any PRE tags in the BONUS tag.
+         if ( $tag_value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
 
-                if ( $tag_name eq 'BONUS:CHECKS' ) {
+            # A PRExxx tag is present
+            LstTidy::Validate::validatePreTag(
+               $1,
+               $2,
+               "$tag_name$tag_value",
+               $linetype,
+               $file_for_error,
+               $line_for_error
+            );
+         }
+
+         if ( $tag_name eq 'BONUS:CHECKS' ) {
                         # BONUS:CHECKS|<check list>|<jep> {|TYPE=<bonus type>} {|<pre tags>}
                         # BONUS:CHECKS|ALL|<jep>                {|TYPE=<bonus type>} {|<pre tags>}
                         # <check list> :=   ( <check name 1> { | <check name 2> } { | <check name 3>} )
