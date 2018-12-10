@@ -2141,7 +2141,7 @@ sub addTagsForConversions {
       push @{ $masterOrder{'PCC'} },            'GAME';
    }
 
-   if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') ) {
+   if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE conversion') ) {
       push @{ $masterOrder{'CLASS'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'CLASS Level'} },    'BONUS:MOVE:*';
       push @{ $masterOrder{'COMPANIONMOD'} },   'BONUS:MOVE:*';

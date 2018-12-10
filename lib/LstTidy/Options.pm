@@ -73,7 +73,7 @@ our $error;
    'EQUIP:no more MOVE'                 => 0,    # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
    'ALL:EQMOD has new keys'             => 0,    # [ 892746 ] KEYS entries were changed in the main files
    'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
-   'ALL:MOVE:nn to MOVE:Walk,nn'        => 0,    # [ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+   'ALL:MOVE:nn to MOVE:Walk,nn'        => 0,    # [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
    'ALL:Convert SPELL to SPELLS'        => 0,    # [ 1070084 ] Convert SPELL to SPELLS
    'TEMPLATE:HITDICESIZE to HITDIE'     => 0,    # [ 1070344 ] HITDICESIZE to HITDIE in templates.lst
    'ALL:PREALIGN conversion'            => 0,    # [ 1173567 ] Convert old style PREALIGN to new style

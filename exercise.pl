@@ -353,7 +353,7 @@ Add BONUS:CASTERLEVEL tags to casting classes that do not already have it.
 
 <L<http://sourceforge.net/tracker/index.php?func=detail&aid=876536&group_id=36698&atid=417816>>
 
-=item * [ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+=item * [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
 
 The old MOVE tags are changed to the proper syntax i.e. the syntax that
 identify the type of move. In this case, we assume that if no move
@@ -1224,7 +1224,7 @@ Major code reengeering to allow a better PRExxx tag validation
 
 [ 1005658 ] BONUS:MOVEMULT
 
-[ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+[ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
 
 [ 1005661 ] ADD:SPELLCASTER in feat .lst
 
@@ -1535,7 +1535,7 @@ block formatting (FILETYPE_parse only)
 
 Added the KIT filetype
 
-Convertion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
+Conversion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
 
 =head2 v1.18 -- 2002.08.31
 

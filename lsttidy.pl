@@ -232,9 +232,9 @@ if ( getOption('htmlhelp') ) {
 my %source_tags        = ()  if LstTidy::Options::isConversionActive('SOURCE line replacement');
 my $source_curent_file = q{} if LstTidy::Options::isConversionActive('SOURCE line replacement');
 
-my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS');
+my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS');
 
-my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL');
+my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL');
 
 my %class_files        = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
 my %class_spelltypes   = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
@@ -472,7 +472,7 @@ if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
    }
 }
 
-my %srd_weapon_name_convertion_433 = (
+my %srd_weapon_name_conversion_433 = (
    q{Sword (Great)}                => q{Greatsword},
    q{Sword (Long)}                 => q{Longsword},
    q{Dagger (Venom)}               => q{Venom Dagger},
@@ -1192,8 +1192,8 @@ if (getOption('inputpath')) {
 
         ##########################################################
         # Cross-checking must be activated for the CLASSSPELL
-        # convertion to work
-        if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
+        # conversion to work
+        if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
            setOption('xcheck', 1);
         }
 
@@ -1339,11 +1339,11 @@ if (getOption('inputpath')) {
 
                                         $Spell_Files{$lstfile} = 1;
                                 }
-                                elsif ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL')
+                                elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
                                 && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) )
                                 {
 
-                                        # CLASSSPELL convertion
+                                        # CLASSSPELL conversion
                                         # We keep the list of CLASSSPELL, CLASS and DOMAIN
                                         # since they must be parse before all the orthers.
                                         $classspell_files{$tag}{$lstfile} = 1;
@@ -1360,11 +1360,11 @@ if (getOption('inputpath')) {
                                                 );
                                         }
                                 }
-                                elsif (LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS')
+                                elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
                                 && $tag eq 'CLASSSKILL' )
                                 {
 
-                                        # CLASSSKILL convertion
+                                        # CLASSSKILL conversion
                                         # We keep the list of CLASSSKILL files
                                         $classskill_files{$lstfile} = 1;
 
@@ -1488,7 +1488,7 @@ if (getOption('inputpath')) {
 
                 close $pcc_fh;
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL')
+                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
                         && $found_filetype{'CLASSSPELL'}
                         && !$found_filetype{'SPELL'} )
                 {
@@ -1498,7 +1498,7 @@ if (getOption('inputpath')) {
                         );
                 }
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS')
+                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
                         && $found_filetype{'CLASSSKILL'}
                         && !$found_filetype{'CLASS'} )
                 {
@@ -1607,7 +1607,7 @@ if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
+if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
 
         # The CLASS and DOMAIN files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1627,7 +1627,7 @@ if ( keys %Spell_Files ) {
 
         # The SPELL file must be loaded before the EQUIPMENT
         # in order to properly generate the EQMOD tags or do
-        # the Spell.MOD convertion to SPELLLEVEL.
+        # the Spell.MOD conversion to SPELLLEVEL.
 
         for my $file_name ( sort keys %Spell_Files ) {
                 push @files_to_parse_sorted, $file_name;
@@ -1635,7 +1635,7 @@ if ( keys %Spell_Files ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS') ) {
+if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
 
         # The CLASSSKILL files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1878,7 +1878,7 @@ if (getOption('xcheck')) {
 
 #########################################
 # Close the files that were opened for
-# special convertion
+# special conversion
 
 if ( LstTidy::Options::isConversionActive('Export lists') ) {
         # Close all the files in reverse order that they were opened
@@ -5172,7 +5172,7 @@ BEGIN {
 # This function does additional parsing on each line once
 # they have been seperated in tags.
 #
-# Most commun use is for addition, convertion or removal of tags.
+# Most commun use is for addition, conversion or removal of tags.
 #
 # Paramter: $tag_name           Name of the tag (before the :)
 #               $tag_value              Value of the tag (after the :)
@@ -5426,7 +5426,7 @@ sub additionnal_tag_parsing {
         }
 
         ##################################################################
-        # [ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+        # [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
         #
         # All the MOVE:<number> tags must be converted to
         # MOVE:Walk,<number>
@@ -5714,7 +5714,7 @@ sub additionnal_tag_parsing {
         # except EQUIPMENT and EQUIPMOD where it most be replaced by
         # BONUS:POSTMOVEADD
 
-        if (   LstTidy::Options::isConversionActive('ALL:BONUS:MOVE convertion') && $tag_name eq 'BONUS:MOVE' ){
+        if (   LstTidy::Options::isConversionActive('ALL:BONUS:MOVE conversion') && $tag_name eq 'BONUS:MOVE' ){
                 if ( $linetype eq "EQUIPMENT" || $linetype eq "EQUIPMOD" ) {
                         $_[0] = "BONUS:POSTMOVEADD";
                 }
@@ -5735,7 +5735,7 @@ sub additionnal_tag_parsing {
         # VISION:.ADD (these will be converted later to BONUS:VISION)
         #
         # [ 728038 ] BONUS:VISION must replace VISION:.ADD
-        # Now doing the VISION:.ADD convertion
+        # Now doing the VISION:.ADD conversion
 
         if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION') && $tag_name eq 'VISION' ) {
                 unless ( $tag_value =~ /(\.ADD,|1,)/i ) {
@@ -5796,8 +5796,8 @@ sub additionnal_tag_parsing {
                 || $tag_name eq 'DEITYWEAP'
                 || $tag_name eq 'MFEAT' )
         ) {
-                for ( keys %srd_weapon_name_convertion_433 ) {
-                        if ( $_[1] =~ s/\Q$_\E/$srd_weapon_name_convertion_433{$_}/ig ) {
+                for ( keys %srd_weapon_name_conversion_433 ) {
+                        if ( $_[1] =~ s/\Q$_\E/$srd_weapon_name_conversion_433{$_}/ig ) {
                                 $log->warning(
                                         qq{Replacing "$tag_name:$tag_value" with "$_[0]:$_[1]"},
                                         $file_for_error,
@@ -6238,13 +6238,13 @@ sub validate_line {
 # This function does additional parsing on each line once
 # they have been seperated in tags.
 #
-# Most commun use is for addition, convertion or removal of tags.
+# Most commun use is for addition, conversion or removal of tags.
 #
-# Paramter: $line_ref           Ref to a hash containing the tags of the line
-#               $filetype               Type for the current file
-#               $file_for_error   Name of the current file
-#               $line_for_error   Number of the current line
-#               $line_info              (Optional) structure generated by FILETYPE_parse
+# Paramter: $line_ref         Ref to a hash containing the tags of the line
+#           $filetype         Type for the current file
+#           $file_for_error   Name of the current file
+#           $line_for_error   Number of the current line
+#           $line_info        (Optional) structure generated by FILETYPE_parse
 #
 
 BEGIN {
@@ -7470,7 +7470,7 @@ BEGIN {
 # This function does additional parsing on each file once
 # they have been seperated in lines of tags.
 #
-# Most commun use is for addition, convertion or removal of tags.
+# Most commun use is for addition, conversion or removal of tags.
 #
 # Paramter: $lines_ref  Ref to an array containing lines of tags
 #               $filetype   Type for the current file
@@ -7693,7 +7693,7 @@ BEGIN {
                 #   '000ClassSpellLevel',
                 #   '001ClassSpells'
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL convertion to SPELL') ) {
+                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
                 if ( $filetype eq 'CLASSSPELL' ) {
 
                         # Here we will put aside all the CLASSSPELL that
@@ -8176,7 +8176,7 @@ BEGIN {
                 # directory, entries with class name.MOD must be generated
                 # at the end of the first CLASS file in the same directory.
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL convertion to CLASS') ) {
+                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
                 if ( $filetype eq 'CLASSSKILL' ) {
 
                         # Here we will put aside all the CLASSSKILL that
@@ -9013,7 +9013,7 @@ work.
   perl prettylst.pl -nx -wl=notice -i=<PATH> -e=<ERROR_FILE>
 
   # parse all the files in PATH and created new ones in NEWPATH
-  # by applaying the convertion pcgen5713. The output is redirected
+  # by applaying the conversion pcgen5713. The output is redirected
   # to ERROR_FILE
   perl prettylst.pl -inputpath=<PATH> -outputpath=<NEWPATH> \
                                 -outputerror=<ERROR_FILE> -convert=pcgen5713
@@ -9077,13 +9077,13 @@ e.g. -gamemode=35e
 
 =head2 B<-convert> or B<-c>
 
-Activate some convertions on the files. The converted files are written in the directory specified
-by B<-outputpath>. If no B<-outputpath> is provided, the convertions messages are displayed but
-no actual convertions are done.
+Activate some conversions on the files. The converted files are written in the directory specified
+by B<-outputpath>. If no B<-outputpath> is provided, the conversions messages are displayed but
+no actual conversions are done.
 
-Only one convertion may be activate at a time.
+Only one conversion may be activate at a time.
 
-Here are the list of the valid convertions so far:
+Here are the list of the valid conversions so far:
 
 =over 12
 
@@ -9152,7 +9152,7 @@ Use to change the TYPE entry in race.lst to RACETYPE if no RACETYPE is present.
 
 =item B<pcgen5713>
 
-Use to apply the convertions that bring the .lst files from v5.7.4 of PCGEN
+Use to apply the conversions that bring the .lst files from v5.7.4 of PCGEN
 to vertion 5.7.13.
 
 =over 16
@@ -9187,7 +9187,7 @@ a lot of old PRECLASS formats have reaappeared in the data sets resently.
 =item B<pcgen574>
 
 
-Use to apply the convertions that bring the .lst files from v5.6.x or v5.7.x of PCGEN
+Use to apply the conversions that bring the .lst files from v5.6.x or v5.7.x of PCGEN
 to vertion 5.7.4.
 
 =over 16
@@ -9198,7 +9198,7 @@ Add BONUS:CASTERLEVEL tags to casting classes that do not already have it.
 
 <L<http://sourceforge.net/tracker/index.php?func=detail&aid=876536&group_id=36698&atid=417816>>
 
-=item * [ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+=item * [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
 
 The old MOVE tags are changed to the proper syntax i.e. the syntax that
 identify the type of move. In this case, we assume that if no move
@@ -9210,7 +9210,7 @@ type was given, the move type is Walk.
 
 =item B<pcgen56>
 
-Use to apply the convertions that bring the .lst files from v5.4.x of PCGEN
+Use to apply the conversions that bring the .lst files from v5.4.x of PCGEN
 to vertion 5.6.
 
 =over 16
@@ -9226,7 +9226,7 @@ main xSRD files. Not all the changes were covered though.
 
 =item B<pcgen555>
 
-Use to apply the convertions that bring the .lst files from v5.4.x of PCGEN
+Use to apply the conversions that bring the .lst files from v5.4.x of PCGEN
 to vertion 5.5.5.
 
 =over 16
@@ -9241,7 +9241,7 @@ The MOVE tags are removed from the equipments files since they are now useless t
 
 =item B<pcgen541>
 
-Use to apply the convertions that bring the .lst files from v5.4 of PCGEN
+Use to apply the conversions that bring the .lst files from v5.4 of PCGEN
 to vertion 5.4.1.
 
 =over 16
@@ -9264,7 +9264,7 @@ B<WARNING>: Do B<not> use this switch with B<CMP> files! You will break them.
 
 =item * [ 707325 ] PCC: GAME is now GAMEMODE
 
-Straight change from one tag to the other. Why? Beats me but it sure helps the convertion script
+Straight change from one tag to the other. Why? Beats me but it sure helps the conversion script
 buisiness to prosper :-).
 
 <L<http://sourceforge.net/tracker/?func=detail&atid=450221&aid=707325&group_id=36698>>
@@ -9286,7 +9286,7 @@ as a game mode. As of PCGEN 5.4, the change to the system files were done and al
 
 <L<http://sourceforge.net/tracker/?func=detail&atid=578825&aid=825005&group_id=36698>>
 
-B<WARNING>: Do B<not> use this convertion with B<CMP> files! You will break them.
+B<WARNING>: Do B<not> use this conversion with B<CMP> files! You will break them.
 
 =item * [ 831569 ] RACE:CSKILL to MONCSKILL
 
@@ -9299,8 +9299,8 @@ opotion is enabled in the PCGEN pref. Otherwise, the FEAT and CSKILL tags are us
 
 =item B<pcgen534>
 
-The following convertions were done on the .lst files between version 5.1.1 and 5.3.4 of PCGEN. See
-the links for more information about the convertions in question.
+The following conversions were done on the .lst files between version 5.1.1 and 5.3.4 of PCGEN. See
+the links for more information about the conversions in question.
 
 =over 16
 
@@ -9313,7 +9313,7 @@ All the B<GAME> tags in the B<.PCC> files are converted to B<GAMEMODE> tags.
 =item * [ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
 
 All the B<BONUS:COMBAT|BAB> related to classes now have a B<TYPE=Base.REPLACE> added to them. This is
-an important convertion if you want to mix files with the files included with PCGEN. If this is not done,
+an important conversion if you want to mix files with the files included with PCGEN. If this is not done,
 the BAB calculation will be all out of wack and you won't really know why.
 
 <L<https://sourceforge.net/tracker/?func=detail&atid=450221&aid=784363&group_id=36698>>
@@ -9322,8 +9322,8 @@ the BAB calculation will be all out of wack and you won't really know why.
 
 =item B<pcgen511>
 
-The following convertions were done on the .lst files between version 4.3.4 and 5.1.1 of PCGEN. See
-the links for more information about the convertions in question.
+The following conversions were done on the .lst files between version 4.3.4 and 5.1.1 of PCGEN. See
+the links for more information about the conversions in question.
 
 =over 16
 
@@ -9332,7 +9332,7 @@ the links for more information about the convertions in question.
 =item * [ 728038 ] BONUS:VISION must replace VISION:.ADD
 
 The B<VISION> tag used to allow the B<,> as a separator. This is no longer the case. Only the B<|>
-can now be used as a separator. This convertion will replace all the B<,> by B<|> in the B<VISION>
+can now be used as a separator. This conversion will replace all the B<,> by B<|> in the B<VISION>
 tags except for those using the B<VISION:.ADD> syntax. The B<VISION:.ADD> tags are replaced by
 B<BONUS:VISION> tags.
 
@@ -9350,8 +9350,8 @@ syntax -- B<PRECLASS:E<lt>number of classesE<gt>,E<lt>list of classesE<gt>=E<lt>
 
 =item B<pcgen438>
 
-The following convertions were done on the .lst files between version 4.3.3 and 4.3.4 of PCGEN. See
-the links for more information about the convertions in question.
+The following conversions were done on the .lst files between version 4.3.3 and 4.3.4 of PCGEN. See
+the links for more information about the conversions in question.
 
 =over 16
 
@@ -9364,7 +9364,7 @@ The B<ATTACKS> tags in the EQUIPMENT line types are replaced by B<BONUS:COMBAT|A
 =item * [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
 
 The equipment of type Glove, Bracer and Boot needs a B<SLOTS:2> tag if the pair must
-be equiped to give the bonus. The convertion looks at the equipement name and adds
+be equiped to give the bonus. The conversion looks at the equipement name and adds
 the B<SLOTS:2> tag if the item is in the plural form. If the equipment name is in the
 singular, a message is printed to show that fact but the SLOTS:2 tag is not added.
 
@@ -10069,7 +10069,7 @@ Major code reengeering to allow a better PRExxx tag validation
 
 [ 1005658 ] BONUS:MOVEMULT
 
-[ 1006285 ] Convertion MOVE:<number> to MOVE:Walk,<Number>
+[ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
 
 [ 1005661 ] ADD:SPELLCASTER in feat .lst
 
@@ -10120,7 +10120,7 @@ Track the variable names with the -x flag (phase 1)
 
 Put BONUS:CASTERLEVEL on the spell CLASS line
 
-Removed a bunch of old convertion code that is no longer used
+Removed a bunch of old conversion code that is no longer used
 
 [ 971746 ] "PREVARGTEQ" can be used more than once in feats.lst
 
@@ -10201,7 +10201,7 @@ The script now detect the tags that have no values (with the -x option).
 
 PRECLASS:Spellcaster, Spellcaster.Arcane and Spellcaster.Devine are now understood.
 
-Removed the 4.3.3 dir restructure convertion code.
+Removed the 4.3.3 dir restructure conversion code.
 
 I've activated the KIT files reformating.
 
@@ -10254,13 +10254,13 @@ Removed the invalid PREBAB tag
 
 Change the order for the FEAT line type
 
-Dir path convertion for the new SRD files
+Dir path conversion for the new SRD files
 
 Upgraded to ActivePerl 635
 
 New EQUIPMENT tag order
 
-Weapon name convertion for PCGEN 4.3.3 for SRD compliance
+Weapon name conversion for PCGEN 4.3.3 for SRD compliance
 
 New B<-convert> parameter
 
@@ -10272,7 +10272,7 @@ Fixed the CLASSSPELL conversion that was not working with the new parser
 
 Fixed a problem with the Export Lists function (for DOMAIN)
 
-Change the BIOSET convertion code so that the new bioset files are
+Change the BIOSET conversion code so that the new bioset files are
 generated in the output directory
 
 New SKILL line tags order
@@ -10380,7 +10380,7 @@ block formatting (FILETYPE_parse only)
 
 Added the KIT filetype
 
-Convertion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
+Conversion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
 
 =head2 v1.18 -- 2002.08.31
 
@@ -10408,7 +10408,7 @@ New file type COMPANIONMOD
 
 New tag INFOTEXT
 
-Added convertion code for the STATADJx tags
+Added conversion code for the STATADJx tags
 
 Add a few of the missing GLOBAL tags
 
@@ -10422,21 +10422,21 @@ must be put before the existing SA tags.
 
 =head2 v1.16 -- 2002.06.28
 
-Add code to correct the convertion mistake and also corrected the convertion matrice
+Add code to correct the conversion mistake and also corrected the conversion matrice
 for the new SKILL tags.
 
 First phase of cross-check validation.
 
 Corrected a bug with the line number.
 
-Add convertion for PRETYPE:Magic to PRETYPE:EQMODTYPE=MagicalEnhancement in the
+Add conversion for PRETYPE:Magic to PRETYPE:EQMODTYPE=MagicalEnhancement in the
 EQUIPMOD files.
 
 Add -x option to do x-check validation.
 
 Add validation for the .MOD entries.
 
-Add convertion for SR to SPELLRES in SPELL files.
+Add conversion for SR to SPELLRES in SPELL files.
 
 =head2 v1.15 -- 2002.06.20
 
@@ -10544,7 +10544,7 @@ Add support for the new SOURCEPAGE, SOURCEWEB, SOURCELONG and SOURCESHORT tags.
 
 Add conversion code that replace the SOURCE:p. tags by SOURCEPAGE:p. tags.
 
-Add convertion code that remove the ROOT tags in the SKILL files and add the
+Add conversion code that remove the ROOT tags in the SKILL files and add the
 new format of the TYPE tag.
 
 Remove the ROOT tag from the SKILL filetype. This tag is now deprecate.
