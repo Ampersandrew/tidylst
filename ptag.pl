@@ -11,6 +11,7 @@ use lib dirname(abs_path $0) . '/lib';
 use LstTidy::Log;
 use LstTidy::LogFactory;
 use LstTidy::LogHeader;
+use LstTidy::Tag;
 
 use LstTidy::Options qw(getOption);
 
@@ -195,15 +196,19 @@ sub parse_tag {
    $tag_text =~ s/^\s+//;
    $tag_text =~ s/\s+$//;
 
-   # Separate the tag name from its value
-   my ( $tag, $value ) = split ':', $tag_text, 2;
+   my $tag =  LstTidy::Tag->new(
+      tagValue => $tag_text,
+      linetype => $linetype,
+      file     => $file,
+      line     => $line,
+   );
 
    # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
    # have two colons). Anything without a tag value is an anomaly. The only
    # exception to this rule is LICENSE that can be used without a value to
    # display an empty line.
 
-   if ( (!defined $value || $value eq q{}) && $tag_text ne 'LICENSE:') {
+   if ( (!defined $tag->value() || $tag->value() eq q{}) && $tag_text ne 'LICENSE:') {
       $logger->warning(
          qq(The tag "$tag_text" is missing a value (or you forgot a : somewhere)),
          $file,
@@ -211,7 +216,7 @@ sub parse_tag {
       );
 
       # We set the value to prevent further errors
-      $value = q{};
+      $tag->value(q{});
    }
 
    # If there is a ! in front of a PRExxx tag, we remove it
