@@ -10,16 +10,24 @@ use lib dirname(dirname abs_path $0);
 # predeclare this so we can call it without & or trailing () like a builtin
 sub report_tag_sort;
 
-# Will hold the information for the entries that must be added in %referer or
-# %referer_types. The array is needed because all the files must have been
+# Will hold the information for the entries that must be added in %referrer or
+# %referrer_types. The array is needed because all the files must have been
 # parsed before processing the information to be added.  The function
 # add_to_xcheck_tables will be called with each line of the array.
 our @xcheck_to_process;  
 
+# Will hold the tags that refer to other entries
+# Format: push @{$referrer{$EntityType}{$entryname}}, [ $tags{$column}, $file_for_error, $line_for_error ]
+my %referrer;
 
-my %referer;
-my %referer_categories;
-my %referer_types;
+# Will hold the categories used by abilities to allow validation;
+# [ 1671407 ] xcheck PREABILITY tag
+my %referrer_categories;
+
+# Will hold the type used by some of the tags to allow validation.
+# Format: push @{$referrer_types{$EntityType}{$typename}}, [ $tags{$column}, $file_for_error, $line_for_error ]
+my %referrer_types;
+
 my %valid_sub_entities;
 
 # Will hold the number of each tag found (by linetype)
@@ -206,6 +214,18 @@ sub registerXCheck {
 }
 
 
+=head2 registerReferrer
+
+   Register this data for later cross checking
+
+=cut
+
+sub registerReferrer {
+   my ($linetype, $entity_name, $token, $file, $line) = @_;
+
+   push @{ $referrer{$linetype}{$entity_name} }, [ $token, $file, $line ]
+}
+
 
 =head2 add_to_xcheck_tables
    
@@ -257,7 +277,7 @@ sub add_to_xcheck_tables {
          $message_name =~ s/@@/$class/;
 
          # Spellcaster is a special PCGEN keyword, not a real class
-         push @{ $referer{'CLASS'}{$class} }, [ $message_name, $file, $line ]
+         push @{ $referrer{'CLASS'}{$class} }, [ $message_name, $file, $line ]
          if ( uc($class) ne "SPELLCASTER"
             && uc($class) ne "SPELLCASTER.ARCANE"
             && uc($class) ne "SPELLCASTER.DIVINE"
@@ -276,7 +296,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$var/;
 
-         push @{ $referer{'DEFINE Variable'}{$var} }, [ $message_name, $file, $line ] unless $Hardcoded_Variables{$var};
+         push @{ $referrer{'DEFINE Variable'}{$var} }, [ $message_name, $file, $line ] unless $Hardcoded_Variables{$var};
       }
 
    } elsif ( $entityType eq 'DEITY' ) {
@@ -286,7 +306,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$deity/;
 
-         push @{ $referer{'DEITY'}{$deity} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'DEITY'}{$deity} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'DOMAIN' ) {
@@ -297,7 +317,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$domain/;
 
-         push @{ $referer{'DOMAIN'}{$domain} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'DOMAIN'}{$domain} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'EQUIPMENT' ) {
@@ -310,11 +330,11 @@ sub add_to_xcheck_tables {
 
          if ( $equipment =~ /^TYPE=(.*)/ ) {
 
-            push @{ $referer_types{'EQUIPMENT'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'EQUIPMENT'}{$1} }, [ $message_name, $file, $line ];
 
          } else {
          
-            push @{ $referer{'EQUIPMENT'}{$equipment} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'EQUIPMENT'}{$equipment} }, [ $message_name, $file, $line ];
         
          }
       }
@@ -327,7 +347,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$type/;
 
-         push @{ $referer_types{'EQUIPMENT'}{$type} }, [ $message_name, $file, $line ]; }
+         push @{ $referrer_types{'EQUIPMENT'}{$type} }, [ $message_name, $file, $line ]; }
 
    } elsif ( $entityType eq 'EQUIPMOD Key' ) {
 
@@ -337,7 +357,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$key/;
 
-         push @{ $referer{'EQUIPMOD Key'}{$key} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'EQUIPMOD Key'}{$key} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'FEAT' ) {
@@ -396,11 +416,11 @@ sub add_to_xcheck_tables {
 
          if ( $feat =~ /^TYPE[=.](.*)/ ) {
 
-            push @{ $referer_types{'FEAT'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'FEAT'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'FEAT'}{$feat} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'FEAT'}{$feat} }, [ $message_name, $file, $line ];
          }
       }
 
@@ -460,15 +480,15 @@ sub add_to_xcheck_tables {
 
          if ( $feat =~ /^TYPE[=.](.*)/ ) {
 
-            push @{ $referer_types{'ABILITY'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'ABILITY'}{$1} }, [ $message_name, $file, $line ];
          
          } elsif ( $feat =~ /^CATEGORY[=.](.*)/ ) {
          
-            push @{ $referer_categories{'ABILITY'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_categories{'ABILITY'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'ABILITY'}{$feat} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'ABILITY'}{$feat} }, [ $message_name, $file, $line ];
          
          }
       }
@@ -481,7 +501,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$kit/;
 
-         push @{ $referer{'KIT STARTPACK'}{$kit} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'KIT STARTPACK'}{$kit} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'LANGUAGE' ) {
@@ -494,11 +514,11 @@ sub add_to_xcheck_tables {
 
          if ( $language =~ /^TYPE=(.*)/ ) {
 
-            push @{ $referer_types{'LANGUAGE'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'LANGUAGE'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'LANGUAGE'}{$language} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'LANGUAGE'}{$language} }, [ $message_name, $file, $line ];
          }
       }
 
@@ -514,7 +534,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$move/;
 
-         push @{ $referer{'MOVE Type'}{$move} }, [ $message_name, $file, $line ]; }
+         push @{ $referrer{'MOVE Type'}{$move} }, [ $message_name, $file, $line ]; }
 
    } elsif ( $entityType eq 'RACE' ) {
 
@@ -525,19 +545,19 @@ sub add_to_xcheck_tables {
 
          if ( $race =~ / \A TYPE= (.*) /xms ) {
 
-            push @{ $referer_types{'RACE'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'RACE'}{$1} }, [ $message_name, $file, $line ];
          
          } elsif ( $race =~ / \A RACETYPE= (.*) /xms ) {
          
-            push @{ $referer{'RACETYPE'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'RACETYPE'}{$1} }, [ $message_name, $file, $line ];
          
          } elsif ( $race =~ / \A RACESUBTYPE= (.*) /xms ) {
          
-            push @{ $referer{'RACESUBTYPE'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'RACESUBTYPE'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'RACE'}{$race} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'RACE'}{$race} }, [ $message_name, $file, $line ];
          
          }
       }
@@ -549,7 +569,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$race_type/;
 
-         push @{ $referer_types{'RACE'}{$race_type} }, [ $message_name, $file, $line ];
+         push @{ $referrer_types{'RACE'}{$race_type} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'RACESUBTYPE' ) {
@@ -561,7 +581,7 @@ sub add_to_xcheck_tables {
          # The RACESUBTYPE can be .REMOVE.<race subtype name>
          $race_subtype =~ s{ \A [.] REMOVE [.] }{}xms;
 
-         push @{ $referer{'RACESUBTYPE'}{$race_subtype} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'RACESUBTYPE'}{$race_subtype} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'RACETYPE' ) {
@@ -573,7 +593,7 @@ sub add_to_xcheck_tables {
          # The RACETYPE can be .REMOVE.<race type name>
          $race_type =~ s{ \A [.] REMOVE [.] }{}xms;
 
-         push @{ $referer{'RACETYPE'}{$race_type} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'RACETYPE'}{$race_type} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'SKILL' ) {
@@ -616,11 +636,11 @@ sub add_to_xcheck_tables {
 
          if ( $skill =~ / \A TYPE [.=] (.*) /xms ) {
 
-            push @{ $referer_types{'SKILL'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'SKILL'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'SKILL'}{$skill} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'SKILL'}{$skill} }, [ $message_name, $file, $line ];
          }
       }
 
@@ -634,11 +654,11 @@ sub add_to_xcheck_tables {
 
          if ( $spell =~ /^TYPE=(.*)/ ) {
          
-            push @{ $referer_types{'SPELL'}{$1} }, [ $message_name, $file, $line ];
+            push @{ $referrer_types{'SPELL'}{$1} }, [ $message_name, $file, $line ];
          
          } else {
          
-            push @{ $referer{'SPELL'}{$spell} }, [ $message_name, $file, $line ];
+            push @{ $referrer{'SPELL'}{$spell} }, [ $message_name, $file, $line ];
          }
       }
 
@@ -654,7 +674,7 @@ sub add_to_xcheck_tables {
          $template_copy =~ s/ CHOOSE: //xms;
          $message_name =~ s/ CHOOSE: //xms;
 
-         push @{ $referer{'TEMPLATE'}{$template_copy} }, [ $message_name, $file, $line ];
+         push @{ $referrer{'TEMPLATE'}{$template_copy} }, [ $message_name, $file, $line ];
       }
 
    } elsif ( $entityType eq 'WEAPONPROF' ) {
@@ -676,7 +696,7 @@ sub add_to_xcheck_tables {
          my $message_name = $tagName;
          $message_name =~ s/@@/$entry/;
 
-         push @{ $referer{$entityType}{$entry} }, [ $message_name, $file, $line ];
+         push @{ $referrer{$entityType}{$entry} }, [ $message_name, $file, $line ];
       }
 
    } else {
@@ -714,7 +734,7 @@ sub doXCheck {
 
    #####################################################
    # First we process the information that must be added
-   # to the %referer and %referer_types;
+   # to the %referrer and %referrer_types;
    for my $parameter_ref (@xcheck_to_process) {
       add_to_xcheck_tables( @{$parameter_ref} );
    }
@@ -726,8 +746,8 @@ sub doXCheck {
    my ($addToReport, $message);
 
    # Find the entries that need to be reported
-   for my $linetype ( sort keys %referer ) {
-      for my $entry ( sort keys %{ $referer{$linetype} } ) {
+   for my $linetype ( sort keys %referrer ) {
+      for my $entry ( sort keys %{ $referrer{$linetype} } ) {
 
          if ( $linetype =~ /,/ ) {
 
@@ -770,7 +790,7 @@ sub doXCheck {
          }
 
          if ($addToReport) {
-            _addToReport($referer{$linetype}{$entry}, \%to_report, $message); 
+            _addToReport($referrer{$linetype}{$entry}, \%to_report, $message); 
          }
       }
    }
@@ -802,10 +822,10 @@ sub doXCheck {
    # This is the code used to change what types are/aren't reported.
    # Find the type entries that need to be reported
    %to_report = ();
-   for my $linetype ( sort %referer_types ) {
-      for my $entry ( sort keys %{ $referer_types{$linetype} } ) {
+   for my $linetype ( sort %referrer_types ) {
+      for my $entry ( sort keys %{ $referrer_types{$linetype} } ) {
          if (! exists $valid_types{$linetype}{$entry} ) {
-            for my $array ( @{ $referer_types{$linetype}{$entry} } ) {
+            for my $array ( @{ $referrer_types{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
          }
@@ -832,10 +852,10 @@ sub doXCheck {
    # Needed for full support for [ 1671407 ] xcheck PREABILITY tag
    # Find the category entries that need to be reported
    %to_report = ();
-   for my $linetype ( sort %referer_categories ) {
-      for my $entry ( sort keys %{ $referer_categories{$linetype} } ) {
+   for my $linetype ( sort %referrer_categories ) {
+      for my $entry ( sort keys %{ $referrer_categories{$linetype} } ) {
          if (!exists $valid_categories{$linetype}{$entry} ) {
-            for my $array ( @{ $referer_categories{$linetype}{$entry} } ) {
+            for my $array ( @{ $referrer_categories{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
          }

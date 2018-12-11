@@ -1037,19 +1037,6 @@ my %valid_types;
 # found in abilities.
 my %valid_categories;   
 
-my %referer;            # Will hold the tags that refer to other entries
-                                # Format: push @{$referer{$EntityType}{$entryname}},
-                                #               [ $tags{$column}, $file_for_error, $line_for_error ]
-
-my %referer_types;      # Will hold the type used by some of the tags
-                                # to allow validation.
-                                # Format: push @{$referer_types{$EntityType}{$typename}},
-                                #               [ $tags{$column}, $file_for_error, $line_for_error ]
-
-my %referer_categories; # Will hold the categories used by abilities
-                                # to allow validation;
-                                # [ 1671407 ] xcheck PREABILITY tag
-
 my %valid_sub_entities; # Will hold the entities that are allowed to include
                                 # a sub-entity between () in their name.
                                 # e.g. Skill Focus(Spellcraft)
@@ -1914,10 +1901,10 @@ if (getOption('outputerror')) {
 #
 # Parameters: $fileType       = The type of the file has defined by the .PCC file
 #             $lines_ref      = Reference to an array containing all the lines of the file
-#             $file_for_error = File name to use with ewarn
+#             $file = File name to use with ewarn
 
 sub FILETYPE_parse {
-   my ($fileType, $lines_ref, $file_for_error) = @_;
+   my ($fileType, $lines_ref, $file) = @_;
 
    ##################################################
    # Working variables
@@ -1934,16 +1921,16 @@ sub FILETYPE_parse {
    # Phase I - Split line in tokens and parse
    #               the tokens
 
-   my $line_for_error = 1;
+   my $line = 1;
    LINE:
-   for my $line (@ {$lines_ref} ) {
+   for my $thisLine (@ {$lines_ref} ) {
 
       my $line_info;
      
       # Convert the line if that conversion is active, otherwise just copy it. 
       my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
-                        ? LstTidy::Convert::convertEntities($line)
-                        : $line;
+                        ? LstTidy::Convert::convertEntities($thisLine)
+                        : $thisLine;
 
       # Remove spaces at the end of the line
       $new_line =~ s/\s+$//;
@@ -1965,8 +1952,8 @@ sub FILETYPE_parse {
       if ( ! defined $line_info ) {
          $log->warning(
             qq(Can\'t find the line type for "$new_line"),
-            $file_for_error,
-            $line_for_error
+            $file,
+            $line
          );
 
          # We push the line as is.
@@ -1978,15 +1965,15 @@ sub FILETYPE_parse {
       $curent_linetype = $line_info->{Linetype};
       if ( $line_info->{Mode} == MAIN ) {
 
-         $last_main_line = $line_for_error - 1;
+         $last_main_line = $line - 1;
 
       } elsif ( $line_info->{Mode} == SUB ) {
 
          if ($last_main_line == -1) {
             $log->warning(
                qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
-               $file_for_error,
-               $line_for_error
+               $file,
+               $line
             )
          }
 
@@ -2000,121 +1987,62 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Parse::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file_for_error, $line_for_error );
+      LstTidy::Parse::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
 
-                # Split the line in tokens
-                my %line_tokens;
+      # Split the line in tokens
+      my %line_tokens;
 
-                # By default, the tab character is used
-                my $sep = $line_info->{SepRegEx} || qr(\t+);
+      # By default, the tab character is used
+      my $sep = $line_info->{SepRegEx} || qr(\t+);
 
-                # We split the tokens, strip the spaces and silently remove the empty tags
-                # (empty tokens are the result of [tab][space][tab] type of chracter
-                # sequences).
-                # [ 975999 ] [tab][space][tab] breaks prettylst
-                my @tokens = grep { $_ ne q{} } map { s{ \A \s* | \s* \z }{}xmsg; $_ } split $sep, $new_line;
+      # We split the tokens, strip the spaces and silently remove the empty tags
+      # (empty tokens are the result of [tab][space][tab] type of chracter
+      # sequences).
+      # [ 975999 ] [tab][space][tab] breaks prettylst
+      my @tokens = grep { $_ ne q{} } map { s{ \A \s* | \s* \z }{}xmsg; $_ } split $sep, $new_line;
 
-                #First, we deal with the tag-less columns
-                COLUMN:
-                for my $column ( @{ $column_with_no_tag{$curent_linetype} } ) {
-                        last COLUMN if ( scalar @tokens == 0 );
+      #First, we deal with the tag-less columns
+      COLUMN:
+      for my $column ( @{ $column_with_no_tag{$curent_linetype} } ) {
 
-                        # We remove the space before and after the token
-                        #       $tokens[0] =~ s/\s+$//;
-                        #       $tokens[0] =~ s/^\s+//;
+         # If the line has no tokens        
+         if ( scalar @tokens == 0 ) {
+            last COLUMN;
+         }
+         
+         # Grab the token from the front of the line 
+         my $token = shift @tokens;
 
-                        # We remove the enclosing quotes if any
-                        $log->warning(
-                                qq{Removing quotes around the '$tokens[0]' tag},
-                                $file_for_error,
-                                $line_for_error
-                        ) if $tokens[0] =~ s/^"(.*)"$/$1/;
+         # We remove the enclosing quotes if any
+         if ($current_token =~ s/^"(.*)"$/$1/) {
+            $log->warning(
+               qq{Removing quotes around the '$current_token' tag},
+               $file,
+               $line
+            )
+         }
 
-                        my $curent_token = shift @tokens;
-                        $line_tokens{$column} = [$curent_token];
+         # and add it to line_tokens
+         $line_tokens{$column} = [$token];
 
-                        # Statistic gathering
-                        LstTidy::Report::incCountValidTags($curent_linetype, $column);
+         # Statistic gathering
+         LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
-                        # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-                        if ( index( $column, '000' ) == 0 ) {
-                                my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
-
-                                if ( $line_info->{ValidateKeep} ) {
-                                        if ( my ($entity_name, $mod_part) = ($curent_token =~ $check_mod) ) {
-
-                                                # We keep track of the .MOD type tags to
-                                                # later validate if they are valid
-                                                push @{ $referer{$curent_linetype}{$entity_name} },
-                                                        [ $curent_token, $file_for_error, $line_for_error ]
-                                                        if getOption('xcheck');
-
-                                                # Special case for .COPY=<new name>
-                                                # <new name> is a valid entity
-                                                if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
-                                                   LstTidy::Validate::setEntityValid($curent_linetype, $new_name);
-                                                }
-
-                                                last COLUMN;
-                                        }
-                                        else {
-                                                if ( getOption('xcheck') ) {
-
-                                                        # We keep track of the entities that could be used
-                                                        # with a .MOD type of tag for later validation.
-                                                        #
-                                                        # Some line type need special code to extract the
-                                                        # entry.
-                                                        my $entry = $curent_token;
-                                                        if ( $line_info->{RegExGetEntry} ) {
-                                                                if ( $entry =~ $line_info->{RegExGetEntry} ) {
-                                                                        $entry = $1;
-
-                                                                        # Some line types refer to other line entries directly
-                                                                        # in the line identifier.
-                                                                        if ( exists $line_info->{GetRefList} ) {
-                                                                           LstTidy::Report::add_to_xcheck_tables(
-                                                                                        $line_info->{IdentRefType},
-                                                                                        $line_info->{IdentRefTag},
-                                                                                        $file_for_error,
-                                                                                        $line_for_error,
-                                                                                        &{ $line_info->{GetRefList} }($entry)
-                                                                                );
-                                                                        }
-                                                                }
-                                                                else {
-                                                                        $log->warning(
-                                                                                qq(Cannot find the $curent_linetype name),
-                                                                                $file_for_error,
-                                                                                $line_for_error
-                                                                        );
-                                                                }
-                                                        }
-                                                        LstTidy::Validate::setEntityValid($curent_linetype, $entry);
-
-                                                        # Check to see if the entry must be recorded for other
-                                                        # entry types.
-                                                        if ( exists $line_info->{OtherValidEntries} ) {
-                                                                for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
-                                                                   LstTidy::Validate::setEntityValid($entry_type, $entry);
-                                                                }
-                                                        }
-                                                }
-                                        }
-                                }
-                        }
-                }
+         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
+            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line) = @_;
+         }
+      }
 
                 #Second, let's parse the regular columns
                 for my $token (@tokens) {
-                        my $key = parse_tag($token, $curent_linetype, $file_for_error, $line_for_error);
+                        my $key = parse_tag($token, $curent_linetype, $file, $line);
 
                         if ($key) {
                                 if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
                                         $log->notice(
                                                 qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
-                                                $file_for_error,
-                                                $line_for_error
+                                                $file,
+                                                $line
                                         );
                                 }
 
@@ -2122,7 +2050,7 @@ sub FILETYPE_parse {
                                 = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $token ] : [$token];
                         }
                         else {
-                                $log->warning( "No tags in \"$token\"\n", $file_for_error, $line_for_error );
+                                $log->warning( "No tags in \"$token\"\n", $file, $line );
                                 $line_tokens{$token} = $token;
                         }
                 }
@@ -2141,27 +2069,22 @@ sub FILETYPE_parse {
                 # This function call will parse individual lines, which will
                 # in turn parse the tags within the lines.
 
-                additionnal_line_parsing(\%line_tokens,
-                                                $curent_linetype,
-                                                $file_for_error,
-                                                $line_for_error,
-                                                $newline
-                );
+                additionnal_line_parsing(\%line_tokens, $curent_linetype, $file, $line, $newline);
 
                 ############################################################
                 # Validate the line
-                validate_line(\%line_tokens, $curent_linetype, $file_for_error, $line_for_error)
+                validate_line(\%line_tokens, $curent_linetype, $file, $line)
                 if getOption('xcheck');
 
                 ############################################################
                 # .CLEAR order verification
-                check_clear_tag_order(\%line_tokens, $file_for_error, $line_for_error);
+                check_clear_tag_order(\%line_tokens, $file, $line);
 
                 #Last, we put the tokens and other line info in the @newlines array
                 push @newlines, $newline;
 
         }
-        continue { $line_for_error++ }
+        continue { $line++ }
 
         #####################################################
         #####################################################
@@ -2215,7 +2138,7 @@ sub FILETYPE_parse {
         ######################## Conversion #############################
         # We manipulate the tags for the whole file here
 
-        additionnal_file_parsing(\@newlines, $fileType, $file_for_error);
+        additionnal_file_parsing(\@newlines, $fileType, $file);
 
         ##################################################
         ##################################################
@@ -2850,43 +2773,49 @@ sub FILETYPE_parse {
 #                       4 = 5.12 format ADD tag, not using token.
 
 sub parse_ADD_tag {
-        my $tag = shift;
+   my $tag = shift;
 
-        my ($token, $therest, $num_count, $optionlist) = ("", "", 0, "");
+   my ($token, $therest, $num_count, $optionlist) = ("", "", 0, "");
 
-        # Old Format
-        if ($tag =~ /\s*ADD:([^\(]+)\((.+)\)(\d*)/) {
-        ($token, $therest, $num_count) = ($1, $2, $3);
-        if (!$num_count) { $num_count = 1; }
-                # Is it a known token?
-                if ( exists $token_ADD_tag{"ADD:$token"} ) {
-                return ( 1, "ADD:$token", $therest, $num_count );
-                }
-                # Is it the right form? => ADD:any text(any text)
-                # Note that no check is done to see if the () are balanced.
-                # elsif ( $therest =~ /^\((.*)\)(\d*)\s*$/ ) {
-        else {
-                return ( 2, "ADD:$token", $therest, $num_count);
-                }
-        }
+   # Old Format
+   if ($tag =~ /\s*ADD:([^\(]+)\((.+)\)(\d*)/) {
 
-        # New format ADD tag.
-#       if ($tag =~ /\s*ADD:([^\|]+)(\|[^\|]*)\|(.+)/) {
-        if ($tag =~ /\s*ADD:([^\|]+)(\|\d+)?\|(.+)/) {
+      ($token, $therest, $num_count) = ($1, $2, $3);
 
-        ($token, $num_count, $optionlist) = ($1, $2, $3);
-        if (!$num_count) { $num_count = 1; }
+      if (!$num_count) { 
+         $num_count = 1; 
+      }
 
-        if ( exists $token_ADD_tag{"ADD:$token"}) {
-                return ( 3, "ADD:$token", $optionlist, $num_count);
-        }
-        else {
-                return ( 4, "ADD:$token", $optionlist, $num_count);
-        }
-        }
+      # Is it a known token?
+      if ( exists $token_ADD_tag{"ADD:$token"} ) {
+         return ( 1, "ADD:$token", $therest, $num_count );
 
-        # Not a good ADD tag.
-        return ( 0, "", undef, 0 );
+      # Is it the right form? => ADD:any text(any text)
+      # Note that no check is done to see if the () are balanced.
+      # elsif ( $therest =~ /^\((.*)\)(\d*)\s*$/ ) {
+      } else {
+         return ( 2, "ADD:$token", $therest, $num_count);
+      }
+   }
+
+   # New format ADD tag.
+   if ($tag =~ /\s*ADD:([^\|]+)(\|\d+)?\|(.+)/) {
+
+      ($token, $num_count, $optionlist) = ($1, $2, $3);
+
+      if (!$num_count) { 
+         $num_count = 1;
+      }
+
+      if ( exists $token_ADD_tag{"ADD:$token"}) {
+         return ( 3, "ADD:$token", $optionlist, $num_count);
+      } else {
+         return ( 4, "ADD:$token", $optionlist, $num_count);
+      }
+   }
+
+   # Not a good ADD tag.
+   return ( 0, "", undef, 0 );
 }
 
 ###############################################################
@@ -3442,8 +3371,8 @@ BEGIN {
 # the syntax of certain tags and detects common errors and
 # deprecations.
 #
-# The %referer hash must be populated following this format
-# $referer{$lintype}{$name} = [ $err_desc, $file_for_error, $line_for_error ]
+# The %referrer hash must be populated following this format
+# $referrer{$lintype}{$name} = [ $err_desc, $file_for_error, $line_for_error ]
 #
 # Paramter: $tag_name           Name of the tag (before the :)
 #           $tag_value              Value of the tag (after the :)

@@ -1828,6 +1828,84 @@ sub parseSystemFiles {
    return;
 }
 
+=head2 process000
+
+   The first tag on a line may need to be processed because it is a MOD, FORGET
+   or COPY. It may also need to be added to crosschecking data to allow other
+   lines to do MOD, FORGETs or COPYs.
+
+=cut
+
+sub process000 {
+
+   my ($line_info, $token, $linetype, $file, $line) = @_;
+
+   # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
+   my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
+
+   if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
+
+      # We keep track of the .MOD type tags to
+      # later validate if they are valid
+      if (getOption('xcheck')) {
+         LstTidy::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
+      }
+
+      # Special case for .COPY=<new name>
+      # <new name> is a valid entity
+      if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
+         LstTidy::Validate::setEntityValid($linetype, $new_name);
+      }
+
+      last COLUMN;
+
+   } elsif ( getOption('xcheck') ) {
+
+      # We keep track of the entities that could be used with a .MOD type of
+      # tag for later validation.
+      #
+      # Some line types need special code to extract the entry.
+
+      if ( $line_info->{RegExGetEntry} ) {
+
+         if ( $token =~ $line_info->{RegExGetEntry} ) {
+            $token = $1;
+
+            # Some line types refer to other line entries directly
+            # in the line identifier.
+            if ( exists $line_info->{GetRefList} ) {
+               LstTidy::Report::add_to_xcheck_tables(
+                  $line_info->{IdentRefType},
+                  $line_info->{IdentRefTag},
+                  $file,
+                  $line,
+                  &{ $line_info->{GetRefList} }($token)
+               );
+            }
+
+         } else {
+
+            LstTidy::LogFactory::getLogger->warning(
+               qq(Cannot find the $linetype name),
+               $file,
+               $line
+            );
+         }
+      }
+
+      LstTidy::Validate::setEntityValid($linetype, $token);
+
+      # Check to see if the token must be recorded for other
+      # token types.
+      if ( exists $line_info->{OtherValidEntries} ) {
+         for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
+            LstTidy::Validate::setEntityValid($entry_type, $token);
+         }
+      }
+
+   }
+}
+
 =head2 scanForDeprecatedTags
 
    This function establishes a centralized location to search
