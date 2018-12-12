@@ -129,6 +129,45 @@ my @validSystemVarNames = qw(
 );
 
 
+# Valid filetype are the only ones that will be parsed Some filetype are valid
+# but not parsed yet (no function name)
+my %parsableFileType = (
+   'ABILITY'         => \&parseFile,
+   'ABILITYCATEGORY' => \&parseFile,
+   'BIOSET'          => \&parseFile,
+   'CLASS'           => \&parseFile,
+   'COMPANIONMOD'    => \&parseFile,
+   'DEITY'           => \&parseFile,
+   'DOMAIN'          => \&parseFile,
+   'EQUIPMENT'       => \&parseFile,
+   'EQUIPMOD'        => \&parseFile,
+   'FEAT'            => \&parseFile,
+   'INFOTEXT'        => 0,
+   'KIT'             => \&parseFile,
+   'LANGUAGE'        => \&parseFile,
+   'LSTEXCLUDE'      => 0,
+   'PCC'             => 1,
+   'RACE'            => \&parseFile,
+   'SKILL'           => \&parseFile,
+   'SOURCELONG'      => 0,
+   'SOURCESHORT'     => 0,
+   'SOURCEWEB'       => 0,
+   'SOURCEDATE'      => 0,
+   'SOURCELINK'      => 0,
+   'SPELL'           => \&parseFile,
+   'TEMPLATE'        => \&parseFile,
+   'WEAPONPROF'      => \&parseFile,
+   'ARMORPROF'       => \&parseFile,
+   'SHIELDPROF'      => \&parseFile,
+   'VARIABLE'        => \&parseFile,
+   'DATACONTROL'     => \&parseFile,
+   'GLOBALMOD'       => \&parseFile,
+   '#EXTRAFILE'      => 1,
+   'SAVE'            => \&parseFile,
+   'STAT'            => \&parseFile,
+   'ALIGNMENT'       => \&parseFile,
+);
+
 # Header use for the comment for each of the tag used in the script
 my %tagheader = (
    default => {
@@ -771,44 +810,27 @@ my %tagheader = (
 
 );
 
-# Valid filetype are the only ones that will be parsed
-# Some filetype are valid but not parsed yet (no function name)
-my %parsableFileType = (
-   'ABILITY'         => \&parseFile,
-   'ABILITYCATEGORY' => \&parseFile,
-   'BIOSET'          => \&parseFile,
-   'CLASS'           => \&parseFile,
-   'COMPANIONMOD'    => \&parseFile,
-   'DEITY'           => \&parseFile,
-   'DOMAIN'          => \&parseFile,
-   'EQUIPMENT'       => \&parseFile,
-   'EQUIPMOD'        => \&parseFile,
-   'FEAT'            => \&parseFile,
-   'INFOTEXT'        => 0,
-   'KIT'             => \&parseFile,
-   'LANGUAGE'        => \&parseFile,
-   'LSTEXCLUDE'      => 0,
-   'PCC'             => 1,
-   'RACE'            => \&parseFile,
-   'SKILL'           => \&parseFile,
-   'SOURCELONG'      => 0,
-   'SOURCESHORT'     => 0,
-   'SOURCEWEB'       => 0,
-   'SOURCEDATE'      => 0,
-   'SOURCELINK'      => 0,
-   'SPELL'           => \&parseFile,
-   'TEMPLATE'        => \&parseFile,
-   'WEAPONPROF'      => \&parseFile,
-   'ARMORPROF'       => \&parseFile,
-   'SHIELDPROF'      => \&parseFile,
-   'VARIABLE'        => \&parseFile,
-   'DATACONTROL'     => \&parseFile,
-   'GLOBALMOD'       => \&parseFile,
-   '#EXTRAFILE'      => 1,
-   'SAVE'            => \&parseFile,
-   'STAT'            => \&parseFile,
-   'ALIGNMENT'       => \&parseFile,
+my %tokenAddTag = map { $_ => 1 } (
+   'ADD:.CLEAR',
+   'ADD:CLASSSKILLS',
+   'ADD:DOMAIN',
+   'ADD:EQUIP',
+   'ADD:FAVOREDCLASS',
+   'ADD:LANGUAGE',
+   'ADD:SAB',
+   'ADD:SPELLCASTER',
+   'ADD:SKILL',
+   'ADD:TEMPLATE',
+   'ADD:WEAPONPROFS',
+
+   'ADD:FEAT',             # Deprecated
+   'ADD:FORCEPOINT',       # Deprecated, never heard of this!
+   'ADD:INIT',             # Deprecated
+   'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
+   'ADD:VFEAT',            # Deprecated
 );
+
+
 
 
 =head2 parseFile
@@ -1588,6 +1610,80 @@ sub normaliseFile {
 
    # return a arrayref so we are a little more efficient
    return (\@lines, $filetype);
+}
+
+=head2 parseAddTag
+
+   The ADD tag has a very adlib form. It can be many of the
+   ADD:Token define in the master_list but is also can be
+   of the form ADD:Any test whatsoever(...). And there is also
+   the fact that the ':' is used in the name...
+   
+   In short, it's a pain.
+   
+   The above describes the pre 5.12 syntax
+   For 5.12, the syntax has changed.
+   It is now:
+   ADD:subtoken[|number]|blah
+   
+   This function return a list of three elements.
+      The first one is a return code
+      The second one is the effective TAG if any
+      The third one is anything found after the tag if any
+      The fourth one is the count if one is detected
+   
+      Return code 0 = no valid ADD tag found,
+                          1 = old format token ADD tag found,
+                          2 = old format adlib ADD tag found.
+                          3 = 5.12 format ADD tag, using known token.
+                          4 = 5.12 format ADD tag, not using known token.
+
+=cut
+
+sub parseAddTag {
+
+   my $tag = shift;
+
+   # Old Format
+   if ($tag =~ /\s*ADD:([^\(]+)\((.+)\)(\d*)/) {
+
+      my ($token, $theRest, $numCount) = ($1, $2, $3);
+
+      if (!$numCount) { 
+         $numCount = 1; 
+      }
+
+      # Old format token ADD tag found,
+      if ( exists $tokenAddTag{"ADD:$token"} ) {
+         return ( 1, "ADD:$token", $theRest, $numCount );
+
+      # Old format adlib ADD tag found.
+      } else {
+         return ( 2, "ADD:$token", $theRest, $numCount);
+      }
+   }
+
+   # New format ADD tag.
+   if ($tag =~ /\s*ADD:([^\|]+)(\|\d+)?\|(.+)/) {
+
+      my ($token, $numCount, $optionList) = ($1, $2, $3);
+
+      if (!$numCount) { 
+         $numCount = 1;
+      }
+
+      # 5.12 format ADD tag, using known token.
+      if ( exists $tokenAddTag{"ADD:$token"}) {
+         return ( 3, "ADD:$token", $optionList, $numCount);
+
+      # 5.12 format ADD tag, not using known token.
+      } else {
+         return ( 4, "ADD:$token", $optionList, $numCount);
+      }
+   }
+
+   # Not a good ADD tag.
+   return ( 0, "", undef, 0 );
 }
 
 =head2 parseJep

@@ -39,7 +39,7 @@ use LstTidy::Validate;
 
 # Subroutines
 sub FILETYPE_parse;
-sub parse_ADD_tag;
+sub parseAddTag;
 sub parse_tag;
 sub validate_tag;
 sub additionnal_tag_parsing;
@@ -823,25 +823,6 @@ my %token_FACTSET_tag = map { $_ => 1 } (
         'FACTSET:Race',
 );
 
-
-my %token_ADD_tag = map { $_ => 1 } (
-        'ADD:.CLEAR',
-        'ADD:CLASSSKILLS',
-        'ADD:DOMAIN',
-        'ADD:EQUIP',
-        'ADD:FAVOREDCLASS',
-        'ADD:FEAT',                     # Deprecated
-        'ADD:FORCEPOINT',               # Deprecated, never heard of this!
-        'ADD:INIT',                     # Deprecated
-        'ADD:LANGUAGE',
-        'ADD:SAB',
-        'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
-        'ADD:SPELLCASTER',
-        'ADD:SKILL',
-        'ADD:TEMPLATE',
-        'ADD:WEAPONPROFS',
-        'ADD:VFEAT',            # Deprecated
-);
 
 my %token_BONUS_tag = map { $_ => 1 } (
    'ABILITYPOOL',
@@ -2745,80 +2726,6 @@ sub FILETYPE_parse {
 }
 
 ###############################################################
-# parse_ADD_tag
-# -------------
-#
-# The ADD tag has a very adlib form. It can be many of the
-# ADD:Token define in the master_list but is also can be
-# of the form ADD:Any test whatsoever(...). And there is also
-# the fact that the ':' is used in the name...
-#
-# In short, it's a pain.
-#
-# The above describes the pre 5.12 syntax
-# For 5.12, the syntax has changed.
-# It is now:
-# ADD:subtoken[|number]|blah
-#
-# This function return a list of three elements.
-#   The first one is a return code
-#   The second one is the effective TAG if any
-#   The third one is anything found after the tag if any
-#   The fourth one is the count if one is detected
-#
-#   Return code 0 = no valid ADD tag found,
-#                       1 = old format token ADD tag found,
-#                       2 = old format adlib ADD tag found.
-#                       3 = 5.12 format ADD tag, using known token.
-#                       4 = 5.12 format ADD tag, not using token.
-
-sub parse_ADD_tag {
-   my $tag = shift;
-
-   my ($token, $therest, $num_count, $optionlist) = ("", "", 0, "");
-
-   # Old Format
-   if ($tag =~ /\s*ADD:([^\(]+)\((.+)\)(\d*)/) {
-
-      ($token, $therest, $num_count) = ($1, $2, $3);
-
-      if (!$num_count) { 
-         $num_count = 1; 
-      }
-
-      # Is it a known token?
-      if ( exists $token_ADD_tag{"ADD:$token"} ) {
-         return ( 1, "ADD:$token", $therest, $num_count );
-
-      # Is it the right form? => ADD:any text(any text)
-      # Note that no check is done to see if the () are balanced.
-      # elsif ( $therest =~ /^\((.*)\)(\d*)\s*$/ ) {
-      } else {
-         return ( 2, "ADD:$token", $therest, $num_count);
-      }
-   }
-
-   # New format ADD tag.
-   if ($tag =~ /\s*ADD:([^\|]+)(\|\d+)?\|(.+)/) {
-
-      ($token, $num_count, $optionlist) = ($1, $2, $3);
-
-      if (!$num_count) { 
-         $num_count = 1;
-      }
-
-      if ( exists $token_ADD_tag{"ADD:$token"}) {
-         return ( 3, "ADD:$token", $optionlist, $num_count);
-      } else {
-         return ( 4, "ADD:$token", $optionlist, $num_count);
-      }
-   }
-
-   # Not a good ADD tag.
-   return ( 0, "", undef, 0 );
-}
-
-###############################################################
 # parse_tag
 # ---------
 #
@@ -2927,38 +2834,41 @@ sub parse_tag {
 
         # Special cases like ADD:... and BONUS:...
         if ( $tag eq 'ADD' ) {
-                my ( $type, $addtag, $therest, $add_count )
-                = parse_ADD_tag( $tag_text );
-                #       Return code     0 = no valid ADD tag found,
-                #                       1 = old format token ADD tag found,
-                #                       2 = old format adlib ADD tag found.
-                #                       3 = 5.12 format ADD tag, using known token.
-                #                       4 = 5.12 format ADD tag, not using token.
 
-                if ($type) {
-                # It's a ADD:token tag
-                if ( $type == 1) {
-                        $tag   = $addtag;
-                        $value = "($therest)$add_count";
-                }
-                        if ((($type == 1) || ($type == 2)) && (LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix')))
-                        {
-                                $tag = "ADD:";
-                                $addtag =~ s/ADD://;
-                                $value = "$addtag|$add_count|$therest";
-                        }
-                }
-                else {
-                        unless ( index( $tag_text, '#' ) == 0 ) {
-                                $log->notice(
-                                        qq{Invalid ADD tag "$tag_text" found in $linetype.},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                LstTidy::Report::incCountInvalidTags($linetype, $addtag); 
-                                $no_more_error = 1;
-                        }
-                }
+           my ( $type, $addtag, $therest, $add_count ) = LstTidy::Parse::parseAddTag( $tag_text );
+           #       Return code     0 = no valid ADD tag found,
+           #                       1 = old format token ADD tag found,
+           #                       2 = old format adlib ADD tag found.
+           #                       3 = 5.12 format ADD tag, using known token.
+           #                       4 = 5.12 format ADD tag, not using token.
+
+           if ($type) {
+              # It's a ADD:token tag
+              if ( $type == 1) {
+                 $tag   = $addtag;
+                 $value = "($therest)$add_count";
+              }
+
+              if (($type == 1 || $type == 2) && LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix'))
+              {
+                 $tag = "ADD:";
+                 $addtag =~ s/ADD://;
+                 $value = "$addtag|$add_count|$therest";
+              }
+
+           } else {
+              if ( index( $tag_text, '#' ) != 0 ) {
+
+                 $log->notice(
+                    qq{Invalid ADD tag "$tag_text" found in $linetype.},
+                    $file_for_error,
+                    $line_for_error
+                 );
+
+                 LstTidy::Report::incCountInvalidTags($linetype, $addtag); 
+                 $no_more_error = 1;
+              }
+           }
         }
 
         if ( $tag eq 'QUALIFY' ) {
