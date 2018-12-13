@@ -102,7 +102,12 @@ sub convertPreSpellType {
 }
 
 =head2 convertAddTags
+
+   If the ADD tag parses as valid, the tag object is rewritten in standard
+   form.   
+
 =cut
+
 sub convertAddTags {
    my ($tag) = @_;
 
@@ -142,9 +147,6 @@ sub convertAddTags {
    }
 }
 
-
-
 1;
-
 
 __END__
