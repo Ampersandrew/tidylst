@@ -8,7 +8,10 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 15;
+use LstTidy::Tag;
+
+use Test::More tests => 25;
+use Test::Warn;
 
 use_ok ('LstTidy::Convert');
 
@@ -42,3 +45,53 @@ for my $conv ( keys %conversions ) {
 
    is($got, $expect, "Converted $expect");
 }
+
+# =====================================
+# Test convertPreSpellType
+# =====================================
+
+my $tag = LstTidy::Tag->new(
+   fullTag => 'PRESPELLTYPE:Arcane|Divine,2,3',
+   lineType => 'SPELL',
+   file     => 'foo_spells.lst',
+);
+
+is($tag->id, 'PRESPELLTYPE', "Id is PRESPELLTYPE");
+is($tag->value, 'Arcane|Divine,2,3', "Value is Arcane|Divine,2,3"); 
+
+my @arr = ();
+
+LstTidy::Options::parseOptions(@arr);
+LstTidy::Options::enableConversion('ALL:PRESPELLTYPE Syntax');
+
+warnings_like { LstTidy::Convert::convertPreSpellType($tag) } [
+   qr{Warning: something's wrong at /mnt/c/github/lst-tidy/lib/LstTidy/Log.pm line 270.},
+   qr{foo_spells.lst},
+   qr{   Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:Arcane|Divine,2,3" found and converted in SPELL}
+], "Throws warnings";
+
+is($tag->id, 'PRESPELLTYPE', "Id has not changed (PRESPELLTYPE)");
+is($tag->value, '2,Arcane=3,Divine=3', "Value is now 2,Arcane=3,Divine=3"); 
+
+# =====================================
+# Continue Test convertPreSpellType
+# =====================================
+
+$tag = LstTidy::Tag->new(
+   fullTag => 'FEAT:Foo|PRESPELLTYPE:Arcane,2,3',
+   lineType => 'RACE',
+   file     => 'foo_race.lst',
+);
+
+is($tag->id, 'FEAT', "Id is PRESPELLTYPE");
+is($tag->value, 'Foo|PRESPELLTYPE:Arcane,2,3', "Value is Foo|PRESPELLTYPE:Arcane,2,3"); 
+
+
+warnings_like { LstTidy::Convert::convertPreSpellType($tag) } 
+[
+   qr{foo_race.lst},
+   qr{   Invalid embedded PRESPELLTYPE tag "FEAT:Foo|PRESPELLTYPE:2,Arcane=3" found and converted RACE.}
+], "Throws warnings";
+
+is($tag->id, 'FEAT', "Id has not changed (FEAT)");
+is($tag->value, 'Foo|PRESPELLTYPE:2,Arcane=3', "Value is now Foo|PRESPELLTYPE:2,Arcane=3"); 

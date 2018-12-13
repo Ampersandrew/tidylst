@@ -5,7 +5,7 @@ use warnings;
 
 use Mouse;
 
-has 'tag' => (
+has 'id' => (
    is       => 'rw',
    isa      => 'Str',
    required => 1,
@@ -16,7 +16,7 @@ has 'isNegatedPre' => (
    isa    => 'Bool',
 );
 
-has 'origTag' => (
+has 'origId' => (
    is  => 'ro',
    isa => 'Str',
 );
@@ -45,6 +45,11 @@ has 'line' => (
    predicate => 'hasLine',
 );
 
+has 'noMoreErrors' => (
+   is     => 'rw',
+   isa    => 'Bool',
+);
+
 around 'BUILDARGS' => sub {
 
    my $orig = shift;
@@ -52,21 +57,21 @@ around 'BUILDARGS' => sub {
 
    my %args = ( @_ > 1 ) ? @_ : %{ $_[0] } ;
 
-   if ( exists $args{'tagValue'} ) {
-      @args{'tag', 'value'} = split ':', $args{'tagValue'}, 2;
+   if ( exists $args{'fullTag'} ) {
+      @args{'id', 'value'} = split ':', $args{'fullTag'}, 2;
 
-      # got a tagValue store it as a readonly origTag
-      $args{'origTag'} = $args{'tagValue'};
+      # got a fullTag store it as a readonly origId
+      $args{'origId'} = $args{'fullTag'};
 
-      delete $args{'tagValue'};
+      delete $args{'fullTag'};
 
-   # no tagValue, construct an origTag
+   # no fullTag, construct an origId
    } else {
       
-      my $tag   = exists $args{'tag'} ? $args{'tag'} : q{} ;
+      my $id   = exists $args{'id'} ? $args{'id'} : q{} ;
       my $value = exists $args{'value'} ? $args{'value'} : q{};
 
-      $args{'origTag'} = $tag . ':' . $value;
+      $args{'origId'} = $id . ':' . $value;
    }
 
    return $self->$orig(%args);
@@ -75,50 +80,50 @@ around 'BUILDARGS' => sub {
 sub BUILD {
    my $self = shift;
 
-   # deal with negated PRE tags, set the tag to itself because teh constructor
-   # doesn't trigger the around tag sub.
-   if ($self->tag =~ m/^!(pre)/i) {
-      $self->tag($self->tag);
+   # deal with negated PRE tags, set the id to itself because teh constructor
+   # doesn't trigger the around id sub.
+   if ($self->id =~ m/^!(pre)/i) {
+      $self->id($self->id);
    };
 };
 
-around 'tag' => sub {
+around 'id' => sub {
    my $orig = shift;
    my $self = shift;
 
    # no arguments, so this is a simple accessor
    return $self->$orig() unless @_;
 
-   # get the new value of tag
-   my $newTag = shift; 
+   # get the new value of id
+   my $newId = shift; 
 
-   # modify new tag and get a boolean for if it was modified.
-   my $mod = $newTag =~ s/^!(pre)/$1/i;
+   # modify new id and get a boolean for if it was modified.
+   my $mod = $newId =~ s/^!(pre)/$1/i;
 
-   # only true if new tag was a negated PRE tag
+   # only true if new id was a negated PRE tag
    $self->isNegatedPre($mod);
 
-   return $self->$orig($newTag);
+   return $self->$orig($newId);
 };
 
-sub realTag {
+sub realId {
    my ($self) = @_;
 
    my $return = defined $self->isNegatedPre && $self->isNegatedPre ? q{!} : q{};
 
-   return  $return . $self->tag;
+   return  $return . $self->id;
 }
 
 sub fullTag {
    my ($self) = @_;
 
-   return $self->tag() . ':' . $self->value();
+   return $self->id() . ':' . $self->value();
 }
 
 sub fullRealTag {
    my ($self) = @_;
 
-   return $self->realTag() . ':' . $self->value();
+   return $self->realId() . ':' . $self->value();
 };
 
 1;

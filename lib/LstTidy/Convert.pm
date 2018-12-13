@@ -3,6 +3,14 @@ package LstTidy::Convert;
 use strict;
 use warnings;
 
+# expand library path so we can find LstTidy modules
+use File::Basename qw(dirname);
+use Cwd  qw(abs_path);
+use lib dirname(dirname abs_path $0);
+
+use LstTidy::LogFactory;
+use LstTidy::Options;
+
 =head2 convertEntities
 
    This subroutine takes a single string and converts all special characters in
@@ -49,9 +57,10 @@ sub convertPreSpellType {
    
    if (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax')) {
 
-      if ($tag->tag() eq 'PRESPELLTYPE') {
+      if ($tag->id eq 'PRESPELLTYPE') {
 
-         if ($tag->value() =~ /^([^\d]+),(\d+),(\d+)/) {
+         if ($tag->value =~ /^([^\d]+),(\d+),(\d+)/) {
+
             my ($spelltype, $num_spells, $num_levels) = ($1, $2, $3);
 
             my $value = "$num_spells";
@@ -65,10 +74,10 @@ sub convertPreSpellType {
                $value .= ",$st=$num_levels";
             }
 
-            LstTidy::LogFactory::GetLogger()->notice(
-               qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:${value}" found and converted in } . $tag->linetype(),
-               $tag->file(),
-               $tag->line()
+            LstTidy::LogFactory::getLogger()->notice(
+               qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:} . $tag->value . qq{" found and converted in } . $tag->lineType,
+               $tag->file,
+               $tag->line
             );
 
             $tag->value($value);
@@ -79,14 +88,14 @@ sub convertPreSpellType {
       # I'll leave out the pipe-delimited error here, since it's more likely
       # to end up with confusion when the tag isn't standalone.
 
-      } elsif ($tag->value() =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
+      } elsif ($tag->value =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
 
-         $tag->value($tag->value() =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
+         $tag->value($tag->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
-         LstTidy::LogFactory::GetLogger()->notice(
-            qq{Invalid embedded PRESPELLTYPE tag "} . $tag->fullTag() . q{" found and converted } . $tag->linetype() . q{.},
-            $tag->file(),
-            $tag->line()
+         LstTidy::LogFactory::getLogger()->notice(
+            qq{Invalid embedded PRESPELLTYPE tag "} . $tag->fullTag . q{" found and converted } . $tag->lineType . q{.},
+            $tag->file,
+            $tag->line
          );
       }
    }
@@ -105,15 +114,15 @@ sub convertAddTags {
    #             4 = 5.12 format ADD tag, not using token.
 
    if ($type) {
-      # It's a ADD:token tag
+      # It's an ADD:token tag
       if ( $type == 1) {
-         $tag->tag($addTag);
+         $tag->id($addTag);
          $tag->value("($theRest)$addCount");
       }
 
       if (($type == 1 || $type == 2) && LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix'))
       {
-         $tag->tag("ADD:");
+         $tag->id("ADD:");
          $addTag =~ s/ADD://;
          $tag->value("$addTag|$addCount|$theRest");
       }
@@ -128,7 +137,7 @@ sub convertAddTags {
          );
 
          LstTidy::Report::incCountInvalidTags($tag->linetype, $addTag); 
-         $no_more_error = 1;
+         $tag->noMoreErrors(1);
       }
    }
 }

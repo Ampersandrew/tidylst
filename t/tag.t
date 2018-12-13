@@ -8,121 +8,131 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 43;
+use Test::More tests => 37;
 
 use_ok ('LstTidy::Tag');
 
+# Test the most basic form of the constructor with the four mantatory data items
+
 my $tag = LstTidy::Tag->new(
-   tag      => 'KEY',
+   id       => 'KEY',
    value    => 'Rogue ~ Sneak Attack',
    lineType => 'ABILITY',
    file     => 'foo_abilities.lst',
 );
 
-is($tag->tag(), 'KEY', "Basic accessor is ok");
+is($tag->id, 'KEY', "Basic accessor is ok");
 
-is($tag->hasLine(), q{}, "There is no line attribute");
+# Test the has line predicate and line attribute
+
+is($tag->hasLine, q{}, "There is no line attribute");
 
 $tag->line(24);
 
-is($tag->hasLine(), 1, "There is now a line attribute");
+is($tag->hasLine, 1, "There is now a line attribute");
+
+# Test the the six basic accessors work
 
 $tag = LstTidy::Tag->new(
-   tag      => 'Category',
+   id       => 'Category',
    value    => 'Feat',
    lineType => 'ABILITY',
    file     => 'foo_abilities.lst',
    line     => 42,
 );
 
-is($tag->tag(), 'Category', "Tag constructed correctly");
-is($tag->value(), 'Feat', "value constructed correctly");
-is($tag->lineType(), 'ABILITY', "lineType is correct");
-is($tag->file(), 'foo_abilities.lst', "File is correct");
-is($tag->hasLine(), 1, "There is a line attribute");
-is($tag->line(), 42, "line is correct");
+is($tag->id, 'Category', "Id is Category");
+is($tag->value, 'Feat', "Value is FEAT");
+is($tag->lineType, 'ABILITY', "lineType is ABILITY");
+is($tag->file, 'foo_abilities.lst', "File is correct");
+is($tag->hasLine, 1, "There is a line attribute");
+is($tag->line, 42, "line is correct");
+
+# Test using the full tag instead of the id & value parameters
 
 $tag = LstTidy::Tag->new(
-   tagValue => 'KEY:Rogue ~ Sneak Attack',
+   fullTag => 'KEY:Rogue ~ Sneak Attack',
    lineType => 'ABILITY',
    file     => 'foo_abilities.lst',
 );
 
-is($tag->tag(), 'KEY', "Tag constructed correctly");
-is($tag->value(), 'Rogue ~ Sneak Attack', "value constructed correctly");
+is($tag->id, 'KEY', "Id is KEY");
+is($tag->value, 'Rogue ~ Sneak Attack', "Value is Rogue ~ Sneak Attack");
 
-is($tag->lineType(), 'ABILITY', "lineType is unaffected");
-is($tag->file(), 'foo_abilities.lst', "File is unaffected");
+# Test empty Value properly sets the id & value
 
 $tag = LstTidy::Tag->new(
    {
-      tagValue => 'LICENCE:',
+      fullTag => 'LICENCE:',
       lineType => 'ABILITY',
       file     => 'foo_abilities.lst',
    }
 );
 
-is($tag->tag(), 'LICENCE', "Tag constructed correctly");
-is($tag->realTag(), 'LICENCE', "LICENCE: Real tag constructed correctly");
-is($tag->value(), '', "value constructed correctly");
+is($tag->id, 'LICENCE', "Id constructed correctly");
+is($tag->realId, 'LICENCE', "LICENCE: Real tag constructed correctly");
+is($tag->value, '', "value constructed correctly");
 
-is($tag->lineType(), 'ABILITY', "lineType is unaffected");
-is($tag->file(), 'foo_abilities.lst', "File is unaffected");
-
-$tag = LstTidy::Tag->new(
-   {
-      tagValue => 'BROKEN',
-      lineType => 'ABILITY',
-      file     => 'foo_abilities.lst',
-   }
-);
-
-is($tag->tag(), 'BROKEN', "Tag constructed correctly");
-is($tag->realTag(), 'BROKEN', "Real tag constructed correctly");
-is($tag->value(), undef, "value constructed correctly");
-is($tag->lineType(), 'ABILITY', "lineType is unaffected");
-is($tag->file(), 'foo_abilities.lst', "File is unaffected");
+# Test that a broken tag (no :) gives an undefined value.
+# Also test the realId accessor (identical to id for non !PRE)
 
 $tag = LstTidy::Tag->new(
-   {
-      tagValue => '!PREFOO:1|Wibble',
-      lineType => 'ABILITY',
-      file     => 'foo_abilities.lst',
-   }
+   fullTag => 'BROKEN',
+   lineType => 'ABILITY',
+   file     => 'foo_abilities.lst',
 );
 
-is($tag->tag(), 'PREFOO', "PREFOO tag constructed correctly");
-is($tag->realTag(), '!PREFOO', "!PREFOO real tag constructed correctly");
-is($tag->value(), "1|Wibble", "value constructed correctly");
-is($tag->lineType(), 'ABILITY', "lineType is unaffected");
-is($tag->file(), 'foo_abilities.lst', "File is unaffected");
+is($tag->id, 'BROKEN', "Id constructed correctly");
+is($tag->realId, 'BROKEN', "Real tag constructed correctly");
+is($tag->value, undef, "value constructed correctly");
 
-is($tag->fullTag(), 'PREFOO:1|Wibble', "Full tag reconstituted correctly.");
-is($tag->fullRealTag(), '!PREFOO:1|Wibble', "Full real tag reconstituted correctly.");
+# Test the negated PRE sets id & value and realId correctly
+
+$tag = LstTidy::Tag->new(
+   fullTag => '!PREFOO:1|Wibble',
+   lineType => 'ABILITY',
+   file     => 'foo_abilities.lst',
+);
+
+is($tag->id, 'PREFOO', "PREFOO tag constructed correctly");
+is($tag->realId, '!PREFOO', "!PREFOO real tag constructed correctly");
+is($tag->value, "1|Wibble", "value constructed correctly");
+
+is($tag->fullTag, 'PREFOO:1|Wibble', "Full tag reconstituted correctly.");
+is($tag->fullRealTag, '!PREFOO:1|Wibble', "Full real tag reconstituted correctly.");
 
 
 $tag = LstTidy::Tag->new(
-   {
-      tagValue => 'ABILITY:FEAT|AUTOMATIC|Toughness',
-      lineType => 'ABILITY',
-      file     => 'foo_abilities.lst',
-   }
+   fullTag  => 'ABILITY:FEAT|AUTOMATIC|Toughness',
+   lineType => 'ABILITY',
+   file     => 'foo_abilities.lst',
 );
 
 
-is($tag->tag(), 'ABILITY', "Tag constructed correctly");
-is($tag->realTag(), 'ABILITY', "Real tag constructed correctly");
-is($tag->value(), "FEAT|AUTOMATIC|Toughness", "value constructed correctly");
-is($tag->lineType(), 'ABILITY', "lineType is unaffected");
-is($tag->file(), 'foo_abilities.lst', "File is unaffected");
+is($tag->id, 'ABILITY', "Id constructed correctly");
+is($tag->realId, 'ABILITY', "Real tag constructed correctly");
+is($tag->value, "FEAT|AUTOMATIC|Toughness", "value constructed correctly");
+is($tag->lineType, 'ABILITY', "lineType is unaffected");
+is($tag->file, 'foo_abilities.lst', "File is unaffected");
 
-is($tag->fullTag(), 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly.");
-is($tag->fullRealTag(), 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly.");
-is($tag->origTag(), 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct.");
+is($tag->fullTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly.");
+is($tag->fullRealTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly.");
+is($tag->origId, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct.");
 
-$tag->tag('FEAT');
+# Test that changing the id updates id, fullTag, fullRealTag, but not origId
 
-is($tag->tag(), 'FEAT', "Tag changes correctly");
-is($tag->fullTag(), 'FEAT:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly after change of tag.");
-is($tag->fullRealTag(), 'FEAT:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly after change of tag.");
-is($tag->origTag(), 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct after change of tag.");
+$tag->id('FEAT');
+
+is($tag->id, 'FEAT', "Id changes correctly");
+is($tag->fullTag, 'FEAT:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly after change of tag.");
+is($tag->fullRealTag, 'FEAT:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly after change of tag.");
+is($tag->origId, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct after change of tag.");
+
+# Test noMoreErrors
+
+is($tag->noMoreErrors, undef, "Unset no more errors is undefined");
+
+$tag->noMoreErrors(1);
+
+is($tag->noMoreErrors, 1, "set no more errors is 1");
+
