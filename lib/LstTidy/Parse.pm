@@ -810,27 +810,201 @@ my %tagheader = (
 
 );
 
-my %tokenAddTag = map { $_ => 1 } (
-   'ADD:.CLEAR',
-   'ADD:CLASSSKILLS',
-   'ADD:DOMAIN',
-   'ADD:EQUIP',
-   'ADD:FAVOREDCLASS',
-   'ADD:LANGUAGE',
-   'ADD:SAB',
-   'ADD:SPELLCASTER',
-   'ADD:SKILL',
-   'ADD:TEMPLATE',
-   'ADD:WEAPONPROFS',
+my %tokenAddTag = (
+   'ADD:.CLEAR'               => 1,
+   'ADD:CLASSSKILLS'          => 1,
+   'ADD:DOMAIN'               => 1,
+   'ADD:EQUIP'                => 1,
+   'ADD:FAVOREDCLASS'         => 1,
+   'ADD:LANGUAGE'             => 1,
+   'ADD:SAB'                  => 1,
+   'ADD:SPELLCASTER'          => 1,
+   'ADD:SKILL'                => 1,
+   'ADD:TEMPLATE'             => 1,
+   'ADD:WEAPONPROFS'          => 1,
 
-   'ADD:FEAT',             # Deprecated
-   'ADD:FORCEPOINT',       # Deprecated, never heard of this!
-   'ADD:INIT',             # Deprecated
-   'ADD:SPECIAL',          # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
-   'ADD:VFEAT',            # Deprecated
+   'ADD:FEAT'                 => 1,    # Deprecated
+   'ADD:FORCEPOINT'           => 1,    # Deprecated - never heard of this!
+   'ADD:INIT'                 => 1,    # Deprecated
+   'ADD:SPECIAL'              => 1,    # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
+   'ADD:VFEAT'                => 1,    # Deprecated
 );
 
+my %validSubTags = (
+   AUTO => {
+      'ARMORPROF'             => 1,
+      'EQUIP'                 => 1,
+      'LANG'                  => 1,
+      'SHIELDPROF'            => 1,
+      'WEAPONPROF'            => 1,
 
+      'FEAT'                  => 1,    # Deprecated
+   },
+
+   BONUS => {
+      'ABILITYPOOL'           => 1,
+      'CASTERLEVEL'           => 1,
+      'COMBAT'                => 1,
+      'CONCENTRATION'         => 1,
+      'DC'                    => 1,
+      'DOMAIN'                => 1,
+      'DR'                    => 1,
+      'EQM'                   => 1,
+      'EQMARMOR'              => 1,
+      'EQMWEAPON'             => 1,
+      'FOLLOWERS'             => 1,
+      'HD'                    => 1,
+      'HP'                    => 1,
+      'ITEMCOST'              => 1,
+      'MISC'                  => 1,
+      'MONSKILLPTS'           => 1,
+      'MOVEADD'               => 1,
+      'MOVEMULT'              => 1,
+      'POSTRANGEADD'          => 1,
+      'POSTMOVEADD'           => 1,
+      'PCLEVEL'               => 1,
+      'RANGEADD'              => 1,
+      'RANGEMULT'             => 1,
+      'SIZEMOD'               => 1,
+      'SAVE'                  => 1,
+      'SKILL'                 => 1,
+      'SITUATION'             => 1,
+      'SKILLPOINTS'           => 1,
+      'SKILLPOOL'             => 1,
+      'SKILLRANK'             => 1,
+      'SLOTS'                 => 1,
+      'SPELL'                 => 1,
+      'SPECIALTYSPELLKNOWN'   => 1,
+      'SPELLCAST'             => 1,
+      'SPELLCASTMULT'         => 1,
+      'SPELLKNOWN'            => 1,
+      'VISION'                => 1,
+      'STAT'                  => 1,
+      'UDAM'                  => 1,
+      'VAR'                   => 1,
+      'WEAPON'                => 1,
+      'WEAPONPROF'            => 1,
+      'WIELDCATEGORY'         => 1,
+
+      'CHECKS'                => 1,    # Deprecated
+      'DAMAGE'                => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
+      'ESIZE'                 => 1,    # Not listed in the Docs
+      'FEAT'                  => 1,    # Deprecated
+      'LANGUAGES'             => 1,    # Not listed in the Docs
+      'MOVE'                  => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
+      'REPUTATION'            => 1,    # Not listed in the Docs
+      'TOHIT'                 => 1,    # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
+   },
+
+   PROFICIENCY => {
+      'WEAPON'                => 1,
+      'ARMOR'                 => 1,
+      'SHIELD'                => 1,
+   },
+
+   QUALIFY => {
+      'ABILITY'               => 1,
+      'CLASS'                 => 1,
+      'DEITY'                 => 1,
+      'DOMAIN'                => 1,
+      'EQUIPMENT'             => 1,
+      'EQMOD'                 => 1,
+      'RACE'                  => 1,
+      'SPELL'                 => 1,
+      'SKILL'                 => 1,
+      'TEMPLATE'              => 1,
+      'WEAPONPROF'            => 1,
+
+      'FEAT'                  => 1,    # Deprecated
+   },
+
+   SPELLLEVEL => {
+      CLASS                   => 1,
+      DOMAIN                  => 1,
+   },
+
+   SPELLKNOWN => {
+      CLASS                   => 1,
+      DOMAIN                  => 1,
+   },
+);
+
+my %tokenBonusTag = (
+   'ABILITYPOOL'           => 1,
+   'CASTERLEVEL'           => 1,
+   'COMBAT'                => 1,
+   'CONCENTRATION'         => 1,
+   'DC'                    => 1,
+   'DOMAIN'                => 1,
+   'DR'                    => 1,
+   'EQM'                   => 1,
+   'EQMARMOR'              => 1,
+   'EQMWEAPON'             => 1,
+   'FOLLOWERS'             => 1,
+   'HD'                    => 1,
+   'HP'                    => 1,
+   'ITEMCOST'              => 1,
+   'MISC'                  => 1,
+   'MONSKILLPTS'           => 1,
+   'MOVEADD'               => 1,
+   'MOVEMULT'              => 1,
+   'POSTRANGEADD'          => 1,
+   'POSTMOVEADD'           => 1,
+   'PCLEVEL'               => 1,
+   'RANGEADD'              => 1,
+   'RANGEMULT'             => 1,
+   'SIZEMOD'               => 1,
+   'SAVE'                  => 1,
+   'SKILL'                 => 1,
+   'SITUATION'             => 1,
+   'SKILLPOINTS'           => 1,
+   'SKILLPOOL'             => 1,
+   'SKILLRANK'             => 1,
+   'SLOTS'                 => 1,
+   'SPELL'                 => 1,
+   'SPECIALTYSPELLKNOWN'   => 1,
+   'SPELLCAST'             => 1,
+   'SPELLCASTMULT'         => 1,
+   'SPELLKNOWN'            => 1,
+   'VISION'                => 1,
+   'STAT'                  => 1,
+   'UDAM'                  => 1,
+   'VAR'                   => 1,
+   'WEAPON'                => 1,
+   'WEAPONPROF'            => 1,
+   'WIELDCATEGORY'         => 1,
+
+   'CHECKS'                => 1,    # Deprecated
+   'DAMAGE'                => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
+   'ESIZE'                 => 1,    # Not listed in the Docs
+   'FEAT'                  => 1,    # Deprecated
+   'LANGUAGES'             => 1,    # Not listed in the Docs
+   'MOVE'                  => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
+   'REPUTATION'            => 1,    # Not listed in the Docs
+   'TOHIT'                 => 1,    # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
+);
+
+my %tokenProficiencyTag = (
+   'WEAPON'                => 1,
+   'ARMOR'                 => 1,
+   'SHIELD'                => 1,
+);
+
+my %tokenQualifyTag = (
+   'ABILITY'               => 1,
+   'CLASS'                 => 1,
+   'DEITY'                 => 1,
+   'DOMAIN'                => 1,
+   'EQUIPMENT'             => 1,
+   'EQMOD'                 => 1,
+   'RACE'                  => 1,
+   'SPELL'                 => 1,
+   'SKILL'                 => 1,
+   'TEMPLATE'              => 1,
+   'WEAPONPROF'            => 1,
+
+   'FEAT'                  => 1,    # Deprecated
+);
 
 
 =head2 parseFile
@@ -876,7 +1050,7 @@ my %writefiletype = (
    'EQUIPMENT'       => 1,
    'EQUIPMOD'        => 1,
    'FEAT'            => 1,
-   'KIT',            => 1,
+   'KIT'             => 1,
    'LANGUAGE'        => 1,
    'LSTEXCLUDE'      => 0,
    'INFOTEXT'        => 0,
@@ -1461,7 +1635,7 @@ sub getParseControl {
 }
 
 
-# These are populated at the end of parseSystemFiles 
+# These are populated after parseSystemFiles has been run
 my %validCheckName = ();
 my %validGameModes = ();
 
@@ -1686,6 +1860,61 @@ sub parseAddTag {
    return ( 0, "", undef, 0 );
 }
 
+=head2 parseAutoTag
+   
+   Check that the Auto tag is valid and adjust the $tag if appropraite.
+
+=cut
+
+sub parseAutoTag {
+
+   my ($tag) = @_;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   my $foundAutoType;
+
+   AUTO_TYPE:
+   for my $autoType ( sort { length($b) <=> length($a) || $a cmp $b } keys %{ $validSubTags{'AUTO'} } ) {
+
+      if ( $tag->value =~ m/^$autoType/ ) {
+         # We found what we were looking for
+         $tag->value($tag->value =~ s/^$autoType//r);
+         $foundAutoType = $autoType;
+         last AUTO_TYPE;
+      }
+   }
+
+   if ($foundAutoType) {
+      
+      $tag->id($tag->id . ':' . $foundAutoType);
+
+   } elsif ( $tag->value =~ /^([^=:|]+)/ ) {
+
+      my $potentialAddTag = $tag->id . ':' . $1;
+
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialAddTag); 
+      $logger->notice(
+         qq{Invalid tag "$potentialAddTag" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+      $tag->noMoreErrors(1);
+
+   } else {
+
+      LstTidy::Report::incCountInvalidTags($tag->lineType, "AUTO"); 
+      $logger->notice(
+         qq{Invalid ADD tag "} . $tag->origTag . q{" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+      $tag->noMoreErrors(1);
+
+   }
+}
+
+
 =head2 parseJep
 
    Parse a Jep formula expression and return a list of variables found.
@@ -1719,6 +1948,52 @@ sub parseJep {
       return _extract_var_name(@_);
    } else {
       return _parseJepRec( @_, 0 );
+   }
+}
+
+
+=head2 parseSubTag
+
+   Check that the sub token is valid and adjust the $tag if appropraite.
+
+=cut
+
+sub parseSubTag {
+
+   my ($tag) = @_;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   # If this is s a subTag, the subTag is currently on the front of the value.
+   my ($subTag) = ($tag->value =~ /^([^=:|]+)/ );
+
+   my $potentialTag = $tag->id . ':' . $subTag;
+
+   if ($subTag && exists $validSubTags{$tag->id}{$subTag}) {
+
+      $tag->id($potentialTag);
+      $tag->value($tag->value =~ s/^$subTag(.*)/$1/r);
+
+   } elsif ($subTag) {
+
+      # No valid type found
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialTag); 
+      $logger->notice(
+         qq{Invalid $potentialTag tag "} . $tag->origTag . q{" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+      $tag->noMoreErrors(1);
+
+   } else {
+
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->id); 
+      $logger->notice(
+         q{Invalid } . $tag->id . q{ tag "} . $tag->origTag . q{" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+      $tag->noMoreErrors(1);
    }
 }
 

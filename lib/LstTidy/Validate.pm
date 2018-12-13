@@ -762,6 +762,53 @@ sub processPREVAR {
    }
 }
 
+
+=head2 validateClearTag
+
+   Validate the Clear tag.
+
+   IF necessary, move the CLEAR from the value to the id.
+
+=cut
+
+   sub validateClearTag {
+   my ($tag) = @_;;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   # All the .CLEAR must be separated tags to help with the tag ordering. That
+   # is, we need to make sure the .CLEAR is ordered before the normal tag.  If
+   # the .CLEAR version of the tag doesn't exists, we do not change the tag
+   # name but we give a warning.
+
+
+      my $clearTag    = $tag->id . ':.CLEAR';
+      my $clearAllTag = $tag->id . ':.CLEARALL';
+
+      if ( LstTidy::Reformat::isValidTag($tag->lineType, $clearAllTag)) {
+
+         # Don't do the else clause at the bottom
+
+      } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
+
+         $logger->notice(
+            q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
+            $file,
+            $line
+         );
+         LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag); 
+         $tag->noMoreErrors(1);
+
+      } else {
+
+         # Its a valid CLEAR tag, move the subTag to id
+         $tag->id($clearTag);
+         $tag->value($tag->value =~ s/^.CLEAR//ir);
+
+      }
+   }
+
+
 =head2 validatePreTag
 
    Validate the PRExxx tags. This function is reentrant and can be called

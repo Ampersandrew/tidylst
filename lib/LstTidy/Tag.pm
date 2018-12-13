@@ -16,7 +16,7 @@ has 'isNegatedPre' => (
    isa    => 'Bool',
 );
 
-has 'origId' => (
+has 'origTag' => (
    is  => 'ro',
    isa => 'Str',
 );
@@ -60,18 +60,18 @@ around 'BUILDARGS' => sub {
    if ( exists $args{'fullTag'} ) {
       @args{'id', 'value'} = split ':', $args{'fullTag'}, 2;
 
-      # got a fullTag store it as a readonly origId
-      $args{'origId'} = $args{'fullTag'};
+      # got a fullTag store it as a readonly origTag
+      $args{'origTag'} = $args{'fullTag'};
 
       delete $args{'fullTag'};
 
-   # no fullTag, construct an origId
+   # no fullTag, construct an origTag
    } else {
       
       my $id   = exists $args{'id'} ? $args{'id'} : q{} ;
       my $value = exists $args{'value'} ? $args{'value'} : q{};
 
-      $args{'origId'} = $id . ':' . $value;
+      $args{'origTag'} = $id . ':' . $value;
    }
 
    return $self->$orig(%args);

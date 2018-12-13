@@ -823,82 +823,6 @@ my %token_FACTSET_tag = map { $_ => 1 } (
         'FACTSET:Race',
 );
 
-
-my %token_BONUS_tag = map { $_ => 1 } (
-   'ABILITYPOOL',
-   'CASTERLEVEL',
-   'CHECKS',               # Deprecated
-   'COMBAT',
-   'CONCENTRATION',
-   'DAMAGE',               # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
-   'DC',
-   'DOMAIN',
-   'DR',
-   'EQM',
-   'EQMARMOR',
-   'EQMWEAPON',
-   'ESIZE',                # Not listed in the Docs
-   'FEAT',         # Deprecated
-   'FOLLOWERS',
-   'HD',
-   'HP',
-   'ITEMCOST',
-   'LANGUAGES',    # Not listed in the Docs
-   'MISC',
-   'MONSKILLPTS',
-   'MOVE',         # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
-   'MOVEADD',
-   'MOVEMULT',
-   'POSTRANGEADD',
-   'POSTMOVEADD',
-   'PCLEVEL',
-   'RANGEADD',
-   'RANGEMULT',
-   'REPUTATION',   # Not listed in the Docs
-   'SIZEMOD',
-   'SAVE',
-   'SKILL',
-   'SITUATION',
-   'SKILLPOINTS',
-   'SKILLPOOL',
-   'SKILLRANK',
-   'SLOTS',
-   'SPELL',
-   'SPECIALTYSPELLKNOWN',
-   'SPELLCAST',
-   'SPELLCASTMULT',
-   'SPELLKNOWN',
-   'VISION',
-   'STAT',
-   'TOHIT',                # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
-   'UDAM',
-   'VAR',
-   'WEAPON',
-   'WEAPONPROF',
-   'WIELDCATEGORY',
-);
-
-my %token_PROFICIENCY_tag = map { $_ => 1 } (
-   'WEAPON',
-   'ARMOR',
-   'SHIELD',
-);
-
-my %token_QUALIFY_tag = map { $_ => 1 } (
-   'ABILITY',
-   'CLASS',
-   'DEITY',
-   'DOMAIN',
-   'EQUIPMENT',
-   'EQMOD',
-   'FEAT',         # Deprecated
-   'RACE',
-   'SPELL',
-   'SKILL',
-   'TEMPLATE',
-   'WEAPONPROF',
-);
-
 my %token_BONUS_MONSKILLPTS_types = map { $_ => 1 } (
         'LOCKNUMBER',
 );
@@ -931,16 +855,6 @@ my %token_BONUS_SLOTS_types = map { $_ => 1 } (
 
         # Special value for the CHOOSE tag
         'LIST',
-);
-
-# [ 832171 ] AUTO:* needs to be separate tags
-my @token_AUTO_tag = (
-   'ARMORPROF',
-   'EQUIP',
-   'FEAT',         # Deprecated
-   'LANG',
-   'SHIELDPROF',
-   'WEAPONPROF',
 );
 
 # Add the CHOOSE type.

@@ -117,16 +117,16 @@ is($tag->file, 'foo_abilities.lst', "File is unaffected");
 
 is($tag->fullTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly.");
 is($tag->fullRealTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly.");
-is($tag->origId, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct.");
+is($tag->origTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct.");
 
-# Test that changing the id updates id, fullTag, fullRealTag, but not origId
+# Test that changing the id updates id, fullTag, fullRealTag, but not origTag
 
 $tag->id('FEAT');
 
 is($tag->id, 'FEAT', "Id changes correctly");
 is($tag->fullTag, 'FEAT:FEAT|AUTOMATIC|Toughness', "Full tag reconstituted correctly after change of tag.");
 is($tag->fullRealTag, 'FEAT:FEAT|AUTOMATIC|Toughness', "Full Real tag reconstituted correctly after change of tag.");
-is($tag->origId, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct after change of tag.");
+is($tag->origTag, 'ABILITY:FEAT|AUTOMATIC|Toughness', "Original tag is correct after change of tag.");
 
 # Test noMoreErrors
 
