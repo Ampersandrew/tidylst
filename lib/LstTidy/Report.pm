@@ -8,13 +8,13 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 # predeclare this so we can call it without & or trailing () like a builtin
-sub report_tag_sort;
+sub reportTagSort;
 
-# Will hold the information for the entries that must be added in %referrer or
-# %referrer_types. The array is needed because all the files must have been
-# parsed before processing the information to be added.  The function
-# add_to_xcheck_tables will be called with each line of the array.
-our @xcheck_to_process;  
+# Will hold the number of each tag found (by linetype)
+my %count_tags;
+
+# File handles for the Export Lists
+our %filehandles;
 
 # Will hold the tags that refer to other entries
 # Format: push @{$referrer{$EntityType}{$entryname}}, [ $tags{$column}, $file_for_error, $line_for_error ]
@@ -30,8 +30,12 @@ my %referrer_types;
 
 my %valid_sub_entities;
 
-# Will hold the number of each tag found (by linetype)
-my %count_tags;
+# Will hold the information for the entries that must be added in %referrer or
+# %referrer_types. The array is needed because all the files must have been
+# parsed before processing the information to be added.  The function
+# add_to_xcheck_tables will be called with each line of the array.
+our @xcheck_to_process;  
+
 
 # Variables names that must be skiped for the DEFINE variable section
 # entry type.
@@ -63,18 +67,18 @@ my %Hardcoded_Variables = map { $_ => 1 } (
    'APPLIEDAS',
 );
 
-sub incCountValidTags {
-   my ($lineType, $tag) = @_;
+=head2 closeExportListFileHandles
 
-   $count_tags{"Valid"}{"Total"}{$tag}++;
-   $count_tags{"Valid"}{$lineType}{$tag}++;
-}
+   Close the file handles used for the export list function.
 
-sub incCountInvalidTags {
-   my ($lineType, $tag) = @_;
+=cut
 
-   $count_tags{"Invalid"}{"Total"}{$tag}++;
-   $count_tags{"Invalid"}{$lineType}{$tag}++;
+sub closeExportListFileHandles {
+
+   # Close all the files in reverse order that they were opened
+   for my $line_type ( reverse sort keys %filehandles ) {
+      close $filehandles{$line_type};
+   }
 }
 
 =head2 foundInvalidTags
@@ -87,9 +91,221 @@ sub foundInvalidTags {
    return exists $count_tags{"Invalid"};
 }
 
+=head2 incCountInvalidTags
+
+   Increment the statistics of invalid tags found, counting both the total and a
+   count of each tag by line type.
+
+=cut
+
+sub incCountInvalidTags {
+
+   my ($lineType, $tag) = @_;
+
+   $count_tags{"Invalid"}{"Total"}{$tag}++;
+   $count_tags{"Invalid"}{$lineType}{$tag}++;
+}
+
+=head2 incCountValidTags
+
+   Increment the statistics of valid tags found, counting both the total and a
+   count of each tag by line type.
+
+=cut
+
+sub incCountValidTags {
+
+   my ($lineType, $tag) = @_;
+
+   $count_tags{"Valid"}{"Total"}{$tag}++;
+   $count_tags{"Valid"}{$lineType}{$tag}++;
+}
+
+=head2 openExportListFileHandles
+
+   Open the file handles for exporting lists of valid objects found (e.g.
+   Classes in CLASS files, Deitys in DEITY files, etc.) and write a header to
+   each.
+
+=cut
+
+sub openExportListFileHandles {
+                
+   # The files should be opened in alpha order since they will
+   # be closed in reverse alpha order.
+
+   # Will hold the list of all classes found in CLASS filetypes
+   open $filehandles{CLASS}, '>', 'class.csv';
+   print { $filehandles{CLASS} } qq{"Class Name","Line","Filename"\n};
+
+   # Will hold the list of all deities found in DEITY filetypes
+   open $filehandles{DEITY}, '>', 'deity.csv';
+   print { $filehandles{DEITY} } qq{"Deity Name","Line","Filename"\n};
+
+   # Will hold the list of all domains found in DOMAIN filetypes
+   open $filehandles{DOMAIN}, '>', 'domain.csv';
+   print { $filehandles{DOMAIN} } qq{"Domain Name","Line","Filename"\n};
+
+   # Will hold the list of all equipements found in EQUIPMENT filetypes
+   open $filehandles{EQUIPMENT}, '>', 'equipment.csv';
+   print { $filehandles{EQUIPMENT} } qq{"Equipment Name","Output Name","Line","Filename"\n};
+
+   # Will hold the list of all equipmod entries found in EQUIPMOD filetypes
+   open $filehandles{EQUIPMOD}, '>', 'equipmod.csv';
+   print { $filehandles{EQUIPMOD} } qq{"Equipmod Name","Key","Type","Line","Filename"\n};
+
+   # Will hold the list of all feats found in FEAT filetypes
+   open $filehandles{FEAT}, '>', 'feat.csv';
+   print { $filehandles{FEAT} } qq{"Feat Name","Line","Filename"\n};
+
+   # Will hold the list of all kits found in KIT filetypes
+   open $filehandles{KIT}, '>', 'kit.csv';
+   print { $filehandles{KIT} } qq{"Kit Startpack Name","Line","Filename"\n};
+
+   # Will hold the list of all language found in LANGUAGE linetypes
+   open $filehandles{LANGUAGE}, '>', 'language.csv';
+   print { $filehandles{LANGUAGE} } qq{"Language Name","Line","Filename"\n};
+
+   # Will hold the list of all PCC files found
+   open $filehandles{PCC}, '>', 'pcc.csv';
+   print { $filehandles{PCC} } qq{"SOURCELONG","SOURCESHORT","GAMEMODE","Full Path"\n};
+
+   # Will hold the list of all races and race types found in RACE filetypes
+   open $filehandles{RACE}, '>', 'race.csv';
+   print { $filehandles{RACE} } qq{"Race Name","Race Type","Race Subtype","Line","Filename"\n};
+
+   # Will hold the list of all skills found in SKILL filetypes
+   open $filehandles{SKILL}, '>', 'skill.csv';
+   print { $filehandles{SKILL} } qq{"Skill Name","Line","Filename"\n};
+
+   # Will hold the list of all spells found in SPELL filetypes
+   open $filehandles{SPELL}, '>', 'spell.csv';
+   print { $filehandles{SPELL} } qq{"Spell Name","Source Page","Line","Filename"\n};
+
+   # Will hold the list of all kit Tables found in KIT filetypes
+   open $filehandles{TABLE}, '>', 'kit-table.csv';
+   print { $filehandles{TABLE} } qq{"Table Name","Line","Filename"\n};
+
+   # Will hold the list of all templates found in TEMPLATE filetypes
+   open $filehandles{TEMPLATE}, '>', 'template.csv';
+   print { $filehandles{TEMPLATE} } qq{"Tempate Name","Line","Filename"\n};
+
+   # Will hold the list of all variables found in DEFINE tags
+   if ( getOption('xcheck') ) {
+      open $filehandles{VARIABLE}, '>', 'variable.csv';
+      print { $filehandles{VARIABLE} } qq{"Var Name","Line","Filename"\n};
+   }
+
+   # We need to list the tags that use Willpower
+   if ( LstTidy::Options::isConversionActive('ALL:Find Willpower') ) {
+      open $filehandles{Willpower}, '>', 'willpower.csv';
+      print { $filehandles{Willpower} } qq{"Tag","Line","Filename"\n};
+   }
+}
+
+=head2 printToExportList
+
+   C<LstTidy::Report::printToExportList('handle', @stuff)>
+
+   Prints the strings in @stuff to the filehandle named 'handle'.
+
+=cut
+
+sub printToExportList {
+   my ($handle, @data) = @_;
+   print { $filehandles{$handle} } @data;
+}
+
+=head2 registerReferrer
+
+   Register this data for later cross checking
+
+=cut
+
+sub registerReferrer {
+   my ($linetype, $entity_name, $token, $file, $line) = @_;
+
+   push @{ $referrer{$linetype}{$entity_name} }, [ $token, $file, $line ]
+}
+
+=head2 registerXCheck
+
+   Register this data for later cross checking
+
+=cut
+
+sub registerXCheck {
+   my ($preType, $tag, $file, $line, @values) = @_;
+   
+   push @xcheck_to_process, [ $preType, $tag, $file, $line, @values ];
+}
+
+=head2 reportInvalid
+
+   Print a report for the number of invalid tags found.
+
+=cut
+
+sub reportInvalid {
+
+   print STDERR "\n================================================================\n";
+   print STDERR "Invalid tags found\n";
+   print STDERR "----------------------------------------------------------------\n";
+
+   my $first = 1;
+   INVALID_LINE_TYPE:
+   for my $linetype ( sort keys %{ $count_tags{"Invalid"} } ) {
+
+      next INVALID_LINE_TYPE if $linetype eq "Total";
+
+      print STDERR "\n" unless $first;
+      print STDERR "Line Type: $linetype\n";
+
+      for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{$linetype} } ) {
+
+         my $line = "    $tag";
+         $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{$linetype}{$tag};
+         print STDERR "$line\n";
+      }
+
+      $first = 0;
+   }
+
+   print STDERR "\nTotal:\n";
+
+   for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{"Total"} } ) {
+
+      my $line = "    $tag";
+      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{"Total"}{$tag};
+      print STDERR "$line\n";
+
+   }
+}
+
+=head2 reportTagSort
+
+   A sort operation used on the list of tags when reporting.
+
+   It's a normal ASCII sort except that leading ! are removed when found.  This
+   means that PRExxx and !PRExxx are sorted together, with !PRExxx following
+   PRExxx.
+
+=cut
+
+sub reportTagSort {
+   my ( $left, $right ) = ( $a, $b );      # We need a copy in order to modify
+
+   # Remove the !. $not_xxx contains 1 if there was a !, otherwise
+   # it contains 0.
+   my $not_left  = $left  =~ s{^!}{}xms;
+   my $not_right = $right =~ s{^!}{}xms;
+
+   $left cmp $right || $not_left <=> $not_right;
+}
+
 =head2 reportValid
    
-   Print a report for the number of tags found.
+   Print a report for the number of valid tags found.
    
 =cut
 
@@ -107,7 +323,7 @@ sub reportValid {
       print STDERR "\n" unless $first;
       print STDERR "Line Type: $line_type\n";
 
-      for my $tag ( sort report_tag_sort keys %{ $count_tags{"Valid"}{$line_type} } ) {
+      for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{$line_type} } ) {
 
          my $tagdisplay = $tag;
          $tagdisplay .= "*" if LstTidy::Reformat::isValidMultiTag($line_type, $tag);
@@ -122,7 +338,7 @@ sub reportValid {
 
    print STDERR "\nTotal:\n";
 
-   for my $tag ( sort report_tag_sort keys %{ $count_tags{"Valid"}{"Total"} } ) {
+   for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{"Total"} } ) {
 
       my $line = "    $tag";
       $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Valid"}{"Total"}{$tag};
@@ -133,98 +349,6 @@ sub reportValid {
 
 
 
-
-=head2 reportInvalid
-
-
-=cut
-
-
-sub reportInvalid {
-
-   print STDERR "\n================================================================\n";
-   print STDERR "Invalid tags found\n";
-   print STDERR "----------------------------------------------------------------\n";
-
-   my $first = 1;
-   INVALID_LINE_TYPE:
-   for my $linetype ( sort keys %{ $count_tags{"Invalid"} } ) {
-
-      next INVALID_LINE_TYPE if $linetype eq "Total";
-
-      print STDERR "\n" unless $first;
-      print STDERR "Line Type: $linetype\n";
-
-      for my $tag ( sort report_tag_sort keys %{ $count_tags{"Invalid"}{$linetype} } ) {
-
-         my $line = "    $tag";
-         $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{$linetype}{$tag};
-         print STDERR "$line\n";
-      }
-
-      $first = 0;
-   }
-
-   print STDERR "\nTotal:\n";
-
-   for my $tag ( sort report_tag_sort keys %{ $count_tags{"Invalid"}{"Total"} } ) {
-
-      my $line = "    $tag";
-      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{"Total"}{$tag};
-      print STDERR "$line\n";
-
-   }
-}
-
-
-
-=head2 report_tag_sort
-
-   Sort used for the tag when reporting them.
-
-   Basicaly, it's a normal ASCII sort except that the ! are removed when found
-   (the PRExxx and !PRExxx are sorted one after the other).
-
-=cut
-
-sub report_tag_sort {
-   my ( $left, $right ) = ( $a, $b );      # We need a copy in order to modify
-
-   # Remove the !. $not_xxx contains 1 if there was a !, otherwise
-   # it contains 0.
-   my $not_left  = $left  =~ s{^!}{}xms;
-   my $not_right = $right =~ s{^!}{}xms;
-
-   $left cmp $right || $not_left <=> $not_right;
-}
-
-
-
-
-=head2 registerXCheck
-
-   Register this data for later cross checking
-
-=cut
-
-sub registerXCheck {
-   my ($preType, $tag, $file, $line, @values) = @_;
-   
-   push @xcheck_to_process, [ $preType, $tag, $file, $line, @values ];
-}
-
-
-=head2 registerReferrer
-
-   Register this data for later cross checking
-
-=cut
-
-sub registerReferrer {
-   my ($linetype, $entity_name, $token, $file, $line) = @_;
-
-   push @{ $referrer{$linetype}{$entity_name} }, [ $token, $file, $line ]
-}
 
 
 =head2 add_to_xcheck_tables
@@ -726,7 +850,7 @@ sub _addToReport {
 
 =head2 doXCheck
 
-   Precoess the the cross check resords stored earlier to produce a report.
+   Process the the cross check records stored earlier to produce a report.
 
 =cut
 
@@ -890,7 +1014,7 @@ sub doXCheck {
 
          $logger->report("Line Type: ${linetype}");
 
-         for my $header ( sort report_tag_sort keys %{ $missing_headers{$linetype} } ) {
+         for my $header ( sort reportTagSort keys %{ $missing_headers{$linetype} } ) {
             $logger->report("  ${header}");
          }
       }

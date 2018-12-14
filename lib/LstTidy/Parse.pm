@@ -40,9 +40,6 @@ use constant {
    TABSIZE        => 6,
 };
 
-# Will hold the tags that do not have defined headers for each linetype.
-my %missing_headers;    
-
 # List of keywords Jep functions names. The fourth and fifth rows are for
 # functions defined by the PCGen libraries that do not exists in
 # the standard Jep library.
@@ -50,7 +47,7 @@ my %is_jep_function = map { $_ => 1 } qw(
    sin     cos     tan     asin    acos    atan    atan2   sinh
    cosh    tanh    asinh   acosh   atanh   ln      log     exp
    abs     rand    mod     sqrt    sum     if      str
-   
+
    ceil    cl      classlevel      count   floor   min
    max     roll    skillinfo       var     mastervar       APPLIEDAS
 );
@@ -70,16 +67,95 @@ my $is_operator = qr{ $is_operators_text }xms;
 
 my $is_number = qr{ (?: \d+ (?: [.] \d* )? ) | (?: [.] \d+ ) }xms;
 
+# Will hold the tags that do not have defined headers for each linetype.
+my %missing_headers;
+
+# Limited choice tags
+my %tagFixValue = (
+
+   ALLOWBASECLASS       => { YES => 1, NO => 1 },
+   DESCISIP             => { YES => 1, NO => 1 },
+   EXCLUSIVE            => { YES => 1, NO => 1 },
+   FREE                 => { YES => 1, NO => 1 },
+   HASSUBCLASS          => { YES => 1, NO => 1 },
+   HASSUBSTITUTIONLEVEL => { YES => 1, NO => 1 },
+   ISD20                => { YES => 1, NO => 1 },
+   ISLICENSED           => { YES => 1, NO => 1 },
+   ISMATURE             => { YES => 1, NO => 1 },
+   ISOGL                => { YES => 1, NO => 1 },
+   MEMORIZE             => { YES => 1, NO => 1 },
+   MODTOSKILLS          => { YES => 1, NO => 1 },
+   MULT                 => { YES => 1, NO => 1 },
+   NAMEISPI             => { YES => 1, NO => 1 },
+   PRESPELLBOOK         => { YES => 1, NO => 1 },
+   RACIAL               => { YES => 1, NO => 1 },
+   REMOVABLE            => { YES => 1, NO => 1 },
+   RESIZE               => { YES => 1, NO => 1 },
+   SHOWINMENU           => { YES => 1, NO => 1 },
+   SPELLBOOK            => { YES => 1, NO => 1 },
+   STACK                => { YES => 1, NO => 1 },
+   USEMASTERSKILL       => { YES => 1, NO => 1 },
+   USEUNTRAINED         => { YES => 1, NO => 1 },
+
+   ACHECK               => { map { $_ => 1 } qw( YES NO WEIGHT PROFICIENT DOUBLE ) },
+   APPLY                => { map { $_ => 1 } qw( INSTANT PERMANENT ) },
+   FORMATCAT            => { map { $_ => 1 } qw( FRONT MIDDLE PARENS ) },
+   MODS                 => { map { $_ => 1 } qw( YES NO REQUIRED ) },
+   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
+   VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
+
+   # See updateValidity for the values of these keys
+   # BONUSSPELLSTAT       
+   # SPELLSTAT            
+   # ALIGN                
+   # PREALIGN             
+   # KEYSTAT              
+
+);
+
+# These operations convert the id of tags with subTags to contain the embeded :
+my %tagProcessor = (
+   ADD         => \&LstTidy::Convert::convertAddTags,
+   AUTO        => \&LstTidy::Parse::parseAutoTag,
+   BONUS       => \&LstTidy::Parse::parseSubTag,
+   PROFICIENCY => \&LstTidy::Parse::parseSubTag,
+   QUALIFY     => \&LstTidy::Parse::parseSubTag,
+   SPELLLEVEL  => \&LstTidy::Parse::parseSubTag,
+   SPELLKNOWN  => \&LstTidy::Parse::parseSubTag,
+);
+
+# This hash is used to convert 1 character choices to proper fix values.
+my %tagProperValue = (
+   'Y'     =>  'YES',
+   'N'     =>  'NO',
+   'W'     =>  'WEIGHT',
+   'Q'     =>  'QUALIFY',
+   'P'     =>  'PROFICIENT',
+   'R'     =>  'REQUIRED',
+   'true'  =>  'YES',
+   'false' =>  'NO',
+);
+
+# [ 832171 ] AUTO:* needs to be separate tags
+my @token_AUTO_tag = (
+   'ARMORPROF',
+   'EQUIP',
+   'FEAT',
+   'LANG',
+   'SHIELDPROF',
+   'WEAPONPROF',
+);
+
 # List of default for values defined in system files
 my @validSystemAlignments = qw(LG LN LE NG TN NE CG CN CE NONE Deity);
 
 my @validSystemCheckNames = qw(Fortitude Reflex Will);
 
-my @validSystemGameModes = ( 
+my @validSystemGameModes = (
    # Main PCGen Release
    qw(35e 3e Deadlands Darwins_World_2 FantasyCraft Gaslight Killshot LoE Modern
    Pathfinder Pathfinder_PFS Sidewinder Spycraft Xcrawl OSRIC),
-   
+
    # Third Party/Homebrew Support
    qw(DnD CMP_D20_Fantasy_v30e CMP_D20_Fantasy_v35e CMP_D20_Fantasy_v35e_Kalamar
    CMP_D20_Modern CMP_DnD_Blackmoor CMP_DnD_Dragonlance CMP_DnD_Eberron
@@ -90,7 +166,7 @@ my @validSystemGameModes = (
 # This meeds replaced, we should be getting this information from the STATS file.
 my @validSystemStats = qw(
    STR DEX CON INT WIS CHA NOB FAM PFM
-   
+
    DVR WEA AGI QUI SDI REA INS PRE
 );
 
@@ -377,11 +453,11 @@ my %tagheader = (
       'NAMEISPI'                    => 'Product Identity?',
       'NATURALARMOR'                => 'Natural Armor',
       'NATURALATTACKS'              => 'Natural Attacks',
-      'NUMPAGES'                    => 'Number of Pages',                
+      'NUMPAGES'                    => 'Number of Pages',
       'OUTPUTNAME'                  => 'Output Name',
-      'PAGEUSAGE'                   => 'Page Usage',                      
+      'PAGEUSAGE'                   => 'Page Usage',
       'PANTHEON'                    => 'Pantheon',
-      'PPCOST'                      => 'Power Points',                     
+      'PPCOST'                      => 'Power Points',
       'PRE:.CLEAR'                  => 'Clear Prereq.',
       'PREABILITY'                  => 'Required Ability',
       '!PREABILITY'                 => 'Restricted Ability',
@@ -1582,7 +1658,7 @@ our %parseControl = (
    Return the correct header for a particular tag in a
    particular file type.
 
-   If no tag is defined for the filetype, the default for 
+   If no tag is defined for the filetype, the default for
    the tag is used. If there is no default for the tag,
    the tag name is returned.
 
@@ -1631,7 +1707,7 @@ sub getParseControl {
    }
 
    # didn't find the record
-   return undef; 
+   return undef;
 }
 
 
@@ -1695,7 +1771,7 @@ sub isParseableFileType {
    return $parsableFileType{$fileType};
 }
 
-=head2 isWriteableFileType 
+=head2 isWriteableFileType
 
    Returns true if the system should rewrite the given file type
 
@@ -1735,9 +1811,9 @@ sub matchLineType {
 =head2 normaliseFile
 
    Detect filetype and normalize lines
-   
+
    Parameters: $buffer => raw file data in a single buffer
-   
+
    Returns: $filetype => either 'tab-based' or 'multi-line'
             $lines => arrayref containing logical lines normalized to tab-based format
 
@@ -1792,20 +1868,20 @@ sub normaliseFile {
    ADD:Token define in the master_list but is also can be
    of the form ADD:Any test whatsoever(...). And there is also
    the fact that the ':' is used in the name...
-   
+
    In short, it's a pain.
-   
+
    The above describes the pre 5.12 syntax
    For 5.12, the syntax has changed.
    It is now:
    ADD:subtoken[|number]|blah
-   
+
    This function return a list of three elements.
       The first one is a return code
       The second one is the effective TAG if any
       The third one is anything found after the tag if any
       The fourth one is the count if one is detected
-   
+
       Return code 0 = no valid ADD tag found,
                           1 = old format token ADD tag found,
                           2 = old format adlib ADD tag found.
@@ -1823,8 +1899,8 @@ sub parseAddTag {
 
       my ($token, $theRest, $numCount) = ($1, $2, $3);
 
-      if (!$numCount) { 
-         $numCount = 1; 
+      if (!$numCount) {
+         $numCount = 1;
       }
 
       # Old format token ADD tag found,
@@ -1842,7 +1918,7 @@ sub parseAddTag {
 
       my ($token, $numCount, $optionList) = ($1, $2, $3);
 
-      if (!$numCount) { 
+      if (!$numCount) {
          $numCount = 1;
       }
 
@@ -1861,7 +1937,7 @@ sub parseAddTag {
 }
 
 =head2 parseAutoTag
-   
+
    Check that the Auto tag is valid and adjust the $tag if appropraite.
 
 =cut
@@ -1886,14 +1962,14 @@ sub parseAutoTag {
    }
 
    if ($foundAutoType) {
-      
+
       $tag->id($tag->id . ':' . $foundAutoType);
 
    } elsif ( $tag->value =~ /^([^=:|]+)/ ) {
 
       my $potentialAddTag = $tag->id . ':' . $1;
 
-      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialAddTag); 
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialAddTag);
       $logger->notice(
          qq{Invalid tag "$potentialAddTag" found in } . $tag->lineType,
          $tag->file,
@@ -1903,7 +1979,7 @@ sub parseAutoTag {
 
    } else {
 
-      LstTidy::Report::incCountInvalidTags($tag->lineType, "AUTO"); 
+      LstTidy::Report::incCountInvalidTags($tag->lineType, "AUTO");
       $logger->notice(
          qq{Invalid ADD tag "} . $tag->origTag . q{" found in } . $tag->lineType,
          $tag->file,
@@ -1934,12 +2010,12 @@ sub parseJep {
 
    # We abosulutely need to be called in array context.
    if (!wantarray) {
-      croak q{parseJep must be called in list context} 
+      croak q{parseJep must be called in list context}
    };
 
    # Sanity check on the number of parameters
    if (scalar @_ != 4) {
-      croak q{Wrong number of parameters for parseJep} 
+      croak q{Wrong number of parameters for parseJep}
    };
 
    # If the -nojep command line option was used, we
@@ -1977,7 +2053,7 @@ sub parseSubTag {
    } elsif ($subTag) {
 
       # No valid type found
-      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialTag); 
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $potentialTag);
       $logger->notice(
          qq{Invalid $potentialTag tag "} . $tag->origTag . q{" found in } . $tag->lineType,
          $tag->file,
@@ -1987,7 +2063,7 @@ sub parseSubTag {
 
    } else {
 
-      LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->id); 
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->id);
       $logger->notice(
          q{Invalid } . $tag->id . q{ tag "} . $tag->origTag . q{" found in } . $tag->lineType,
          $tag->file,
@@ -2199,6 +2275,237 @@ sub parseSystemFiles {
    return;
 }
 
+=head2 parseTag
+
+   The most common use of this function is for the addition, conversion or
+   removal of tags.
+
+   Paramter: $tagText  Text to parse
+             $linetype  Type for the current line
+             $file      Name of the current file
+             $line      Number of the current line
+
+   Return:   in scalar context, return $tag
+             in array context, return ($tag, $value)
+=cut
+
+sub parseTag {
+
+   my ($tagText, $linetype, $file, $line) = @_;
+
+   my $no_more_error = 0;  # Set to 1 if no more error must be displayed.
+
+   my $logger = LstTidy::LogFactory::GetLogger();
+
+   # We remove the enclosing quotes if any
+   if ($tagText =~ s/^"(.*)"$/$1/) {
+      $logger->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
+   }
+
+   # Is this a pragma?
+   if ( $tagText =~ /^(\#.*?):(.*)/ && LstTidy::Reformat::isValidTag($linetype, $1)) {
+      return wantarray ? ( $1, $2 ) : $1
+   }
+
+   # Return already if no text to parse (comment)
+   if (length $tagText == 0 || $tagText =~ /^\s*\#/) {
+      return wantarray ? ( "", "" ) : ""
+   }
+
+   # Remove any spaces before and after the tag
+   $tagText =~ s/^\s+//;
+   $tagText =~ s/\s+$//;
+
+   my $tag =  LstTidy::Tag->new(
+      fullTag  => $tagText,
+      lineType => $linetype,
+      file     => $file,
+      line     => $line,
+   );
+
+   # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
+   # have two colons). Anything without a tag value is an anomaly. The only
+   # exception to this rule is LICENSE that can be used without a value to
+   # display an empty line.
+
+   if ( (!defined $tag->value || $tag->value eq q{}) && $tagText ne 'LICENSE:') {
+      $logger->warning(
+         qq(The tag "$tagText" is missing a value (or you forgot a : somewhere)),
+         $file,
+         $line
+      );
+
+      # We set the value to prevent further errors
+      $tag->value(q{});
+   }
+
+   # [ 1387361 ] No KIT STARTPACK entry for \"KIT:xxx\"
+   # STARTPACK lines in Kit files weren't getting added to $valid_entities. If
+   # the verify flag is set and they aren't added to valid_entities, each Kit
+   # will cause a spurious error. I've added them to valid entities to prevent
+   # that.
+   if ($tag->id eq 'STARTPACK') {
+      my $value  = $tag->value;
+      LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$value");
+      LstTidy::Validate::setEntityValid('KIT STARTPACK', "$value");
+   }
+
+   if ( $tag->fullTag =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
+      LstTidy::Convert::convertPreSpellType($tag);
+   }
+
+   # Special cases like ADD:... and BONUS:...
+   if (exists $tagProcessor{$tag->id}) {
+
+      my $processor = $tagProcessor{$tag->id};
+
+      if ( ref ($processor) eq "CODE" ) {
+         &{ $processor }($tag);
+      }
+   }
+
+   if ( defined $tag->value && $tag->value =~ /^.CLEAR/i ) {
+      LstTidy::Validate::validateClearTag($tag);
+   }
+
+   if ( !$tag->noMoreErrors && ! LstTidy::Reformat::isValidTag($tag->lineType, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
+
+      # we're allowed to keep warning, the tag (as is ) is invalid and it's not a commnet.
+      my $doWarn = 1;
+
+      # See if it might be a valid ADD tag.
+      if ($tag->fullTag =~ /^ADD:([^\(\|]+)[\|\(]+/) {
+         my $subTag = ($1);
+         if (LstTidy::Reformat::isValidTag($tag->linetype, "ADD:$subTag")) {
+            $doWarn = 0;
+         }
+      }
+
+      if ($doWarn) {
+         $logger->notice(
+            qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
+
+            $tag->file,
+            $tag->line
+         );
+         LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->realId);
+      }
+
+   } elsif (LstTidy::Reformat::isValidTag($tag->lineType, $tag->id)) {
+
+      # Statistic gathering
+      LstTidy::Report::incCountValidTags($tag->lineType, $tag->realId);
+   }
+
+   # ===============================================================================================
+
+
+   # Check and reformat the values for the tags with
+   # only a limited number of values.
+
+   if ( exists $tagFixValue{$tag->id} ) {
+
+      # All the limited value are uppercase except the alignment value 'Deity'
+      my $newvalue = uc($tag->value);
+      my $is_valid = 1;
+
+      # Special treament for the ALIGN tag
+      if ( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' ) {
+         # It is possible for the ALIGN and PREALIGN tags to have more then
+         # one value
+
+         # ALIGN use | for separator, PREALIGN use ,
+         my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
+
+         for my $align (split $slip_patern, $newvalue) {
+
+            if ( $align eq 'DEITY' ) {
+               $align = 'Deity';
+            }
+
+            # Is it a number?
+            my ($number) = $align =~ / \A (\d+) \z /xms;
+
+            if ( defined $number && $number >= 0 && $number < scalar @validSystemAlignments) {
+               $align = $validSystemAlignments[$number];
+               $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
+            }
+
+            # Is it a valid alignment?
+            if (!exists $tagFixValue{$tag->id}{$align}) {
+               $logger->notice(
+                  qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
+                  $file,
+                  $line
+               );
+               $is_valid = 0;
+            }
+         }
+
+      } else {
+
+         # Standerdize the YES NO and other such tags
+         if ( exists $tagProperValue{$newvalue} ) {
+            $newvalue = $tagProperValue{$newvalue};
+         }
+
+         # Is this a proper value for the tag?
+         if ( !exists $tagFixValue{$tag->id}{$newvalue} ) {
+            $logger->notice(
+               qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
+               $file,
+               $line
+            );
+            $is_valid = 0;
+         }
+      }
+
+      # Was the tag changed ?
+      if ( $is_valid && $tag->value ne $newvalue && !( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' )) {
+         $logger->warning(
+            qq{Replaced "} . $tag->origTag . q{" by "} . $tag->realId . qq{:$newvalue"},
+            $file,
+            $line
+         );
+         $tag->value = $newvalue;
+      }
+   }
+
+   # =========================================================================================
+
+        ############################################################
+        ######################## Conversion ########################
+        # We manipulate the tag here
+        additionnal_tag_parsing( $tag->realId, $tag->value, $tag->linetype, $file, $line );
+
+        ############################################################
+        # We call the validating function if needed
+        if (getOption('xcheck')) {
+           validate_tag($tag->realId, $tag->value, $tag->linetype, $file, $line)
+        };
+
+        # If there is already a :  in the tag name, no need to add one more
+        my $need_sep = index( $tag->realId, ':' ) == -1 ? q{:} : q{};
+
+        if ($tag->value eq q{}) {
+           $logger->debug(qq{parseTag: $tagText}, $file, $line)
+        };
+
+        # We change the tagText value from the caller
+        # This is very ugly but it gets th job done
+        $_[0] = $tag->realId;
+        $_[0] .= $need_sep . $tag->value if defined $tag->value;
+
+        # Return the tag
+        wantarray ? ( $tag->realId, $tag->value ) : $tag->realId;
+
+}
+
+
+
+
+
+
 =head2 process000
 
    The first tag on a line may need to be processed because it is a MOD, FORGET
@@ -2281,7 +2588,7 @@ sub process000 {
 
    This function establishes a centralized location to search
    each line for deprecated tags.
-   
+
    Parameters:   $line           = The line to be searched
                  $linetype       = The type of line
                  $log            = The logging object
@@ -2499,7 +2806,7 @@ sub scanForDeprecatedTags {
    operation can change the value of both @validSystemCheckNames
    @validSystemGameModes,
 
-=cut 
+=cut
 
 sub updateValidity {
    %validCheckName = map { $_ => 1} @validSystemCheckNames, '%LIST', '%CHOICE';
@@ -2537,6 +2844,23 @@ sub updateValidity {
       'T20',
       'Traveller20',
    );
+
+   # When this function is called the system data has been processed. These
+   # keys don't exist in %tagFixValue yet, so there is no danger of
+   # overwriting.
+
+   my %extraFixValue = (
+      BONUSSPELLSTAT       => { map { $_ => 1 } ( @validSystemStats, qw(NONE) ) },
+      SPELLSTAT            => { map { $_ => 1 } ( @validSystemStats, qw(SPELL NONE OTHER) ) },
+      ALIGN                => { map { $_ => 1 } @validSystemAlignments },
+      PREALIGN             => { map { $_ => 1 } @validSystemAlignments },
+      KEYSTAT              => { map { $_ => 1 } @validSystemStats },
+   );
+
+   while (my ($key, $value) = each %extraFixValue) {
+      $tagFixValue{$key} = $value;
+   }
+
 };
 
 =head2 _extract_var_name
@@ -2630,10 +2954,10 @@ sub _extract_var_name {
 }
 
 =head2 _parseJepRec
-   
+
    Parse a Jep formula expression and return a list of variables
    found.
-   
+
    Parameter:  $formula   : String containing the formula
                $tag       : Tag containing the formula
                $file      : Filename to use with ewarn
@@ -2709,7 +3033,7 @@ sub _parseJepRec {
                   ($var_text) = ( $var_text =~ / \A [\"] ( .* ) [\"] \z /xms );
 
                } else {
-                  
+
                   # We use the original extracted text with the old var parser
                   $var_text = $extracted_text;
 
@@ -2841,7 +3165,7 @@ sub _parseJepRec {
 
       } elsif ( $formula =~ / \G \s+ /xmsgc ) {
          # Spaces are allowed in Jep expressions, we simply ignore them
-      
+
       } else {
 
          if ( $formula =~ /\G\[.+\]/gc ) {
@@ -2860,7 +3184,5 @@ sub _parseJepRec {
 
    return @variables_found;
 }
-
-
 
 1;

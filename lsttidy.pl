@@ -40,7 +40,6 @@ use LstTidy::Validate;
 # Subroutines
 sub FILETYPE_parse;
 sub parseAddTag;
-sub parse_tag;
 sub validate_tag;
 sub additionnal_tag_parsing;
 sub validate_line;
@@ -53,9 +52,6 @@ sub embedded_coma_split;
 sub record_bioset_tags;
 sub generate_bioset_files;
 sub generate_css;
-
-# File handles for the Export Lists
-my %filehandle_for;
 
 # Print version information
 print STDERR "$VERSION_LONG\n";
@@ -996,81 +992,12 @@ if (getOption('inputpath')) {
    # Construct the valid tags for all file types
    LstTidy::Reformat::constructValidTags();
 
-        ##########################################################
-        # Files that needs to be open for special conversions
+   ##########################################################
+   # Files that needs to be open for special conversions
 
-        if ( LstTidy::Options::isConversionActive('Export lists') ) {
-                # The files should be opened in alpha order since they will
-                # be closed in reverse alpha order.
-
-                # Will hold the list of all classes found in CLASS filetypes
-                open $filehandle_for{CLASS}, '>', 'class.csv';
-                print { $filehandle_for{CLASS} } qq{"Class Name","Line","Filename"\n};
-
-                # Will hold the list of all deities found in DEITY filetypes
-                open $filehandle_for{DEITY}, '>', 'deity.csv';
-                print { $filehandle_for{DEITY} } qq{"Deity Name","Line","Filename"\n};
-
-                # Will hold the list of all domains found in DOMAIN filetypes
-                open $filehandle_for{DOMAIN}, '>', 'domain.csv';
-                print { $filehandle_for{DOMAIN} } qq{"Domain Name","Line","Filename"\n};
-
-                # Will hold the list of all equipements found in EQUIPMENT filetypes
-                open $filehandle_for{EQUIPMENT}, '>', 'equipment.csv';
-                print { $filehandle_for{EQUIPMENT} } qq{"Equipment Name","Output Name","Line","Filename"\n};
-
-                # Will hold the list of all equipmod entries found in EQUIPMOD filetypes
-                open $filehandle_for{EQUIPMOD}, '>', 'equipmod.csv';
-                print { $filehandle_for{EQUIPMOD} } qq{"Equipmod Name","Key","Type","Line","Filename"\n};
-
-                # Will hold the list of all feats found in FEAT filetypes
-                open $filehandle_for{FEAT}, '>', 'feat.csv';
-                print { $filehandle_for{FEAT} } qq{"Feat Name","Line","Filename"\n};
-
-                # Will hold the list of all kits found in KIT filetypes
-                open $filehandle_for{KIT}, '>', 'kit.csv';
-                print { $filehandle_for{KIT} } qq{"Kit Startpack Name","Line","Filename"\n};
-
-                # Will hold the list of all kit Tables found in KIT filetypes
-                open $filehandle_for{TABLE}, '>', 'kit-table.csv';
-                print { $filehandle_for{TABLE} } qq{"Table Name","Line","Filename"\n};
-
-                # Will hold the list of all language found in LANGUAGE linetypes
-                open $filehandle_for{LANGUAGE}, '>', 'language.csv';
-                print { $filehandle_for{LANGUAGE} } qq{"Language Name","Line","Filename"\n};
-
-                # Will hold the list of all PCC files found
-                open $filehandle_for{PCC}, '>', 'pcc.csv';
-                print { $filehandle_for{PCC} } qq{"SOURCELONG","SOURCESHORT","GAMEMODE","Full Path"\n};
-
-                # Will hold the list of all races and race types found in RACE filetypes
-                open $filehandle_for{RACE}, '>', 'race.csv';
-                print { $filehandle_for{RACE} } qq{"Race Name","Race Type","Race Subtype","Line","Filename"\n};
-
-                # Will hold the list of all skills found in SKILL filetypes
-                open $filehandle_for{SKILL}, '>', 'skill.csv';
-                print { $filehandle_for{SKILL} } qq{"Skill Name","Line","Filename"\n};
-
-                # Will hold the list of all spells found in SPELL filetypes
-                open $filehandle_for{SPELL}, '>', 'spell.csv';
-                print { $filehandle_for{SPELL} } qq{"Spell Name","Source Page","Line","Filename"\n};
-
-                # Will hold the list of all templates found in TEMPLATE filetypes
-                open $filehandle_for{TEMPLATE}, '>', 'template.csv';
-                print { $filehandle_for{TEMPLATE} } qq{"Tempate Name","Line","Filename"\n};
-
-                # Will hold the list of all variables found in DEFINE tags
-                if ( getOption('xcheck') ) {
-                open $filehandle_for{VARIABLE}, '>', 'variable.csv';
-                print { $filehandle_for{VARIABLE} } qq{"Var Name","Line","Filename"\n};
-                }
-
-                # We need to list the tags that use Willpower
-                if ( LstTidy::Options::isConversionActive('ALL:Find Willpower') ) {
-                open $filehandle_for{Willpower}, '>', 'willpower.csv';
-                print { $filehandle_for{Willpower} } qq{"Tag","Line","Filename"\n};
-                }
-        }
+   if ( LstTidy::Options::isConversionActive('Export lists') ) {
+      LstTidy::Report::openExportListFileHandles();
+   }
 
         ##########################################################
         # Cross-checking must be activated for the CLASSSPELL
@@ -1171,11 +1098,11 @@ if (getOption('inputpath')) {
 
                 push @pcc_lines, $_;
 
-                my ( $tag, $value ) = parse_tag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
+                my ( $tag, $value ) = LstTidy::Parse::parseTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
 
                 if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
 
-                        # The parse_tag function modified the values.
+                        # The parseTag function modified the values.
                         $must_write = YES;
                         if ( $double_PCC_tags{$tag} ) {
                                 $pcc_lines[-1] = "$tag$value";
@@ -1399,8 +1326,7 @@ if (getOption('inputpath')) {
                 }
 
                 if ( $GAMEMODE_found && getOption('exportlist') ) {
-                        print { $filehandle_for{PCC} }
-                                qq{"$SOURCELONG_found","$SOURCESHORT_found","$GAMEMODE_found","$pcc_file_name"\n};
+                   LstTidy::Report::printToExportList('PCC', qq{"$SOURCELONG_found","$SOURCESHORT_found","$GAMEMODE_found","$pcc_file_name"\n});
                 }
 
                 # Do we copy the .PCC???
@@ -1762,11 +1688,8 @@ if (getOption('xcheck')) {
 # Close the files that were opened for
 # special conversion
 
-if ( LstTidy::Options::isConversionActive('Export lists') ) {
-        # Close all the files in reverse order that they were opened
-        for my $line_type ( reverse sort keys %filehandle_for ) {
-                close $filehandle_for{$line_type};
-        }
+if (LstTidy::Options::isConversionActive('Export lists')) {
+   LstTidy::Report::closeExportListFileHandles();
 }
 
 #########################################
@@ -1909,9 +1832,9 @@ sub FILETYPE_parse {
          my $token = shift @tokens;
 
          # We remove the enclosing quotes if any
-         if ($current_token =~ s/^"(.*)"$/$1/) {
+         if ($token =~ s/^"(.*)"$/$1/) {
             $log->warning(
-               qq{Removing quotes around the '$current_token' tag},
+               qq{Removing quotes around the '$token' tag},
                $file,
                $line
             )
@@ -1924,13 +1847,13 @@ sub FILETYPE_parse {
          LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line) = @_;
+            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
          }
       }
 
                 #Second, let's parse the regular columns
                 for my $token (@tokens) {
-                        my $key = parse_tag($token, $curent_linetype, $file, $line);
+                        my $key = LstTidy::Parse::parseTag($token, $curent_linetype, $file, $line);
 
                         if ($key) {
                                 if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
@@ -2639,498 +2562,6 @@ sub FILETYPE_parse {
 
 }
 
-###############################################################
-# parse_tag
-# ---------
-#
-# This function
-#
-# Most commun use is for addition, conversion or removal of tags.
-#
-# Paramter: $tag_text           Text to parse
-#               $linetype               Type for the current line
-#               $file_for_error   Name of the current file
-#               $line_for_error   Number of the current line
-#
-# Return:   in scallar context, return $tag
-#               in array context, return ($tag,$value)
-
-sub parse_tag {
-        my ( $tag_text, $linetype, $file_for_error, $line_for_error ) = @_;
-        my $no_more_error = 0;  # Set to 1 if no more error must be displayed.
-
-        # We remove the enclosing quotes if any
-        $log->warning( qq{Removing quotes around the '$tag_text' tag}, $file_for_error, $line_for_error)
-                if $tag_text =~ s/^"(.*)"$/$1/;
-
-        # Is this a pragma?
-        if ( $tag_text =~ /^(\#.*?):(.*)/ ) {
-           return wantarray ? ( $1, $2 ) : $1 if LstTidy::Reformat::isValidTag($linetype, $1);
-        }
-
-        # Return already if no text to parse (comment)
-        return wantarray ? ( "", "" ) : ""
-                if length $tag_text == 0 || $tag_text =~ /^\s*\#/;
-
-        # Remove any spaces before and after the tag
-        $tag_text =~ s/^\s+//;
-        $tag_text =~ s/\s+$//;
-
-        # Separate the tag name from its value
-        my ( $tag, $value ) = split ':', $tag_text, 2;
-
-        # All PCGen should at least have TAG_NAME:TAG_VALUE, anything else
-        # is an anomaly. The only exception to this rule is LICENSE that
-        # can be used without value to display empty line.
-        if ( (!defined $value || $value eq q{})
-                && $tag_text ne 'LICENSE:'
-                ) {
-                $log->warning(
-                        qq(The tag "$tag_text" is missing a value (or you forgot a : somewhere)),
-                        $file_for_error,
-                        $line_for_error
-                );
-
-                # We set the value to prevent further errors
-                $value = q{};
-        }
-
-        # If there is a ! in front of a PRExxx tag, we remove it
-        my $negate_pre = $tag =~ s/^!(pre)/$1/i ? 1 : 0;
-
-        # [ 1387361 ] No KIT STARTPACK entry for \"KIT:xxx\"
-        # STARTPACK lines in Kit files weren't getting added to $valid_entities.
-        # If they aren't added to valid_entities, since the verify flag is set,
-        # each Kit will
-        # cause a spurious error. I've added them to valid entities to prevent
-        # that.
-        if ($tag eq 'STARTPACK') {
-           LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$value");
-           LstTidy::Validate::setEntityValid('KIT STARTPACK', "$value");
-        }
-
-        # [ 1678570 ] Correct PRESPELLTYPE syntax
-        # PRESPELLTYPE conversion
-        if (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax') &&
-                $tag eq 'PRESPELLTYPE' &&
-                $tag_text =~ /^PRESPELLTYPE:([^\d]+),(\d+),(\d+)/)
-        {
-                my ($spelltype, $num_spells, $num_levels) = ($1, $2, $3);
-                #$tag_text =~ /^PRESPELLTYPE:([^,\d]+),(\d+),(\d+)/;
-                $value = "$num_spells,";
-                # Common homebrew mistake is to include Arcade|Divine, since the
-                # 5.8 documentation had an example that showed this. Might
-                # as well handle it while I'm here.
-                my @spelltypes = split(/\|/,$spelltype);
-                foreach my $st (@spelltypes) {
-                        $value .= "$st=$num_levels";
-                }
-                $log->notice(
-                                qq{Invalid standalone PRESPELLTYPE tag "$tag_text" found and converted in $linetype.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-        }
-        # Continuing the fix - fix it anywhere. This is meant to address PRE tags
-        # that are on the end of other tags or in PREMULTS.
-        # I'll leave out the pipe-delimited error here, since it's more likely
-        # to end up with confusion when the tag isn't standalone.
-        elsif (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax')
-                && $tag_text =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/)
-        {
-                $value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/g;
-                                $log->notice(
-                                        qq{Invalid embedded PRESPELLTYPE tag "$tag_text" found and converted $linetype.},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-        }
-
-        # Special cases like ADD:... and BONUS:...
-        if ( $tag eq 'ADD' ) {
-
-           my ( $type, $addtag, $therest, $add_count ) = LstTidy::Parse::parseAddTag( $tag_text );
-           #       Return code     0 = no valid ADD tag found,
-           #                       1 = old format token ADD tag found,
-           #                       2 = old format adlib ADD tag found.
-           #                       3 = 5.12 format ADD tag, using known token.
-           #                       4 = 5.12 format ADD tag, not using token.
-
-           if ($type) {
-              # It's a ADD:token tag
-              if ( $type == 1) {
-                 $tag   = $addtag;
-                 $value = "($therest)$add_count";
-              }
-
-              if (($type == 1 || $type == 2) && LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix'))
-              {
-                 $tag = "ADD:";
-                 $addtag =~ s/ADD://;
-                 $value = "$addtag|$add_count|$therest";
-              }
-
-           } else {
-              if ( index( $tag_text, '#' ) != 0 ) {
-
-                 $log->notice(
-                    qq{Invalid ADD tag "$tag_text" found in $linetype.},
-                    $file_for_error,
-                    $line_for_error
-                 );
-
-                 LstTidy::Report::incCountInvalidTags($linetype, $addtag); 
-                 $no_more_error = 1;
-              }
-           }
-        }
-
-        if ( $tag eq 'QUALIFY' ) {
-                my ($qualify_type) = ($value =~ /^([^=:|]+)/ );
-                if ($qualify_type && exists $token_QUALIFY_tag{$qualify_type} ) {
-                        $tag .= ':' . $qualify_type;
-                        $value =~ s/^$qualify_type(.*)/$1/;
-                }
-                elsif ($qualify_type) {
-                        # No valid Qualify type found
-                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$qualify_type"); 
-                        $log->notice(
-                                qq{Invalid QUALIFY:$qualify_type tag "$tag_text" found in $linetype.},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-                else {
-                        LstTidy::Report::incCountInvalidTags($linetype, "QUALIFY"); 
-                        $log->notice(
-                                qq{Invalid QUALIFY tag "$tag_text" found in $linetype},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-        }
-
-        if ( $tag eq 'BONUS' ) {
-                my ($bonus_type) = ( $value =~ /^([^=:|]+)/ );
-
-                if ( $bonus_type && exists $token_BONUS_tag{$bonus_type} ) {
-
-                        # Is it valid for the curent file type?
-                        $tag .= ':' . $bonus_type;
-                        $value =~ s/^$bonus_type(.*)/$1/;
-                }
-                elsif ($bonus_type) {
-
-                        # No valid bonus type was found
-                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$bonus_type"); 
-                        $log->notice(
-                                qq{Invalid BONUS:$bonus_type tag "$tag_text" found in $linetype.},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-                else {
-                        LstTidy::Report::incCountInvalidTags($linetype, "BONUS"); 
-                        $log->notice(
-                                qq{Invalid BONUS tag "$tag_text" found in $linetype},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-        }
-
-        if ( $tag eq 'PROFICIENCY' ) {
-                my ($prof_type) = ( $value =~ /^([^=:|]+)/ );
-
-                if ( $prof_type && exists $token_PROFICIENCY_tag{$prof_type} ) {
-
-                        # Is it valid for the curent file type?
-                        $tag .= ':' . $prof_type;
-                        $value =~ s/^$prof_type(.*)/$1/;
-                }
-                elsif ($prof_type) {
-
-                        # No valid bonus type was found
-                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:$prof_type"); 
-                        $log->notice(
-                                qq{Invalid PROFICIENCY:$prof_type tag "$tag_text" found in $linetype.},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-                else {
-                        LstTidy::Report::incCountInvalidTags($linetype, "PROFICIENCY"); 
-                        $log->notice(
-                                qq{Invalid PROFICIENCY tag "$tag_text" found in $linetype},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $no_more_error = 1;
-                }
-        }
-
-
-        # [ 832171 ] AUTO:* needs to be separate tags
-        if ( $tag eq 'AUTO' ) {
-                my $found_auto_type;
-                AUTO_TYPE:
-                for my $auto_type ( sort { length($b) <=> length($a) || $a cmp $b } @token_AUTO_tag ) {
-                        if ( $value =~ s/^$auto_type// ) {
-                                # We found what we were looking for
-                                $found_auto_type = $auto_type;
-                                last AUTO_TYPE;
-                        }
-                }
-
-                if ($found_auto_type) {
-                        $tag .= ':' . $found_auto_type;
-                }
-                else {
-
-                        # No valid auto type was found
-                        if ( $value =~ /^([^=:|]+)/ ) {
-                           LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
-                                $log->notice(
-                                        qq{Invalid $tag:$1 tag "$tag_text" found in $linetype.},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        else {
-                                LstTidy::Report::incCountInvalidTags($linetype, "AUTO"); 
-                                $log->notice(
-                                        qq{Invalid AUTO tag "$tag_text" found in $linetype},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        $no_more_error = 1;
-
-                }
-        }
-
-        # [ 813504 ] SPELLLEVEL:DOMAIN in domains.lst
-        # SPELLLEVEL is now a multiple level tag like ADD and BONUS
-
-        if ( $tag eq 'SPELLLEVEL' ) {
-                if ( $value =~ s/^CLASS(?=\|)// ) {
-                        # It's a SPELLLEVEL:CLASS tag
-                        $tag = "SPELLLEVEL:CLASS";
-                }
-                elsif ( $value =~ s/^DOMAIN(?=\|)// ) {
-                        # It's a SPELLLEVEL:DOMAIN tag
-                        $tag = "SPELLLEVEL:DOMAIN";
-                }
-                else {
-                        # No valid SPELLLEVEL subtag was found
-                        if ( $value =~ /^([^=:|]+)/ ) {
-                                LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
-                                $log->notice(
-                                        qq{Invalid SPELLLEVEL:$1 tag "$tag_text" found in $linetype.},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        else {
-                                LstTidy::Report::incCountInvalidTags($linetype, "SPELLLEVEL"); 
-                                $log->notice(
-                                        qq{Invalid SPELLLEVEL tag "$tag_text" found in $linetype},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        $no_more_error = 1;
-                }
-        }
-
-        # [ 2544134 ] New Token - SPELLKNOWN
-
-        if ( $tag eq 'SPELLKNOWN' ) {
-                if ( $value =~ s/^CLASS(?=\|)// ) {
-                        # It's a SPELLKNOWN:CLASS tag
-                        $tag = "SPELLKNOWN:CLASS";
-                }
-                elsif ( $value =~ s/^DOMAIN(?=\|)// ) {
-                        # It's a SPELLKNOWN:DOMAIN tag
-                        $tag = "SPELLKNOWN:DOMAIN";
-                }
-                else {
-                        # No valid SPELLKNOWN subtag was found
-                        if ( $value =~ /^([^=:|]+)/ ) {
-                                LstTidy::Report::incCountInvalidTags($linetype, "$tag:$1"); 
-                                $log->notice(
-                                        qq{Invalid SPELLKNOWN:$1 tag "$tag_text" found in $linetype.},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        else {
-                                LstTidy::Report::incCountInvalidTags($linetype, "SPELLKNOWN"); 
-                                $log->notice(
-                                        qq{Invalid SPELLKNOWN tag "$tag_text" found in $linetype},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                        $no_more_error = 1;
-                }
-        }
-
-        # All the .CLEAR must be separated tags to help with the
-        # tag ordering. That is, we need to make sure the .CLEAR
-        # is ordered before the normal tag.
-        # If the .CLEAR version of the tag doesn't exists, we do not
-        # change the tag name but we give a warning.
-        if ( defined $value && $value =~ /^.CLEAR/i ) {
-                if ( LstTidy::Reformat::isValidTag($linetype, "$tag:.CLEARALL")) {
-                        # Nothing to see here. Move on.
-                } elsif ( ! LstTidy::Reformat::isValidTag($linetype, "$tag:.CLEAR")) {
-                        $log->notice(
-                                qq{The tag "$tag:.CLEAR" from "$tag_text" is not in the $linetype tag list\n},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        LstTidy::Report::incCountInvalidTags($linetype, "$tag:.CLEAR"); 
-                        $no_more_error = 1;
-                }
-                else {
-                        $value =~ s/^.CLEAR//i;
-                        $tag .= ':.CLEAR';
-                }
-        }
-
-        # Verify if the tag is valid for the line type
-        my $real_tag = ( $negate_pre ? "!" : "" ) . $tag;
-
-
-
-        if ( !$no_more_error && !  LstTidy::Reformat::isValidTag($linetype, $tag) && index( $tag_text, '#' ) != 0 ) {
-                my $do_warn = 1;
-                if ($tag_text =~ /^ADD:([^\(\|]+)[\|\(]+/) {
-                        my $tag_text = ($1);
-                        if (LstTidy::Reformat::isValidTag($linetype, "ADD:$tag_text")) {
-                                $do_warn = 0;
-                        }
-                }
-                if ($do_warn) {
-                        $log->notice(
-                                qq{The tag "$tag" from "$tag_text" is not in the $linetype tag list\n},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        LstTidy::Report::incCountInvalidTags($linetype, $real_tag); 
-                }
-        }
-
-
-        elsif (LstTidy::Reformat::isValidTag($linetype, $tag)) {
-
-           # Statistic gathering
-           LstTidy::Report::incCountValidTags($linetype, $real_tag);
-        }
-
-        # Check and reformat the values for the tags with
-        # only a limited number of values.
-
-        if ( exists $tag_fix_value{$tag} ) {
-
-                # All the limited value are uppercase except the alignment value 'Deity'
-                my $newvalue = uc($value);
-                my $is_valid = 1;
-
-                # Special treament for the ALIGN tag
-                if ( $tag eq 'ALIGN' || $tag eq 'PREALIGN' ) {
-                # It is possible for the ALIGN and PREALIGN tags to have more then
-                # one value
-
-                # ALIGN use | for separator, PREALIGN use ,
-                my $slip_patern = $tag eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
-
-                for my $align (split $slip_patern, $newvalue) {
-                        if ( $align eq 'DEITY' ) { $align = 'Deity'; }
-                        # Is it a number?
-                        my $number;
-                        if ( (($number) = ($align =~ / \A (\d+) \z /xms))
-                                && $number >= 0
-                                && $number < scalar @valid_system_alignments
-                        ) {
-                                $align = $valid_system_alignments[$number];
-                                $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
-                        }
-
-                        # Is it a valid alignment?
-                        if (!exists $tag_fix_value{$tag}{$align}) {
-                                $log->notice(
-                                        qq{Invalid value "$align" for tag "$real_tag"},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                $is_valid = 0;
-                        }
-                }
-                }
-                else {
-                # Standerdize the YES NO and other such tags
-                if ( exists $tag_proper_value_for{$newvalue} ) {
-                        $newvalue = $tag_proper_value_for{$newvalue};
-                }
-
-                # Is this a proper value for the tag?
-                if ( !exists $tag_fix_value{$tag}{$newvalue} ) {
-                        $log->notice(
-                                qq{Invalid value "$value" for tag "$real_tag"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                        $is_valid = 0;
-                }
-                }
-
-
-
-                # Was the tag changed ?
-                if ( $is_valid && $value ne $newvalue && !( $tag eq 'ALIGN' || $tag eq 'PREALIGN' )) {
-                $log->warning(
-                        qq{Replaced "$real_tag:$value" by "$real_tag:$newvalue"},
-                        $file_for_error,
-                        $line_for_error
-                );
-                $value = $newvalue;
-                }
-        }
-
-        ############################################################
-        ######################## Conversion ########################
-        # We manipulate the tag here
-        additionnal_tag_parsing( $real_tag, $value, $linetype, $file_for_error, $line_for_error );
-
-        ############################################################
-        # We call the validating function if needed
-        if getOption('xcheck') {
-           validate_tag($real_tag, $value, $linetype, $file_for_error, $line_for_error);
-        }
-
-        # If there is already a :  in the tag name, no need to add one more
-        my $need_sep = index( $real_tag, ':' ) == -1 ? q{:} : q{};
-
-        if $value eq q{} {
-           $log->debug(qq{parse_tag: $tag_text}, $file_for_error, $line_for_error);
-        }
-
-        # We change the tag_text value from the caller
-        # This is very ugly but it gets th job done
-        $_[0] = $real_tag;
-        $_[0] .= $need_sep . $value if defined $value;
-
-        # Return the tag
-        wantarray ? ( $real_tag, $value ) : $real_tag;
-
-}
 
 BEGIN {
 
@@ -4693,8 +4124,7 @@ BEGIN {
                                         if ( LstTidy::Options::isConversionActive('Export lists') ) {
                                                 my $file = $file_for_error;
                                                 $file =~ tr{/}{\\};
-                                                print { $filehandle_for{VARIABLE} }
-                                                        qq{"$var_name","$line_for_error","$file"\n};
+                                                LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$line_for_error","$file"\n});
                                         }
 
                                 }
@@ -5032,8 +4462,7 @@ sub additionnal_tag_parsing {
                 my $tag_separator = $tag_name =~ / : /xms ? q{} : q{:};
                 my $file_name = $file_for_error;
                 $file_name =~ tr{/}{\\};
-                print { $filehandle_for{Willpower} }
-                        qq{"$tag_name$tag_separator$tag_value","$line_for_error","$file_name"\n};
+                   LstTidy::Report::printToExportList('Willpower', qq{"$tag_name$tag_separator$tag_value","$line_for_error","$file_name"\n});
                 }
         }
 
@@ -7101,24 +6530,22 @@ BEGIN {
                         $sourcepage = $line_ref->{'SOURCEPAGE'}[0] if exists $line_ref->{'SOURCEPAGE'};
 
                         # Write to file
-                        print { $filehandle_for{SPELL} }
-                                qq{"$spellname","$sourcepage","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('SPELL', qq{"$spellname","$sourcepage","$line_for_error","$filename"\n});
                 }
                 if ( $filetype eq 'CLASS' ) {
                         my $class = ( $line_ref->{'000ClassName'}[0] =~ /^CLASS:(.*)/ )[0];
-                        print { $filehandle_for{CLASS} } qq{"$class","$line_for_error","$filename"\n}
-                                if $class_name ne $class;
+                        if ($class_name ne $class) {
+                           LstTidy::Report::printToExportList('CLASS', qq{"$class","$line_for_error","$filename"\n})
+                        };
                         $class_name = $class;
                 }
 
                 if ( $filetype eq 'DEITY' ) {
-                        print { $filehandle_for{DEITY} }
-                                qq{"$line_ref->{'000DeityName'}[0]","$line_for_error","$filename"\n};
+                   LstTidy::Report::printToExportList('DEITY', qq{"$line_ref->{'000DeityName'}[0]","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'DOMAIN' ) {
-                        print { $filehandle_for{DOMAIN} }
-                                qq{"$line_ref->{'000DomainName'}[0]","$line_for_error","$filename"\n};
+                   LstTidy::Report::printToExportList('DOMAIN', qq{"$line_ref->{'000DomainName'}[0]","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'EQUIPMENT' ) {
@@ -7132,8 +6559,7 @@ BEGIN {
                                 $replacementname = $1;
                         }
                         $outputname =~ s/\[NAME\]/$replacementname/;
-                        print { $filehandle_for{EQUIPMENT} }
-                                qq{"$equipname","$outputname","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('EQUIPMENT', qq{"$equipname","$outputname","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'EQUIPMOD' ) {
@@ -7142,33 +6568,32 @@ BEGIN {
                         my ( $key, $type ) = ( "", "" );
                         $key  = substr( $line_ref->{'KEY'}[0],  4 ) if exists $line_ref->{'KEY'};
                         $type = substr( $line_ref->{'TYPE'}[0], 5 ) if exists $line_ref->{'TYPE'};
-                        print { $filehandle_for{EQUIPMOD} }
-                                qq{"$equipmodname","$key","$type","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('EQUIPMOD', qq{"$equipmodname","$key","$type","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'FEAT' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my $featname = $line_ref->{ $tagLookup }[0];
-                        print { $filehandle_for{FEAT} } qq{"$featname","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('FEAT', qq{"$featname","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'KIT STARTPACK' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                    my ($kitname) = ( $line_ref->{ $tagLookup }[0] =~ /\A STARTPACK: (.*) \z/xms );
-                        print { $filehandle_for{KIT} } qq{"$kitname","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('KIT', qq{"$kitname","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'KIT TABLE' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my ($tablename)
                                 = ( $line_ref->{ $tagLookup }[0] =~ /\A TABLE: (.*) \z/xms );
-                        print { $filehandle_for{TABLE} } qq{"$tablename","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('TABLE', qq{"$tablename","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'LANGUAGE' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my $languagename = $line_ref->{ $tagLookup }[0];
-                        print { $filehandle_for{LANGUAGE} } qq{"$languagename","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('LANGUAGE', qq{"$languagename","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'RACE' ) {
@@ -7183,20 +6608,19 @@ BEGIN {
                         $race_sub_type = $line_ref->{'RACESUBTYPE'}[0] if exists $line_ref->{'RACESUBTYPE'};
                         $race_sub_type =~ s{ \A RACESUBTYPE: }{}xms;
 
-                        print { $filehandle_for{RACE} }
-                                qq{"$racename","$race_type","$race_sub_type","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('RACE', qq{"$racename","$race_type","$race_sub_type","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'SKILL' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my $skillname = $line_ref->{ $tagLookup }[0];
-                        print { $filehandle_for{SKILL} } qq{"$skillname","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('SKILL', qq{"$skillname","$line_for_error","$filename"\n});
                 }
 
                 if ( $filetype eq 'TEMPLATE' ) {
                    my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
                         my $template_name = $line_ref->{ $tagLookup }[0];
-                        print { $filehandle_for{TEMPLATE} } qq{"$template_name","$line_for_error","$filename"\n};
+                        LstTidy::Report::printToExportList('TEMPLATE', qq{"$template_name","$line_for_error","$filename"\n});
                 }
                 }
 
@@ -10154,7 +9578,7 @@ New tag MODTOSKILLS
 
 Deprecated INTMODTOSKILLS
 
-Fixed a bug with #EXTRAFILE that was introduced in parse_tag
+Fixed a bug with #EXTRAFILE that was introduced in parseTag
 
 =head2 v1.17 -- 2002.08.17
 
@@ -10251,7 +9675,7 @@ VFEAT.
 
 Remove the empty columns for the CLASS lines.
 
-Added the parse_tag function for all the tags.
+Added the parseTag function for all the tags.
 
 Deprecate the NATURALARMOR tag and added code to convert to
 BONUS:COMBAT|AC|x|Type=Natural
