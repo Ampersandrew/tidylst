@@ -21,41 +21,46 @@ my @validSystemStats      = LstTidy::Parse::getValidSystemArr('stats');
 
 # Limited choice tags
 my %tag_fix_value = (
-   ACHECK               => { YES => 1, NO => 1, WEIGHT => 1, PROFICIENT => 1, DOUBLE => 1 },
-   ALIGN                => { map { $_ => 1 } @validSystemAlignments },
-   APPLY                => { INSTANT => 1, PERMANENT => 1 },
-   BONUSSPELLSTAT       => { map { $_ => 1 } ( @validSystemStats, 'NONE' ) },
-   DESCISIP             => { YES => 1, NO => 1 },
-   EXCLUSIVE            => { YES => 1, NO => 1 },
-   FORMATCAT            => { FRONT => 1, MIDDLE => 1, PARENS => 1 },
-   FREE                 => { YES => 1, NO => 1 },
-   KEYSTAT              => { map { $_ => 1 } @validSystemStats },
-   HASSUBCLASS          => { YES => 1, NO => 1 },
-   ALLOWBASECLASS       => { YES => 1, NO => 1 },
-   HASSUBSTITUTIONLEVEL => { YES => 1, NO => 1 },
-   ISD20                => { YES => 1, NO => 1 },
-   ISLICENSED           => { YES => 1, NO => 1 },
-   ISOGL                => { YES => 1, NO => 1 },
-   ISMATURE             => { YES => 1, NO => 1 },
-   MEMORIZE             => { YES => 1, NO => 1 },
-   MULT                 => { YES => 1, NO => 1 },
-   MODS                 => { YES => 1, NO => 1, REQUIRED => 1 },
-   MODTOSKILLS          => { YES => 1, NO => 1 },
-   NAMEISPI             => { YES => 1, NO => 1 },
-   RACIAL               => { YES => 1, NO => 1 },
-   REMOVABLE            => { YES => 1, NO => 1 },
-   RESIZE               => { YES => 1, NO => 1 },
-   PREALIGN             => { map { $_ => 1 } @validSystemAlignments }, 
-   PRESPELLBOOK         => { YES => 1, NO => 1 },
-   SHOWINMENU           => { YES => 1, NO => 1 },
-   STACK                => { YES => 1, NO => 1 },
-   SPELLBOOK            => { YES => 1, NO => 1 },
-   SPELLSTAT            => { map { $_ => 1 } ( @validSystemStats, 'SPELL', 'NONE', 'OTHER' ) },
-   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
-   USEUNTRAINED         => { YES => 1, NO => 1 },
-   USEMASTERSKILL       => { YES => 1, NO => 1 },
-   VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
+
+   ALLOWBASECLASS       => { YES => 1, NO => 1 },                                                                       
+   DESCISIP             => { YES => 1, NO => 1 },                                                                       
+   EXCLUSIVE            => { YES => 1, NO => 1 },                                                                       
+   FREE                 => { YES => 1, NO => 1 },                                                                       
+   HASSUBCLASS          => { YES => 1, NO => 1 },                                                                       
+   HASSUBSTITUTIONLEVEL => { YES => 1, NO => 1 },                                                                       
+   ISD20                => { YES => 1, NO => 1 },                                                                       
+   ISLICENSED           => { YES => 1, NO => 1 },                                                                       
+   ISMATURE             => { YES => 1, NO => 1 },                                                                       
+   ISOGL                => { YES => 1, NO => 1 },                                                                       
+   MEMORIZE             => { YES => 1, NO => 1 },                                                                       
+   MODTOSKILLS          => { YES => 1, NO => 1 },                                                                       
+   MULT                 => { YES => 1, NO => 1 },                                                                       
+   NAMEISPI             => { YES => 1, NO => 1 },                                                                       
+   PRESPELLBOOK         => { YES => 1, NO => 1 },                                                                       
+   RACIAL               => { YES => 1, NO => 1 },                                                                       
+   REMOVABLE            => { YES => 1, NO => 1 },                                                                       
+   RESIZE               => { YES => 1, NO => 1 },                                                                       
+   SHOWINMENU           => { YES => 1, NO => 1 },                                                                       
+   SPELLBOOK            => { YES => 1, NO => 1 },                                                                       
+   STACK                => { YES => 1, NO => 1 },                                                                       
+   USEMASTERSKILL       => { YES => 1, NO => 1 },                                                                       
+   USEUNTRAINED         => { YES => 1, NO => 1 },                                                                       
+
+   ACHECK               => { map { $_ => 1 } qw( YES NO WEIGHT PROFICIENT DOUBLE ) },                            
+   APPLY                => { map { $_ => 1 } qw( INSTANT PERMANENT ) },                                                            
+   FORMATCAT            => { map { $_ => 1 } qw( FRONT MIDDLE PARENS ) },                                                    
+   MODS                 => { map { $_ => 1 } qw( YES NO REQUIRED ) },                                                        
+   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },           
+   VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },                   
+
+   BONUSSPELLSTAT       => { map { $_ => 1 } ( @validSystemStats, qw(NONE) ) },                                           
+   SPELLSTAT            => { map { $_ => 1 } ( @validSystemStats, qw(SPELL NONE OTHER) ) },                         
+   ALIGN                => { map { $_ => 1 } @validSystemAlignments },                                                  
+   PREALIGN             => { map { $_ => 1 } @validSystemAlignments },                                                  
+   KEYSTAT              => { map { $_ => 1 } @validSystemStats },                                                       
+
 );
+
 
 # This hash is used to convert 1 character choices to proper fix values.
 my %tag_proper_value_for = (
@@ -193,23 +198,22 @@ sub parse_tag {
       LstTidy::Validate::validateClearTag($tag);
    }
 
-   # ===============================================================================================
-
-
    if ( !$tag->noMoreErrors && ! LstTidy::Reformat::isValidTag($tag->linetype, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
 
+      # we're allowed to keep warning, the tag (as is ) is invalid and it's not a commnet.
       my $doWarn = 1;
 
-      if ($tagText =~ /^ADD:([^\(\|]+)[\|\(]+/) {
-         my $tagText = ($1);
-         if (LstTidy::Reformat::isValidTag($tag->linetype, "ADD:$tagText")) {
+      # See if it might be a valid ADD tag.
+      if ($tag->fullTag =~ /^ADD:([^\(\|]+)[\|\(]+/) {
+         my $subTag = ($1);
+         if (LstTidy::Reformat::isValidTag($tag->linetype, "ADD:$subTag")) {
             $doWarn = 0;
          }
       }
 
       if ($doWarn) {
          $logger->notice(
-            qq{The tag "} . $tag->id . q{" from "} . $tagText . q{" is not in the } . $linetype . q{ tag list\n},
+            qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $linetype . q{ tag list\n},
 
             $file,
             $line
@@ -223,77 +227,79 @@ sub parse_tag {
       LstTidy::Report::incCountValidTags($tag->linetype, $tag->realId);
    }
 
-        # Check and reformat the values for the tags with
-        # only a limited number of values.
-
-        if ( exists $tag_fix_value{$tag->id} ) {
-
-           # All the limited value are uppercase except the alignment value 'Deity'
-           my $newvalue = uc($tag->value);
-           my $is_valid = 1;
-
-           # Special treament for the ALIGN tag
-           if ( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' ) {
-              # It is possible for the ALIGN and PREALIGN tags to have more then
-              # one value
-
-              # ALIGN use | for separator, PREALIGN use ,
-              my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
-
-              for my $align (split $slip_patern, $newvalue) {
-
-                 if ( $align eq 'DEITY' ) { 
-                    $align = 'Deity'; 
-                 }
-
-                 # Is it a number?
-                 my ($number) = $align =~ / \A (\d+) \z /xms;
-
-                 if ( defined $number && $number >= 0 && $number < scalar @validSystemAlignments) {
-                    $align = $validSystemAlignments[$number];
-                    $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
-                 }
-
-                 # Is it a valid alignment?
-                 if (!exists $tag_fix_value{$tag->id}{$align}) {
-                    $logger->notice(
-                       qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
-                       $file,
-                       $line
-                    );
-                    $is_valid = 0;
-                 }
-              }
-           } else {
-
-                # Standerdize the YES NO and other such tags
-                if ( exists $tag_proper_value_for{$newvalue} ) {
-                        $newvalue = $tag_proper_value_for{$newvalue};
-                }
-
-                # Is this a proper value for the tag?
-                if ( !exists $tag_fix_value{$tag->id}{$newvalue} ) {
-                   $logger->notice(
-                      qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
-                      $file,
-                      $line
-                   );
-                   $is_valid = 0;
-                }
-             }
+   # ===============================================================================================
 
 
+   # Check and reformat the values for the tags with
+   # only a limited number of values.
 
-                # Was the tag changed ?
-                if ( $is_valid && $tag->value ne $newvalue && !( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' )) {
-                   $logger->warning(
-                      qq{Replaced "} . $tag->origTag . q{" by "} . $tag->realId . qq{:$newvalue"},
-                      $file,
-                      $line
-                   );
-                   $tag->value = $newvalue;
-                }
-        }
+   if ( exists $tag_fix_value{$tag->id} ) {
+
+      # All the limited value are uppercase except the alignment value 'Deity'
+      my $newvalue = uc($tag->value);
+      my $is_valid = 1;
+
+      # Special treament for the ALIGN tag
+      if ( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' ) {
+         # It is possible for the ALIGN and PREALIGN tags to have more then
+         # one value
+
+         # ALIGN use | for separator, PREALIGN use ,
+         my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
+
+         for my $align (split $slip_patern, $newvalue) {
+
+            if ( $align eq 'DEITY' ) { 
+               $align = 'Deity'; 
+            }
+
+            # Is it a number?
+            my ($number) = $align =~ / \A (\d+) \z /xms;
+
+            if ( defined $number && $number >= 0 && $number < scalar @validSystemAlignments) {
+               $align = $validSystemAlignments[$number];
+               $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
+            }
+
+            # Is it a valid alignment?
+            if (!exists $tag_fix_value{$tag->id}{$align}) {
+               $logger->notice(
+                  qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
+                  $file,
+                  $line
+               );
+               $is_valid = 0;
+            }
+         }
+
+      } else {
+
+         # Standerdize the YES NO and other such tags
+         if ( exists $tag_proper_value_for{$newvalue} ) {
+            $newvalue = $tag_proper_value_for{$newvalue};
+         }
+
+         # Is this a proper value for the tag?
+         if ( !exists $tag_fix_value{$tag->id}{$newvalue} ) {
+            $logger->notice(
+               qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
+               $file,
+               $line
+            );
+            $is_valid = 0;
+         }
+      }
+
+      # Was the tag changed ?
+      if ( $is_valid && $tag->value ne $newvalue && !( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' )) {
+         $logger->warning(
+            qq{Replaced "} . $tag->origTag . q{" by "} . $tag->realId . qq{:$newvalue"},
+            $file,
+            $line
+         );
+         $tag->value = $newvalue;
+      }
+   }
 
         ############################################################
         ######################## Conversion ########################
