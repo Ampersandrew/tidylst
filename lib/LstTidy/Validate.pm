@@ -382,7 +382,7 @@ sub warnDeprecate {
       $message .= qq{ found in "$enclosing_tag"};
    }
 
-   $log->info( $message, $file_for_error, $line_for_error );
+   LstTidy::LogFactory::getLogger->info( $message, $file_for_error, $line_for_error );
 
 }
 
@@ -771,42 +771,40 @@ sub processPREVAR {
 
 =cut
 
-   sub validateClearTag {
-   my ($tag) = @_;;
+sub validateClearTag {
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my ($tag) = @_;;
 
    # All the .CLEAR must be separated tags to help with the tag ordering. That
    # is, we need to make sure the .CLEAR is ordered before the normal tag.  If
    # the .CLEAR version of the tag doesn't exists, we do not change the tag
    # name but we give a warning.
 
+   my $clearTag    = $tag->id . ':.CLEAR';
+   my $clearAllTag = $tag->id . ':.CLEARALL';
 
-      my $clearTag    = $tag->id . ':.CLEAR';
-      my $clearAllTag = $tag->id . ':.CLEARALL';
+   if ( LstTidy::Reformat::isValidTag($tag->lineType, $clearAllTag)) {
 
-      if ( LstTidy::Reformat::isValidTag($tag->lineType, $clearAllTag)) {
+      # Don't do the else clause at the bottom
 
-         # Don't do the else clause at the bottom
+   } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
 
-      } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
+      LstTidy::LogFactory::getLogger->notice(
+         q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
+         $tag->file,
+         $tag->line
+      );
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag); 
+      $tag->noMoreErrors(1);
 
-         $logger->notice(
-            q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
-            $file,
-            $line
-         );
-         LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag); 
-         $tag->noMoreErrors(1);
+   } else {
 
-      } else {
+      # Its a valid CLEAR tag, move the subTag to id
+      $tag->id($clearTag);
+      $tag->value($tag->value =~ s/^.CLEAR//ir);
 
-         # Its a valid CLEAR tag, move the subTag to id
-         $tag->id($clearTag);
-         $tag->value($tag->value =~ s/^.CLEAR//ir);
-
-      }
    }
+}
 
 
 =head2 validatePreTag
