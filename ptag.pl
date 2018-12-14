@@ -84,6 +84,15 @@ my @token_AUTO_tag = (
    'WEAPONPROF',
 );
 
+my %tagProcessor = (
+   ADD         => \&LstTidy::Convert::convertAddTags,
+   AUTO        => \&LstTidy::Parse::parseAutoTag,
+   BONUS       => \&LstTidy::Parse::parseSubTag,
+   PROFICIENCY => \&LstTidy::Parse::parseSubTag,
+   QUALIFY     => \&LstTidy::Parse::parseSubTag,
+   SPELLLEVEL  => \&LstTidy::Parse::parseSubTag,
+   SPELLKNOWN  => \&LstTidy::Parse::parseSubTag,
+);
 
 =head2 parse_tag
 
@@ -165,40 +174,20 @@ sub parse_tag {
    }
 
    # Special cases like ADD:... and BONUS:...
-   if ( $tag->id eq 'ADD' ) {
-      LstTidy::Convert::convertAddTags($tag);
-   }
+   if (exists $tagProcessor{$tag->id}) {
 
-   # [ 832171 ] AUTO:* needs to be separate tags
-   if ( $tag->id eq 'AUTO' ) {
-      LstTidy::Parse::parseAutoTag($tag);
-   }
+      my $processor = $tagProcessor{$tag->id};
 
-   if ( $tag->id eq 'BONUS' ) {
-      LstTidy::Parse::parseSubTag($tag);
-   }
-
-   if ( $tag->id eq 'PROFICIENCY' ) {
-      LstTidy::Parse::parseSubTag($tag);
-   }
-
-   if ( $tag->id eq 'QUALIFY' ) {
-      LstTidy::Parse::parseSubTag($tag);
-   }
-
-   if ( $tag->id eq 'SPELLLEVEL' ) {
-      LstTidy::Parse::parseSubTag($tag);
-   }
-
-   if ( $tag->id eq 'SPELLKNOWN' ) {
-      LstTidy::Parse::parseSubTag($tag);
+      if ( ref ($processor) eq "CODE" ) {
+         &{ $processor }($tag);
+      }
    }
 
    if ( defined $tag->value && $tag->value =~ /^.CLEAR/i ) {
       LstTidy::Validate::validateClearTag($tag);
    }
 
-   if ( !$tag->noMoreErrors && ! LstTidy::Reformat::isValidTag($tag->linetype, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
+   if ( !$tag->noMoreErrors && ! LstTidy::Reformat::isValidTag($tag->lineType, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
 
       # we're allowed to keep warning, the tag (as is ) is invalid and it's not a commnet.
       my $doWarn = 1;
@@ -213,18 +202,18 @@ sub parse_tag {
 
       if ($doWarn) {
          $logger->notice(
-            qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $linetype . q{ tag list\n},
+            qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
 
-            $file,
-            $line
+            $tag->file,
+            $tag->line
          );
-         LstTidy::Report::incCountInvalidTags($tag->linetype, $tag->realId); 
+         LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->realId); 
       }
 
-   } elsif (LstTidy::Reformat::isValidTag($tag->linetype, $tag->id)) {
+   } elsif (LstTidy::Reformat::isValidTag($tag->lineType, $tag->id)) {
 
       # Statistic gathering
-      LstTidy::Report::incCountValidTags($tag->linetype, $tag->realId);
+      LstTidy::Report::incCountValidTags($tag->lineType, $tag->realId);
    }
 
    # ===============================================================================================
