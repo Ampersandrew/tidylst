@@ -117,13 +117,17 @@ sub realId {
 sub fullTag {
    my ($self) = @_;
 
-   return $self->id() . ':' . $self->value();
+   my $sep = $self->id =~ m/:/ ? q{} : q{:};
+
+   return $self->id() . $sep . $self->value();
 }
 
 sub fullRealTag {
    my ($self) = @_;
 
-   return $self->realId() . ':' . $self->value();
+   my $sep = $self->id =~ m/:/ ? q{} : q{:};
+
+   return $self->realId() . $sep . $self->value();
 };
 
 1;
