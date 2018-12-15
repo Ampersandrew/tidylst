@@ -12,7 +12,9 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
+use LstTidy::Convert;
 use LstTidy::Options qw(getOption);
+use LstTidy::Tag;
 
 # Constants for the master_line_type
 use constant {
@@ -2275,64 +2277,73 @@ sub parseSystemFiles {
    return;
 }
 
-=head2 parseTag
+=head2 extractTag
 
-   The most common use of this function is for the addition, conversion or
-   removal of tags.
+   This opeatrion takes a tag and makes sure it is suitable for further
+   processing. It eliminates comments and dentifies pragma.
 
-   Paramter: $tagText  Text to parse
-             $linetype  Type for the current line
-             $file      Name of the current file
-             $line      Number of the current line
+   Paramter: $tagText   The text of the tag
+             $linetype  The Type of the current line
+             $file      The name of the current file
+             $line      The number of the current line
 
-   Return:   in scalar context, return $tag
-             in array context, return ($tag, $value)
+   Return: Tag and value, if value is defined the tag needs no further
+           parsing.
+
 =cut
 
-sub parseTag {
+sub extractTag {
 
    my ($tagText, $linetype, $file, $line) = @_;
 
-   my $no_more_error = 0;  # Set to 1 if no more error must be displayed.
-
-   my $logger = LstTidy::LogFactory::GetLogger();
-
    # We remove the enclosing quotes if any
    if ($tagText =~ s/^"(.*)"$/$1/) {
-      $logger->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
+      LstTidy::LogFactory::getLogger->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
    }
 
    # Is this a pragma?
-   if ( $tagText =~ /^(\#.*?):(.*)/ && LstTidy::Reformat::isValidTag($linetype, $1)) {
-      return wantarray ? ( $1, $2 ) : $1
+   if ( $tagText =~ m/^(\#.*?):(.*)/ && LstTidy::Reformat::isValidTag($linetype, $1)) {
+      return ( $1, $2 )
    }
 
    # Return already if no text to parse (comment)
    if (length $tagText == 0 || $tagText =~ /^\s*\#/) {
-      return wantarray ? ( "", "" ) : ""
+      return  ( "", "" )
    }
 
    # Remove any spaces before and after the tag
    $tagText =~ s/^\s+//;
    $tagText =~ s/\s+$//;
+   
+   return $tagText;
+}
 
-   my $tag =  LstTidy::Tag->new(
-      fullTag  => $tagText,
-      lineType => $linetype,
-      file     => $file,
-      line     => $line,
-   );
+=head2 parseTag
+
+   The most common use of this function is for the addition, conversion or
+   removal of tags. The tag object passed in is modified and may be queried for
+   the updated tag.
+
+=cut
+
+sub parseTag {
+
+   my ($tag) = @_;
+
+   # my ($tagText, $linetype, $file, $line) = @_;
+
+   my $logger = LstTidy::LogFactory::getLogger();
 
    # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
    # have two colons). Anything without a tag value is an anomaly. The only
    # exception to this rule is LICENSE that can be used without a value to
    # display an empty line.
 
-   if ( (!defined $tag->value || $tag->value eq q{}) && $tagText ne 'LICENSE:') {
+   if ( (!defined $tag->value || $tag->value eq q{}) && $tag->fullTag ne 'LICENSE:') {
       $logger->warning(
-         qq(The tag "$tagText" is missing a value (or you forgot a : somewhere)),
-         $file,
-         $line
+         qq(The tag "} . $tag->fullTag . q{" is missing a value (or you forgot a : somewhere)),
+         $tag->file,
+         $tag->line
       );
 
       # We set the value to prevent further errors
@@ -2376,7 +2387,7 @@ sub parseTag {
       # See if it might be a valid ADD tag.
       if ($tag->fullTag =~ /^ADD:([^\(\|]+)[\|\(]+/) {
          my $subTag = ($1);
-         if (LstTidy::Reformat::isValidTag($tag->linetype, "ADD:$subTag")) {
+         if (LstTidy::Reformat::isValidTag($tag->lineType, "ADD:$subTag")) {
             $doWarn = 0;
          }
       }
@@ -2435,8 +2446,8 @@ sub parseTag {
             if (!exists $tagFixValue{$tag->id}{$align}) {
                $logger->notice(
                   qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
-                  $file,
-                  $line
+                  $tag->file,
+                  $tag->line
                );
                $is_valid = 0;
             }
@@ -2453,8 +2464,8 @@ sub parseTag {
          if ( !exists $tagFixValue{$tag->id}{$newvalue} ) {
             $logger->notice(
                qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
-               $file,
-               $line
+               $tag->file,
+               $tag->line
             );
             $is_valid = 0;
          }
@@ -2464,41 +2475,27 @@ sub parseTag {
       if ( $is_valid && $tag->value ne $newvalue && !( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' )) {
          $logger->warning(
             qq{Replaced "} . $tag->origTag . q{" by "} . $tag->realId . qq{:$newvalue"},
-            $file,
-            $line
+            $tag->file,
+            $tag->line
          );
          $tag->value = $newvalue;
       }
    }
 
-   # =========================================================================================
+   ############################################################
+   ######################## Conversion ########################
+   # We manipulate the tag here
+   LstTidy::Convert::doTagConversions($tag);
 
-        ############################################################
-        ######################## Conversion ########################
-        # We manipulate the tag here
-        additionnal_tag_parsing( $tag->realId, $tag->value, $tag->linetype, $file, $line );
+   ############################################################
+   # We call the validating function if needed
+   if (getOption('xcheck')) {
+      validate_tag($tag->realId, $tag->value, $tag->lineType, $tag->file, $tag->line)
+   };
 
-        ############################################################
-        # We call the validating function if needed
-        if (getOption('xcheck')) {
-           validate_tag($tag->realId, $tag->value, $tag->linetype, $file, $line)
-        };
-
-        # If there is already a :  in the tag name, no need to add one more
-        my $need_sep = index( $tag->realId, ':' ) == -1 ? q{:} : q{};
-
-        if ($tag->value eq q{}) {
-           $logger->debug(qq{parseTag: $tagText}, $file, $line)
-        };
-
-        # We change the tagText value from the caller
-        # This is very ugly but it gets th job done
-        $_[0] = $tag->realId;
-        $_[0] .= $need_sep . $tag->value if defined $tag->value;
-
-        # Return the tag
-        wantarray ? ( $tag->realId, $tag->value ) : $tag->realId;
-
+   if ($tag->value eq q{}) {
+      $logger->debug(qq{parseTag: } . $tag->fullTag, $tag->file, $tag->line)
+   };
 }
 
 

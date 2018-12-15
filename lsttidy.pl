@@ -1059,7 +1059,7 @@ if (getOption('inputpath')) {
                         return if $_ =~ $regex;
                 }
 
-                if ( !-d && / [.] pcc \z /xmsi ) {
+                if ( !-d && m/ [.] pcc \z /xmsi ) {
                         push @filelist, $File::Find::name;
                 }
 
@@ -1090,209 +1090,222 @@ if (getOption('inputpath')) {
 
                 PCC_LINE:
                 while ( <$pcc_fh> ) {
-                last PCC_LINE if !$continue;
+                   last PCC_LINE if !$continue;
 
-                chomp;
-                $must_write += s/[\x0d\x0a]//g; # Remove the real and weird CR-LF
-                $must_write += s/\s+$//;                # Remove the tralling white spaces
+                   chomp;
+                   $must_write += s/[\x0d\x0a]//g; # Remove the real and weird CR-LF
+                   $must_write += s/\s+$//;        # Remove any tralling white spaces
 
-                push @pcc_lines, $_;
+                   push @pcc_lines, $_;
 
-                my ( $tag, $value ) = LstTidy::Parse::parseTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
+                   my ( $tag, $value ) = LstTidy::Parse::extractTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
 
-                if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
+                   # if extractTag returns a defined value, no further
+                   # processing is neeeded. If value is not defined then the
+                   # tag that was returned should be  processed further. 
+                   if (not defined $value) {
 
-                        # The parseTag function modified the values.
-                        $must_write = YES;
-                        if ( $double_PCC_tags{$tag} ) {
-                                $pcc_lines[-1] = "$tag$value";
-                        }
-                        else { 
-                                $pcc_lines[-1] = "$tag:$value";
-                        }
-                }
+                      my $tag =  LstTidy::Tag->new(
+                         fullTag  => $tag,
+                         lineType => 'PCC', 
+                         file     => $pcc_file_name, 
+                         line     => $INPUT_LINE_NUMBER,
+                      );
 
-                if ($tag) {
-                        if (LstTidy::Parse::isParseableFileType($tag)) {
+                      # Potentally modify the tag
+                      LstTidy::Parse::parseTag( $tag );
+                      ($tag, $value) = ($tag->readId, $tag->value);
+                   }
 
-                                # Keep track of the filetypes found
-                                $found_filetype{$tag}++;
+                      
+                      
 
-                                $value =~ s/^([^|]*).*/$1/;
-                                my $lstfile = find_full_path( $value, $currentbasedir, getOption('basepath') );
-                                $files_to_parse{$lstfile} = $tag;
+                   if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
 
-                                # Check to see if the file exists
-                                if ( !-e $lstfile ) {
-                                        $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
-                                        delete $files_to_parse{$lstfile};
-                                }
-                                elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
-                                && $tag eq 'CLASS' )
-                                {
+                      # The parseTag function modified the values.
+                      $must_write = YES;
+                      if ( $double_PCC_tags{$tag} ) {
+                         $pcc_lines[-1] = "$tag$value";
+                      }
+                      else { 
+                         $pcc_lines[-1] = "$tag:$value";
+                      }
+                   }
 
-                                        # [ 653596 ] Add a TYPE tag for all SPELLs
-                                        #
-                                        # The CLASS files must be read before any other
-                                        $class_files{$lstfile} = 1;
-                                }
-                                elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                                        || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) )
-                                {
+                   if ($tag) {
+                      if (LstTidy::Parse::isParseableFileType($tag)) {
 
-                                        #[ 677962 ] The DMG wands have no charge.
-                                        #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-                                        #
-                                        # We keep a list of the SPELL files because they
-                                        # need to be put in front of the others.
+                         # Keep track of the filetypes found
+                         $found_filetype{$tag}++;
 
-                                        $Spell_Files{$lstfile} = 1;
-                                }
-                                elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
-                                && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) )
-                                {
+                         $value =~ s/^([^|]*).*/$1/;
+                         my $lstfile = find_full_path( $value, $currentbasedir, getOption('basepath') );
+                         $files_to_parse{$lstfile} = $tag;
 
-                                        # CLASSSPELL conversion
-                                        # We keep the list of CLASSSPELL, CLASS and DOMAIN
-                                        # since they must be parse before all the orthers.
-                                        $classspell_files{$tag}{$lstfile} = 1;
+                         # Check to see if the file exists
+                         if ( !-e $lstfile ) {
 
-                                        # We comment out the CLASSSPELL line
-                                        if ( $tag eq 'CLASSSPELL' ) {
-                                                push @pcc_lines, q{#} . pop @pcc_lines;
-                                                $must_write = YES;
+                            $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
+                            delete $files_to_parse{$lstfile};
 
-                                                $log->warning(
-                                                        qq{Commenting out "$pcc_lines[$#pcc_lines]"},
-                                                        $pcc_file_name,
-                                                        $INPUT_LINE_NUMBER
-                                                );
-                                        }
-                                }
-                                elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
-                                && $tag eq 'CLASSSKILL' )
-                                {
+                         } elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
 
-                                        # CLASSSKILL conversion
-                                        # We keep the list of CLASSSKILL files
-                                        $classskill_files{$lstfile} = 1;
+                            # [ 653596 ] Add a TYPE tag for all SPELLs
+                            #
+                            # The CLASS files must be read before any other
+                            $class_files{$lstfile} = 1;
 
-                                        # Make a comment out of the line.
-                                        push @pcc_lines, q{#} . pop @pcc_lines;
-                                        $must_write = YES;
+                         } elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
+                               || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
 
-                                        $log->warning(
-                                                qq{Commenting out "$pcc_lines[$#pcc_lines]"},
-                                                $pcc_file_name,
-                                                $INPUT_LINE_NUMBER
-                                        );
+                            #[ 677962 ] The DMG wands have no charge.
+                            #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
+                            #
+                            # We keep a list of the SPELL files because they
+                            # need to be put in front of the others.
 
-                                }
+                            $Spell_Files{$lstfile} = 1;
 
-                                #               ($lstfile) = ($lstfile =~ m{/([^/]+)$});
-                                delete $filelist_notpcc{$lstfile} if exists $filelist_notpcc{$lstfile};
-                                $LST_found = YES;
+                         } elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
+                            && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) ) {
 
-                        } elsif (LstTidy::Reformat::isValidTag('PCC', $tag)) {
+                            # CLASSSPELL conversion
+                            # We keep the list of CLASSSPELL, CLASS and DOMAIN
+                            # since they must be parse before all the orthers.
+                            $classspell_files{$tag}{$lstfile} = 1;
 
-                                # All the tags that do not have file should be cought here
+                            # We comment out the CLASSSPELL line
+                            if ( $tag eq 'CLASSSPELL' ) {
+                               push @pcc_lines, q{#} . pop @pcc_lines;
+                               $must_write = YES;
 
-                                # Get the SOURCExxx tags for future ref.
-                                if (LstTidy::Options::isConversionActive('SOURCE line replacement')
-                                && ( $tag eq 'SOURCELONG'
-                                        || $tag eq 'SOURCESHORT'
-                                        || $tag eq 'SOURCEWEB'
-                                        || $tag eq 'SOURCEDATE' ) )
-                                {
-                                        my $path = File::Basename::dirname($pcc_file_name);
-                                        if ( exists $source_tags{$path}{$tag}
-                                                && $path !~ /custom|altpcc/i )
-                                        {
-                                                $log->notice(
-                                                        "$tag already found for $path",
-                                                        $pcc_file_name,
-                                                        $INPUT_LINE_NUMBER
-                                                );
-                                        }
-                                        else {
-                                                $source_tags{$path}{$tag} = "$tag:$value";
-                                        }
+                               $log->warning(
+                                  qq{Commenting out "$pcc_lines[$#pcc_lines]"},
+                                  $pcc_file_name,
+                                  $INPUT_LINE_NUMBER
+                               );
+                            }
 
-                                        # For the PCC report
-                                        if ( $tag eq 'SOURCELONG' ) {
-                                                $SOURCELONG_found = $value;
-                                        }
-                                        elsif ( $tag eq 'SOURCESHORT' ) {
-                                                $SOURCESHORT_found = $value;
-                                        }
-                                }
-                                elsif ( $tag eq 'GAMEMODE' ) {
+                         } elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
 
-                                        # Verify that the GAMEMODEs are valid
-                                        # and match the filer.
-                                        $GAMEMODE_found = $value;       # The GAMEMODE tag we found
-                                        my @modes = split /[|]/, $value;
+                            # CLASSSKILL conversion
+                            # We keep the list of CLASSSKILL files
+                            $classskill_files{$lstfile} = 1;
 
-                                        my $gamemode = getOption('gamemode');
-                                        my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
-                                        my $valid_game_mode = $gamemode ? 0 : 1;
+                            # Make a comment out of the line.
+                            push @pcc_lines, q{#} . pop @pcc_lines;
+                            $must_write = YES;
 
-                                        # First the filter is applied
-                                        for my $mode (@modes) {
-                                           if ( $mode =~ $gamemode_regex ) {
-                                              $valid_game_mode = 1;
-                                           }
-                                        }
+                            $log->warning(
+                               qq{Commenting out "$pcc_lines[$#pcc_lines]"},
+                               $pcc_file_name,
+                               $INPUT_LINE_NUMBER
+                            );
 
-                                        # Then we check if the game mode is valid only if
-                                        # the game modes have not been filtered out
-                                        if ($valid_game_mode) {
-                                           for my $mode (@modes) {
-                                              if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
-                                                 $log->notice(
-                                                    qq{Invalid GAMEMODE "$mode" in "$_"},
-                                                    $pcc_file_name,
-                                                    $INPUT_LINE_NUMBER
-                                                 );
-                                              }
-                                           }
-                                        }
+                         }
 
-                                        if ( !$valid_game_mode ) {
-                                                # We set the variables that will kick us out of the
-                                                # while loop that read the file and that will
-                                                # prevent the file from being written.
-                                                $continue               = NO;
-                                                $must_write     = NO;
-                                        }
-                                }
-                                elsif ( $tag eq 'BOOKTYPE' || $tag eq 'TYPE' ) {
+                         delete $filelist_notpcc{$lstfile} if exists $filelist_notpcc{$lstfile};
+                         $LST_found = YES;
 
-                                        # Found a TYPE tag
-                                        $BOOKTYPE_found = YES;
-                                }
-                                elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+                      } elsif (LstTidy::Reformat::isValidTag('PCC', $tag)) {
 
-                                        # [ 707325 ] PCC: GAME is now GAMEMODE
-                                        $pcc_lines[-1] = "GAMEMODE:$value";
-                                        $log->warning(
-                                                qq{Replacing "$tag:$value" by "GAMEMODE:$value"},
-                                                $pcc_file_name,
-                                                $INPUT_LINE_NUMBER
-                                        );
-                                        $GAMEMODE_found = $value;
-                                        $must_write     = YES;
-                                }
-                        }
-                }
-                elsif ( / <html> /xmsi ) {
-                        $log->error(
-                                "HTML file detected. Maybe you had a problem with your CSV checkout.\n",
-                                $pcc_file_name
-                        );
-                        $must_write = NO;
-                        last PCC_LINE;
-                }
+                         # All the tags that do not have file should be cought here
+
+                         # Get the SOURCExxx tags for future ref.
+                         if (LstTidy::Options::isConversionActive('SOURCE line replacement')
+                              && (    $tag eq 'SOURCELONG'
+                                   || $tag eq 'SOURCESHORT'
+                                   || $tag eq 'SOURCEWEB'
+                                   || $tag eq 'SOURCEDATE' ) ) 
+                         {
+                            my $path = File::Basename::dirname($pcc_file_name);
+
+                            if ( exists $source_tags{$path}{$tag} && $path !~ /custom|altpcc/i ) {
+
+                               $log->notice(
+                                  "$tag already found for $path",
+                                  $pcc_file_name,
+                                  $INPUT_LINE_NUMBER
+                               );
+
+                            } else {
+                               $source_tags{$path}{$tag} = "$tag:$value";
+                            }
+
+                            # For the PCC report
+                            if ( $tag eq 'SOURCELONG' ) {
+                               $SOURCELONG_found = $value;
+                            } elsif ( $tag eq 'SOURCESHORT' ) {
+                               $SOURCESHORT_found = $value;
+                            }
+
+                         } elsif ( $tag eq 'GAMEMODE' ) {
+
+                            # Verify that the GAMEMODEs are valid
+                            # and match the filer.
+                            $GAMEMODE_found = $value;       # The GAMEMODE tag we found
+                            my @modes = split /[|]/, $value;
+
+                            my $gamemode = getOption('gamemode');
+                            my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
+                            my $valid_game_mode = $gamemode ? 0 : 1;
+
+                            # First the filter is applied
+                            for my $mode (@modes) {
+                               if ( $mode =~ $gamemode_regex ) {
+                                  $valid_game_mode = 1;
+                               }
+                            }
+
+                            # Then we check if the game mode is valid only if
+                            # the game modes have not been filtered out
+                            if ($valid_game_mode) {
+                               for my $mode (@modes) {
+                                  if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
+                                     $log->notice(
+                                        qq{Invalid GAMEMODE "$mode" in "$_"},
+                                        $pcc_file_name,
+                                        $INPUT_LINE_NUMBER
+                                     );
+                                  }
+                               }
+                            }
+
+                            if ( !$valid_game_mode ) {
+                               # We set the variables that will kick us out of the
+                               # while loop that read the file and that will
+                               # prevent the file from being written.
+                               $continue               = NO;
+                               $must_write     = NO;
+                            }
+
+                         } elsif ( $tag eq 'BOOKTYPE' || $tag eq 'TYPE' ) {
+
+                            # Found a TYPE tag
+                            $BOOKTYPE_found = YES;
+
+                         } elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+
+                            # [ 707325 ] PCC: GAME is now GAMEMODE
+                            $pcc_lines[-1] = "GAMEMODE:$value";
+                            $log->warning(
+                               qq{Replacing "$tag:$value" by "GAMEMODE:$value"},
+                               $pcc_file_name,
+                               $INPUT_LINE_NUMBER
+                            );
+                            $GAMEMODE_found = $value;
+                            $must_write     = YES;
+                         }
+                      }
+
+                   } elsif ( m/ <html> /xmsi ) {
+                      $log->error(
+                         "HTML file detected. Maybe you had a problem with your CSV checkout.\n",
+                         $pcc_file_name
+                      );
+                      $must_write = NO;
+                      last PCC_LINE;
+                   }
                 }
 
                 close $pcc_fh;
@@ -1851,58 +1864,77 @@ sub FILETYPE_parse {
          }
       }
 
-                #Second, let's parse the regular columns
-                for my $token (@tokens) {
-                        my $key = LstTidy::Parse::parseTag($token, $curent_linetype, $file, $line);
+      #Second, let's parse the regular columns
+      for my $token (@tokens) {
 
-                        if ($key) {
-                                if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
-                                        $log->notice(
-                                                qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
-                                                $file,
-                                                $line
-                                        );
-                                }
+         my ( $tag, $value ) = LstTidy::Parse::extractTag($token, $curent_linetype, $file, $line );
 
-                        $line_tokens{$key}
-                                = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $token ] : [$token];
-                        }
-                        else {
-                                $log->warning( "No tags in \"$token\"\n", $file, $line );
-                                $line_tokens{$token} = $token;
-                        }
-                }
+         # if extractTag returns a defined value, no further
+         # processing is neeeded. If tag is defined but value is not,
+         # then the tag that was returned is the cleaned token and
+         # should be processed further.
+         if ($tag && not defined $value) {
 
-                my $newline = [
-                        $curent_linetype,
-                        \%line_tokens,
-                        $last_main_line,
-                        $curent_entity,
-                        $line_info,
-                ];
+            my $tag =  LstTidy::Tag->new(
+               fullTag  => $tag,
+               lineType => $curent_linetype,
+               file     => $file,
+               line     => $line,
+            );
 
-                ############################################################
-                ######################## Conversion ########################
-                # We manipulate the tags for the line here
-                # This function call will parse individual lines, which will
-                # in turn parse the tags within the lines.
+            # Potentally modify the tag
+            LstTidy::Parse::parseTag( $tag );
 
-                additionnal_line_parsing(\%line_tokens, $curent_linetype, $file, $line, $newline);
+            my $key = $tag->readId;
 
-                ############################################################
-                # Validate the line
-                validate_line(\%line_tokens, $curent_linetype, $file, $line)
-                if getOption('xcheck');
+            if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
+               $log->notice(
+                  qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
+                  $file,
+                  $line
+               );
+            }
 
-                ############################################################
-                # .CLEAR order verification
-                check_clear_tag_order(\%line_tokens, $file, $line);
+            $line_tokens{$key} = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $tag->fullRealTag ] : [$tag->fullRealTag];
 
-                #Last, we put the tokens and other line info in the @newlines array
-                push @newlines, $newline;
+         } else {
 
-        }
-        continue { $line++ }
+            $log->warning( "No tags in \"$token\"\n", $file, $line );
+            $line_tokens{$token} = $token;
+         }
+      }
+
+      my $newline = [
+         $curent_linetype,
+         \%line_tokens,
+         $last_main_line,
+         $curent_entity,
+         $line_info,
+      ];
+
+      ############################################################
+      ######################## Conversion ########################
+      # We manipulate the tags for the line here
+      # This function call will parse individual lines, which will
+      # in turn parse the tags within the lines.
+
+      additionnal_line_parsing(\%line_tokens, $curent_linetype, $file, $line, $newline);
+
+      ############################################################
+      # Validate the line
+      if (getOption('xcheck')) {
+         validate_line(\%line_tokens, $curent_linetype, $file, $line) 
+      };
+
+      ############################################################
+      # .CLEAR order verification
+      check_clear_tag_order(\%line_tokens, $file, $line);
+
+      #Last, we put the tokens and other line info in the @newlines array
+      push @newlines, $newline;
+
+   }
+   continue { $line++ }
 
         #####################################################
         #####################################################
@@ -7467,30 +7499,27 @@ BEGIN {
 # that would be separated by tabs.
 
 sub mylength {
-        return 0 unless defined $_[0];
 
-        my @list;
+   return 0 unless defined $_[0];
 
-        if ( ref( $_[0] ) eq 'ARRAY' ) {
-                @list = @{ $_[0] };
-        }
-        else {
-                @list = @_;
-        }
+   my @list = ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_;
 
-        my $Length      = 0;
-        my $beforelast = scalar(@list) - 2;
+   # if ( ref( $_[0] ) eq 'ARRAY' ) {
+   #    @list = @{ $_[0] };
+   # } else {
+   #    @list = @_;
+   # }
 
-        if ( $beforelast > -1 ) {
+   my $Length  = 0;
+   my $last    = pop @list;
 
-                # All the elements except the last must be rounded to the next tab
-                for my $subtag ( @list[ 0 .. $beforelast ] ) {
-                $Length += ( int( length($subtag) / $tablength ) + 1 ) * $tablength;
-                }
-        }
+   # All the elements except the last must be rounded to the next tab
+   for my $tag ( @list ) {
+      $Length += ( int( length($tag) / $tablength ) + 1 ) * $tablength;
+   }
 
-        # The last item is not rounded to the tab length
-        $Length += length( $list[-1] );
+   # The last item is not rounded to the tab length
+   $Length += length $last;
 
 }
 
