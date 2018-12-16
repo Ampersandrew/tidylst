@@ -1655,6 +1655,32 @@ our %parseControl = (
 
 );
 
+=head2 checkLimitedValueTags
+
+   Certain tags only specif a specific set of fixed values. This operation is
+   used to ensure their values are correct.
+
+   ALIGN and PREALIGN can both take multiples of a specific set of tags, they
+   are handled separately.
+
+=cut
+
+sub checkLimitedValueTags {
+
+   my ($tag) = @_;
+
+
+   # Special treament for the ALIGN and PREALIGN tags
+   if ( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' ) {
+
+      processAlign($tag);
+
+   } else {
+
+      processNonAlign($tag);
+   }
+}
+
 =head2 getHeader
 
    Return the correct header for a particular tag in a
@@ -2356,13 +2382,9 @@ sub parseTag {
    # will cause a spurious error. I've added them to valid entities to prevent
    # that.
    if ($tag->id eq 'STARTPACK') {
-      my $value  = $tag->value;
+      my $value = $tag->value;
       LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$value");
       LstTidy::Validate::setEntityValid('KIT STARTPACK', "$value");
-   }
-
-   if ( $tag->fullTag =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
-      LstTidy::Convert::convertPreSpellType($tag);
    }
 
    # Special cases like ADD:... and BONUS:...
@@ -2379,28 +2401,10 @@ sub parseTag {
       LstTidy::Validate::validateClearTag($tag);
    }
 
-   if ( !$tag->noMoreErrors && ! LstTidy::Reformat::isValidTag($tag->lineType, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
+   # The tag is invalid and it's not a commnet.
+   if ( ! LstTidy::Reformat::isValidTag($tag->lineType, $tag->id) && index( $tag->fullTag, '#' ) != 0 ) {
 
-      # we're allowed to keep warning, the tag (as is ) is invalid and it's not a commnet.
-      my $doWarn = 1;
-
-      # See if it might be a valid ADD tag.
-      if ($tag->fullTag =~ /^ADD:([^\(\|]+)[\|\(]+/) {
-         my $subTag = ($1);
-         if (LstTidy::Reformat::isValidTag($tag->lineType, "ADD:$subTag")) {
-            $doWarn = 0;
-         }
-      }
-
-      if ($doWarn) {
-         $logger->notice(
-            qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
-
-            $tag->file,
-            $tag->line
-         );
-         LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->realId);
-      }
+      processInvalidNonComment($tag);
 
    } elsif (LstTidy::Reformat::isValidTag($tag->lineType, $tag->id)) {
 
@@ -2408,78 +2412,11 @@ sub parseTag {
       LstTidy::Report::incCountValidTags($tag->lineType, $tag->realId);
    }
 
-   # ===============================================================================================
-
-
-   # Check and reformat the values for the tags with
-   # only a limited number of values.
+   # Check and reformat the values for the tags with only a limited number of
+   # values.
 
    if ( exists $tagFixValue{$tag->id} ) {
-
-      # All the limited value are uppercase except the alignment value 'Deity'
-      my $newvalue = uc($tag->value);
-      my $is_valid = 1;
-
-      # Special treament for the ALIGN tag
-      if ( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' ) {
-         # It is possible for the ALIGN and PREALIGN tags to have more then
-         # one value
-
-         # ALIGN use | for separator, PREALIGN use ,
-         my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
-
-         for my $align (split $slip_patern, $newvalue) {
-
-            if ( $align eq 'DEITY' ) {
-               $align = 'Deity';
-            }
-
-            # Is it a number?
-            my ($number) = $align =~ / \A (\d+) \z /xms;
-
-            if ( defined $number && $number >= 0 && $number < scalar @validSystemAlignments) {
-               $align = $validSystemAlignments[$number];
-               $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
-            }
-
-            # Is it a valid alignment?
-            if (!exists $tagFixValue{$tag->id}{$align}) {
-               $logger->notice(
-                  qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-               $is_valid = 0;
-            }
-         }
-
-      } else {
-
-         # Standerdize the YES NO and other such tags
-         if ( exists $tagProperValue{$newvalue} ) {
-            $newvalue = $tagProperValue{$newvalue};
-         }
-
-         # Is this a proper value for the tag?
-         if ( !exists $tagFixValue{$tag->id}{$newvalue} ) {
-            $logger->notice(
-               qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
-               $tag->file,
-               $tag->line
-            );
-            $is_valid = 0;
-         }
-      }
-
-      # Was the tag changed ?
-      if ( $is_valid && $tag->value ne $newvalue && !( $tag->id eq 'ALIGN' || $tag->id eq 'PREALIGN' )) {
-         $logger->warning(
-            qq{Replaced "} . $tag->origTag . q{" by "} . $tag->realId . qq{:$newvalue"},
-            $tag->file,
-            $tag->line
-         );
-         $tag->value = $newvalue;
-      }
+      checkLimitedValueTags($tag);
    }
 
    ############################################################
@@ -2581,218 +2518,140 @@ sub process000 {
    }
 }
 
-=head2 scanForDeprecatedTags
+=head2 processAlign
 
-   This function establishes a centralized location to search
-   each line for deprecated tags.
-
-   Parameters:   $line           = The line to be searched
-                 $linetype       = The type of line
-                 $log            = The logging object
-                 $file_for_error = File name to use with ewarn
-                 $line_for_error = The currrent line's number within the file
+   It is possible for the ALIGN and PREALIGN tags to have more then one value,
+   make sure they are all valid. Convert them from number to text if necessary.
 
 =cut
 
-sub scanForDeprecatedTags {
-   my ( $line, $linetype, $log, $file, $lineNum ) = @_ ;
+sub processAlign {
 
-   # Deprecated tags
-   if ( $line =~ /\scl\(/ ) {
-      $log->info(
-         qq{The Jep function cl() is deprecated, use classlevel() instead},
-         $file,
-         $lineNum
+   my ($tag) = @_;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+      
+   # All the limited values are uppercase except the alignment value 'Deity'
+   my $newvalue = uc($tag->value);
+      
+   my $is_valid = 1;
+
+   # ALIGN use | for separator, PREALIGN use ,
+   my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
+
+   for my $align (split $slip_patern, $newvalue) {
+
+      if ( $align eq 'DEITY' ) {
+         $align = 'Deity';
+      }
+
+      # Is it a number?
+      my ($number) = $align =~ / \A (\d+) \z /xms;
+
+      if ( defined $number && $number >= 0 && $number < scalar @validSystemAlignments) {
+         $align = $validSystemAlignments[$number];
+         $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
+      }
+
+      # Is it a valid alignment?
+      if (!exists $tagFixValue{$tag->id}{$align}) {
+         $logger->notice(
+            qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
+            $tag->file,
+            $tag->line
+         );
+         $is_valid = 0;
+      }
+   }
+
+   # Was the tag changed ?
+   if ( $is_valid && $tag->value ne $newvalue) {
+
+      $tag->value = $newvalue;
+
+      $logger->warning(
+         qq{Replaced "} . $tag->origTag . q{" with "} . $tag->fullRealId . qq{"},
+         $tag->file,
+         $tag->line
       );
    }
 
-   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
-   if ( $line =~ /\sBONUS:DAMAGE\s/ ) {
-      $log->info(
-         qq{BONUS:DAMAGE is deprecated 5.5.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y instead},
-         $file,
-         $lineNum
-      );
+   return  $is_valid;
+}
+
+=head2 processInvalidNonComment
+
+   After modifying the tag to account for sub tags, it is still invalid, check
+   if it might be a valid ADD tag, if not log it (if allowed) and count it.
+
+=cut
+
+sub processInvalidNonComment {
+
+   my ($tag) = @_;
+
+   my $invalidTag = 1;
+
+   # See if it might be a valid ADD tag.
+   if ($tag->fullTag =~ /^ADD:([^\(\|]+)[\|\(]+/) {
+      my $subTag = ($1);
+      if (LstTidy::Reformat::isValidTag($tag->lineType, "ADD:$subTag")) {
+         $invalidTag = 0;
+      }
    }
 
-   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
-   if ( $line =~ /\sBONUS:TOHIT\s/ ) {
-      $log->info(
-         qq{BONUS:TOHIT is deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x instead},
-         $file,
-         $lineNum
+   if ($invalidTag && !$tag->noMoreErrors) {
+
+      LstTidy::LogFactory::getLogger->notice(
+         qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
+         $tag->file,
+         $tag->line
       );
+
+      # If no more errors is set, we have already counted the invalid tag.
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->realId);
+   }
+}
+
+=head2 processNonAlign
+
+   Any tag that has limited values but is not an ALIGN or PREALIGN can only
+   have one value.  The value shold be uppercase, Check for validity and if
+   necessary change the value.
+
+=cut
+
+sub processNonAlign {
+
+   my ($tag) = @_;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   # All the limited values are uppercase
+   my $newvalue = uc($tag->value);
+
+   # Standerdize the YES NO and other such tags
+   if ( exists $tagProperValue{$newvalue} ) {
+      $newvalue = $tagProperValue{$newvalue};
    }
 
-   # [ 1973497 ] HASSPELLFORMULA is deprecated
-   if ( $line =~ /\sHASSPELLFORMULA/ ) {
-      $log->warning(
-         qq{HASSPELLFORMULA is no longer needed and is deprecated in PCGen 5.15},
-         $file,
-         $lineNum
+   # Is this a proper value for the tag?
+   if ( !exists $tagFixValue{$tag->id}{$newvalue} ) {
+
+      $logger->notice(
+         qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
+         $tag->file,
+         $tag->line
       );
-   }
 
-   if ( $line =~ /[\d+|\)]MAX\d+/ ) {
-      $log->info(
-         qq{The function aMAXb is deprecated, use the Jep function max(a,b) instead},
-         $file,
-         $lineNum
-      );
-   }
+   } elsif ($tag->value ne $newvalue) {
 
-   if ( $line =~ /[\d+|\)]MIN\d+/ ) {
-      $log->info(
-         qq{The function aMINb is deprecated, use the Jep function min(a,b) instead},
-         $file,
-         $lineNum
-      );
-   }
+      $tag->value = $newvalue;
 
-   if ( $line =~ /\b]TRUNC\b/ ) {
-      $log->info(
-         qq{The function TRUNC is deprecated, use the Jep function floor(a) instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sHITDICESIZE\s/ ) {
-      $log->info(
-         qq{HITDICESIZE is deprecated, use HITDIE instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sSPELl\s/ && $linetype ne 'PCC' ) {
-      $log->info(
-         qq{SPELL is deprecated, use SPELLS instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sWEAPONAUTO\s/ ) {
-      $log->info(
-         qq{WEAPONAUTO is deprecated, use AUTO:WEAPONPROF instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sADD:WEAPONBONUS\s/ ) {
-      $log->info(
-         qq{ADD:WEAPONBONUS is deprecated, use BONUS instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sADD:LIST\s/ ) {
-      $log->info(
-         qq{ADD:LIST is deprecated, use BONUS instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   if ( $line =~ /\sFOLLOWERALIGN/) {
-      $log->info(
-         qq{FOLLOWERALIGN is deprecated, use PREALIGN on Domain instead. Use the -c=pcgen5120 command line switch to fix this problem},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ 1905481 ] Deprecate CompanionMod SWITCHRACE
-   if ( $line =~ /\sSWITCHRACE\s/) {
-      $log->info(
-         qq{SWITCHRACE is deprecated 5.13.11 - Remove 6.0 - Use RACETYPE:x tag instead },
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ 1804786 ] Deprecate SA: replace with SAB:
-   if ( $line =~ /\sSA:/) {
-      $log->info(
-         qq{SA is deprecated 5.x.x - Remove 6.0 - use SAB instead },
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
-   if ( $line =~ /\sCHOOSE:EQBUILDER\|1/) {
-      $log->info(
-         qq{CHOOSE:EQBUILDER|1 is deprecated use CHOOSE:NOCHOICE instead },
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
-   if ( $line =~ /\sAUTO:ARMORPROF\|TYPE\=/) {
-      $log->info(
-         qq{AUTO:ARMORPROF|TYPE=x is deprecated Use AUTO:ARMORPROF|ARMORTYPE=x instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ 1870482 ] AUTO:SHIELDPROF changes
-   if ( $line =~ /\sAUTO:SHIELDPROF\|TYPE\=/) {
-      $log->info(
-         qq{AUTO:SHIELDPROF|TYPE=x is deprecated Use AUTO:SHIELDPROF|SHIELDTYPE=x instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ NEWTAG-19 ] CHOOSE:ARMORPROF= is deprecated
-   if ( $line =~ /\sCHOOSE:ARMORPROF\=/) {
-      $log->info(
-         qq{CHOOSE:ARMORPROF= is deprecated 5.15 - Remove 6.0. Use CHOOSE:ARMORPROFICIENCY instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ NEWTAG-17 ] CHOOSE:FEATADD= is deprecated
-   if ( $line =~ /\sCHOOSE:FEATADD\=/) {
-      $log->info(
-         qq{CHOOSE:FEATADD= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ NEWTAG-17 ] CHOOSE:FEATLIST= is deprecated
-   if ( $line =~ /\sCHOOSE:FEATLIST\=/) {
-      $log->info(
-         qq{CHOOSE:FEATLIST= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
-         $file,
-         $lineNum
-      );
-   }
-
-   # [ NEWTAG-17 ] CHOOSE:FEATSELECT= is deprecated
-   if ( $line =~ /\sCHOOSE:FEATSELECT\=/) {
-      $log->info(
-         qq{CHOOSE:FEATSELECT= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
-         $file,
-         $lineNum
-      );
-   }
-
-
-   # [ 1888288 ] CHOOSE:COUNT= is deprecated
-   if ( $line =~ /\sCHOOSE:COUNT\=/) {
-      $log->info(
-         qq{CHOOSE:COUNT= is deprecated 5.13.9 - Remove 6.0. Use SELECT instead},
-         $file,
-         $lineNum
+      $logger->warning(
+         qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealId . qq{"},
+         $tag->file,
+         $tag->line
       );
    }
 }
