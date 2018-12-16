@@ -1774,6 +1774,20 @@ sub isValidCheck{
    return exists $validCheckName{$check};
 }
 
+=head2 isValidFixedValue
+
+   Is this a valid value for the tag.
+
+=cut
+
+sub isValidFixedValue {
+
+   my ($tag, $value) = @_;
+
+   return exists $tagFixValue{$tag}{$value};
+}
+
+
 =head2 isValidGamemode
 
    Returns true if the given Gamemode is valid.
@@ -2427,7 +2441,7 @@ sub parseTag {
    ############################################################
    # We call the validating function if needed
    if (getOption('xcheck')) {
-      validate_tag($tag->realId, $tag->value, $tag->lineType, $tag->file, $tag->line)
+      LstTidy::Validate::validateTag($tag->realId, $tag->value, $tag->lineType, $tag->file, $tag->line)
    };
 
    if ($tag->value eq q{}) {
