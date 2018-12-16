@@ -312,6 +312,223 @@ sub isEntityValid {
    return exists $valid_entities{$entitytype}{$entityname};
 }
 
+=head2 scanForDeprecatedTags
+
+   This function establishes a centralized location to search
+   each line for deprecated tags.
+
+   Parameters: $line     = The line to be searched
+               $linetype = The type of line
+               $file     = File name to use with ewarn
+               $line     = The currrent line's number within the file
+
+=cut
+
+sub scanForDeprecatedTags {
+   my ( $line, $linetype, $file, $lineNum ) = @_ ;
+
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   # Deprecated tags
+   if ( $line =~ /\scl\(/ ) {
+      $logger->info(
+         qq{The Jep function cl() is deprecated, use classlevel() instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
+   if ( $line =~ /\sBONUS:DAMAGE\s/ ) {
+      $logger->info(
+         qq{BONUS:DAMAGE is deprecated 5.5.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
+   if ( $line =~ /\sBONUS:TOHIT\s/ ) {
+      $logger->info(
+         qq{BONUS:TOHIT is deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1973497 ] HASSPELLFORMULA is deprecated
+   if ( $line =~ /\sHASSPELLFORMULA/ ) {
+      $logger->warning(
+         qq{HASSPELLFORMULA is no longer needed and is deprecated in PCGen 5.15},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /[\d+|\)]MAX\d+/ ) {
+      $logger->info(
+         qq{The function aMAXb is deprecated, use the Jep function max(a,b) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /[\d+|\)]MIN\d+/ ) {
+      $logger->info(
+         qq{The function aMINb is deprecated, use the Jep function min(a,b) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\b]TRUNC\b/ ) {
+      $logger->info(
+         qq{The function TRUNC is deprecated, use the Jep function floor(a) instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sHITDICESIZE\s/ ) {
+      $logger->info(
+         qq{HITDICESIZE is deprecated, use HITDIE instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sSPELl\s/ && $linetype ne 'PCC' ) {
+      $logger->info(
+         qq{SPELL is deprecated, use SPELLS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sWEAPONAUTO\s/ ) {
+      $logger->info(
+         qq{WEAPONAUTO is deprecated, use AUTO:WEAPONPROF instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sADD:WEAPONBONUS\s/ ) {
+      $logger->info(
+         qq{ADD:WEAPONBONUS is deprecated, use BONUS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sADD:LIST\s/ ) {
+      $logger->info(
+         qq{ADD:LIST is deprecated, use BONUS instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   if ( $line =~ /\sFOLLOWERALIGN/) {
+      $logger->info(
+         qq{FOLLOWERALIGN is deprecated, use PREALIGN on Domain instead. Use the -c=pcgen5120 command line switch to fix this problem},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1905481 ] Deprecate CompanionMod SWITCHRACE
+   if ( $line =~ /\sSWITCHRACE\s/) {
+      $logger->info(
+         qq{SWITCHRACE is deprecated 5.13.11 - Remove 6.0 - Use RACETYPE:x tag instead },
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1804786 ] Deprecate SA: replace with SAB:
+   if ( $line =~ /\sSA:/) {
+      $logger->info(
+         qq{SA is deprecated 5.x.x - Remove 6.0 - use SAB instead },
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
+   if ( $line =~ /\sCHOOSE:EQBUILDER\|1/) {
+      $logger->info(
+         qq{CHOOSE:EQBUILDER|1 is deprecated use CHOOSE:NOCHOICE instead },
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
+   if ( $line =~ /\sAUTO:ARMORPROF\|TYPE\=/) {
+      $logger->info(
+         qq{AUTO:ARMORPROF|TYPE=x is deprecated Use AUTO:ARMORPROF|ARMORTYPE=x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ 1870482 ] AUTO:SHIELDPROF changes
+   if ( $line =~ /\sAUTO:SHIELDPROF\|TYPE\=/) {
+      $logger->info(
+         qq{AUTO:SHIELDPROF|TYPE=x is deprecated Use AUTO:SHIELDPROF|SHIELDTYPE=x instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-19 ] CHOOSE:ARMORPROF= is deprecated
+   if ( $line =~ /\sCHOOSE:ARMORPROF\=/) {
+      $logger->info(
+         qq{CHOOSE:ARMORPROF= is deprecated 5.15 - Remove 6.0. Use CHOOSE:ARMORPROFICIENCY instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATADD= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATADD\=/) {
+      $logger->info(
+         qq{CHOOSE:FEATADD= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATLIST= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATLIST\=/) {
+      $logger->info(
+         qq{CHOOSE:FEATLIST= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+   # [ NEWTAG-17 ] CHOOSE:FEATSELECT= is deprecated
+   if ( $line =~ /\sCHOOSE:FEATSELECT\=/) {
+      $logger->info(
+         qq{CHOOSE:FEATSELECT= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
+         $file,
+         $lineNum
+      );
+   }
+
+
+   # [ 1888288 ] CHOOSE:COUNT= is deprecated
+   if ( $line =~ /\sCHOOSE:COUNT\=/) {
+      $logger->info(
+         qq{CHOOSE:COUNT= is deprecated 5.13.9 - Remove 6.0. Use SELECT instead},
+         $file,
+         $lineNum
+      );
+   }
+}
+
 =head2 setEntityValid
 
    Increments the number of times entity has been seen, and makes the exists
@@ -777,7 +994,7 @@ sub validateClearTag {
 
    # All the .CLEAR must be separated tags to help with the tag ordering. That
    # is, we need to make sure the .CLEAR is ordered before the normal tag.  If
-   # the .CLEAR version of the tag doesn't exists, we do not change the tag
+   # the .CLEAR version of the tag doesn't exist, we do not change the tag
    # name but we give a warning.
 
    my $clearTag    = $tag->id . ':.CLEAR';
@@ -794,6 +1011,7 @@ sub validateClearTag {
          $tag->file,
          $tag->line
       );
+
       LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag); 
       $tag->noMoreErrors(1);
 

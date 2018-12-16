@@ -1730,9 +1730,9 @@ if (getOption('outputerror')) {
 # This function uses the information of LstTidy::Parse::parseControl to
 # identify the curent line type and parse it.
 #
-# Parameters: $fileType       = The type of the file has defined by the .PCC file
-#             $lines_ref      = Reference to an array containing all the lines of the file
-#             $file = File name to use with ewarn
+# Parameters: $fileType  = The type of the file has defined by the .PCC file
+#             $lines_ref = Reference to an array containing all the lines of the file
+#             $file      = File name to use with the logger
 
 sub FILETYPE_parse {
    my ($fileType, $lines_ref, $file) = @_;
@@ -1758,7 +1758,8 @@ sub FILETYPE_parse {
 
       my $line_info;
      
-      # Convert the line if that conversion is active, otherwise just copy it. 
+      # Convert the non-ascii character in the line if that conversion is
+      # active, otherwise just copy it. 
       my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
                         ? LstTidy::Convert::convertEntities($thisLine)
                         : $thisLine;
@@ -1818,7 +1819,7 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Parse::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
+      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1869,10 +1870,9 @@ sub FILETYPE_parse {
 
          my ( $tag, $value ) = LstTidy::Parse::extractTag($token, $curent_linetype, $file, $line );
 
-         # if extractTag returns a defined value, no further
-         # processing is neeeded. If tag is defined but value is not,
-         # then the tag that was returned is the cleaned token and
-         # should be processed further.
+         # if extractTag returns a defined value, no further processing is
+         # neeeded. If tag is defined but value is not, then the tag that was
+         # returned is the cleaned token and should be processed further.
          if ($tag && not defined $value) {
 
             my $tag =  LstTidy::Tag->new(
