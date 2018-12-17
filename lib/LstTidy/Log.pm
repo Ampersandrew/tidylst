@@ -307,6 +307,33 @@ sub _log {
 };
 
 
+=head2 report
+
+   This is the method that does a simple Report for things that we don't have
+   Files or line numbers for.
+
+   C<$logger->report( [message] )>
+
+   [message] A text string describing the issue.
+
+=cut
+
+sub report {
+   my ($self, $message) = @_;
+
+   # Print the header if needed
+   if ($self->printHeader()) {
+      warn $self->header();
+      $self->printHeader(0);
+      $self->isStartOfLog(0);
+   }
+   
+   # Make sure there is a new-line at the end of the output.
+   $message .= "\n" unless $message =~ /\n$/;
+
+   warn $message; 
+};
+
 =head2 checkWarningLevel
 
    Check that warning level is valid, if it is not, then return a default
