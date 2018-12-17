@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 38;
+use Test::More tests => 40;
 use Test::Warn;
 
 use_ok ('LstTidy::Log');
@@ -127,3 +127,7 @@ my ($header, $filename, $message) = ( @{ $log->collectedWarnings } );
 is($header, "\nThird header", "Header was printed");
 is($filename, "my_bar.lst\n", "header added, filename is also printed");
 is($message, qq{   Something to note\n}, "Message is correct");
+
+is(scalar @{$log->collectedWarnings}, 3, "Collected Warnings has three entries.");
+$log->collectedWarnings( [] );
+is(scalar @{$log->collectedWarnings}, 0, "Collected Warnings has been emptied.");
