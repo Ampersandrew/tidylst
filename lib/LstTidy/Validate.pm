@@ -1070,6 +1070,52 @@ sub processPREVAR {
    }
 }
 
+=head2 validateBonusChecks
+
+   Validate a Bonus checks tag. if this is called, we have already
+   eliminated BONUS:CHECKS|ALL
+
+=cut
+
+sub validateBonusChecks {
+
+   my ($tag, $checks) = @_;
+   
+   my ($base, $non_base) = ( 0, 0 );
+   
+   my $logger = LstTidy::LogFactory::getLogger();
+
+   for my $check ( split q{,}, $checks ) {
+
+      # We keep the original name for error messages
+      my $cleanCheck = $check;
+
+      # Did we use BASE.? is yes, we remove it
+      if ( $cleanCheck =~ s/ \A BASE [.] //xms ) {
+         $base = 1;
+      } else {
+         $non_base = 1;
+      }
+
+      if ( ! LstTidy::Parse::isValidCheck($cleanCheck) ) {
+         $logger->notice(
+            qq{Invalid save check name "$check" found in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+      }
+   }
+
+   # Warn the user if they're mixing base and non-base
+   if ( $base && $non_base ) {
+      $logger->info(
+         qq{Are you sure you want to mix BASE and non-BASE in "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
 =head2 validateBonusTag
 
 =cut
@@ -1081,7 +1127,7 @@ sub validateBonusTag {
    # Are there any PRE tags in the BONUS tag.
    if ( $tag->value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
 
-      # A PRExxx tag is present
+      # A PRExxx tag is present, make a new Tag with just the PRE info.
       my $subTag = LstTidy::Tag->new(
          fullTag  => "$1:$2",
          lineType => $tag->lineType, 
@@ -1089,6 +1135,7 @@ sub validateBonusTag {
          line     => $tag->line,
       );
 
+      # validate the pre, with the full embeded tag.
       validatePreTag($subTag, $tag->fullRealTag);
    }
 
@@ -1103,41 +1150,9 @@ sub validateBonusTag {
 
       # The checkname part
       if ( $check_names ne 'ALL' ) {
-         # We skip ALL as it is a special value that must be used alone
 
-         # $check_name => 1 or 0 to indicates if BASE. is used
-         my ($found_base, $found_non_base) = ( 0, 0 );
-
-         for my $check_name ( split q{,}, $check_names ) {
-            # We keep the original name for error messages
-            my $clean_check_name = $check_name;
-
-            # Did we use BASE.? is yes, we remove it
-            if ( $clean_check_name =~ s/ \A BASE [.] //xms ) {
-               $found_base = 1;
-            } else {
-               $found_non_base = 1;
-            }
-
-            # Is the check name valid
-            if ( ! LstTidy::Parse::isValidCheck($clean_check_name) ) {
-               $logger->notice(
-                  qq{Invalid save check name "$clean_check_name" found in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-         }
-
-         # Verify if there is a mix of BASE and non BASE
-         if ( $found_base && $found_non_base ) {
-            $logger->info(
-               qq{Are you sure you want to mix BASE and non-BASE in "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
-            );
-         }
-      }
+      validateBonusChecks($tag, $check_names);
+   }
 
       # The formula part
       push @LstTidy::Report::xcheck_to_process,
