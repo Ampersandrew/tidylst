@@ -34,6 +34,12 @@ has 'isStartOfLog' => (
    default => 1,
 );
 
+has 'isOutputting' => (
+   is      => 'rw',
+   isa     => 'Bool',
+   default => 1,
+);
+
 has 'previousFile' => (
    is      => 'rw',
    isa     => 'Str',
@@ -54,7 +60,23 @@ has 'warningLevel' => (
    coerce   => 1,
 );
 
-# make sue the construction warning level is a number in range
+has 'collectedWarnings' => (
+   is      => 'rw',
+   isa     => 'ArrayRef',
+   default => sub { [] },
+);
+
+sub doOutput {
+   my ($self) = shift;
+
+   if ($self->isOutputting) {
+      warn @_
+   } else {
+      push @{ $self->collectedWarnings }, @_
+   }
+}
+
+# make sure the construction warning level is a number in range
 
 around 'BUILDARGS' => sub {
 
@@ -263,11 +285,11 @@ sub _log {
    my ( $warning_level, $message, $file_name, $line_number ) = ( @_, undef );
 
    # Verify if warning level should be displayed
-   return if ( $self->warningLevel() < $warning_level );
+   return if ( $self->warningLevel < $warning_level );
 
    # Print the header if needed
-   if ($self->printHeader()) {
-      warn $self->header();
+   if ($self->printHeader) {
+      $self->doOutput($self->header);
       $self->printHeader(0);
       $self->isStartOfLog(0);
    }
@@ -287,19 +309,25 @@ sub _log {
    }->{$warning_level};
 
    # Add the line number if we have one.
-   $output .= "(Line ${line_number}): " if defined $line_number;
+   if (defined $line_number) {
+      $output .= "(Line ${line_number}): "
+   }
 
    # Add the message we were asked to output.
    $output .= $message;
    
    # Make sure there is a new-line at the end of the output.
-   $output .= "\n" unless $message =~ /\n$/;
+   if ($message !~ /\n$/) {
+      $output .= "\n"
+   }
 
    # We display the file only if it is not the same are the last
    # time _log was called
-   warn "$file_name\n" if $file_name ne $self->previousFile();
+   if ($file_name ne $self->previousFile) {
+      $self->doOutput("$file_name\n") 
+   }
 
-   warn $output; 
+   $self->doOutput($output); 
 
    # Set the file name of the file this message originated from
    # so that we only write each file name once.
@@ -322,16 +350,18 @@ sub report {
    my ($self, $message) = @_;
 
    # Print the header if needed
-   if ($self->printHeader()) {
-      warn $self->header();
+   if ($self->printHeader) {
+      $self->doOutput($self->header);
       $self->printHeader(0);
       $self->isStartOfLog(0);
    }
    
    # Make sure there is a new-line at the end of the output.
-   $message .= "\n" unless $message =~ /\n$/;
+   if ($message !~ /\n$/) {
+      $message .= "\n" 
+   }
 
-   warn $message; 
+   $self->doOutput($message); 
 };
 
 =head2 checkWarningLevel
