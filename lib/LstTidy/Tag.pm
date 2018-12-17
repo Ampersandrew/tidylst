@@ -130,4 +130,6 @@ sub fullRealTag {
    return $self->realId() . $sep . $self->value();
 };
 
+__PACKAGE__->meta->make_immutable;
+
 1;
