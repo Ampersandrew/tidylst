@@ -1235,7 +1235,7 @@ sub validateBonusTag {
       # The <move> are found in the MOVE tags.
       # <number to add or mult> can be a formula
 
-      my ( $type_list, $formula ) = ( split '\|', $tag->value )[ 1, 2 ];
+      my ( undef, $type_list, $formula ) = ( split '\|', $tag->value );
 
       # We keep the move types for validation
       for my $type ( split ',', $type_list ) {
@@ -1280,7 +1280,7 @@ sub validateBonusTag {
       # The valid types are defined in %validBonusSlots
       # <number of slots> could be a formula.
 
-      my ( $type_list, $formula ) = ( split '\|', $tag->value )[ 1, 2 ];
+      my ( undef, $type_list, $formula ) = ( split '\|', $tag->value );
 
       # We first check the slot types
       for my $type ( split ',', $type_list ) {
@@ -1311,8 +1311,7 @@ sub validateBonusTag {
    elsif ( $tag_name eq 'BONUS:VAR' ) {
 
       # BONUS:VAR|List of Names|Formula|... only the first two values are variable related.
-      my ( $var_name_list, @formulas )
-      = ( split '\|', $tag->value )[ 1, 2 ];
+      my ( undef, $var_name_list, @formulas ) = ( split '\|', $tag->value );
 
       # First we store the DEFINE variable name
       for my $var_name ( split ',', $var_name_list ) {
@@ -1361,7 +1360,7 @@ sub validateBonusTag {
    elsif ( $tag_name eq 'BONUS:WIELDCATEGORY' ) {
 
       # BONUS:WIELDCATEGORY|<List of category>|<formula>
-      my ( $category_list, $formula ) = ( split '\|', $tag->value )[ 1, 2 ];
+      my ( undef, $category_list, $formula ) = ( split '\|', $tag->value );
 
       # Validate the category to see if valid
       for my $category ( split ',', $category_list ) {
