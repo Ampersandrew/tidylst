@@ -1066,15 +1066,15 @@ sub processPREVAR {
    LstTidy::Report::registerXCheck('DEFINE Variable', qq{@@" in "} . $tag->fullRealTag, $tag->file, $tag->line, $var_name,);
 
    for my $formula (@formulas) {
-      my @values = LstTidy::Parse::parseJep( $formula, $tag->fullRealTag, $tag->file, $tag->line);
+      my @values = LstTidy::Parse::extractVariables($formula, $tag);
       LstTidy::Report::registerXCheck('DEFINE Variable', qq{@@" in "} . $tag->fullRealTag, $tag->file, $tag->line, @values);
    }
 }
 
 =head2 validateBonusChecks
 
-   Validate a Bonus checks tag. if this is called, we have already
-   eliminated BONUS:CHECKS|ALL
+   Validate a Bonus checks tag. if this is called, we have already eliminated
+   BONUS:CHECKS|ALL
 
 =cut
 
@@ -1147,7 +1147,7 @@ sub validateBonusTag {
       #                       | ( BASE.<check name 1> { | BASE.<check name 2> } { | BASE.<check name 3>} )
 
       # We get parameter 1 and 2 (0 is empty since $tag->value begins with a |)
-      my (undef, $check_names, $jep) = (split /[|]/, $tag->value);
+      my (undef, $check_names, $formula) = (split /[|]/, $tag->value);
 
       # The checkname part
       if ( $check_names ne 'ALL' ) {
@@ -1162,12 +1162,7 @@ sub validateBonusTag {
          qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
-         LstTidy::Parse::parseJep(
-            $jep,
-            $tag->fullTag,
-            $tag->file,
-            $tag->line
-         )
+         LstTidy::Parse::extractVariables($formula, $tag)
       ];
 
    } elsif ( $tag->id eq 'BONUS:FEAT' ) {
@@ -1196,12 +1191,7 @@ sub validateBonusTag {
          qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
-         LstTidy::Parse::parseJep(
-            ( shift @list_of_param ),
-            $tag->fullTag,
-            $tag->file,
-            $tag->line
-         )
+         LstTidy::Parse::extractVariables(shift @list_of_param, $tag)
       ];
 
       # For the rest, we need to check if it is a PRExxx tag or a TYPE=
@@ -1281,12 +1271,7 @@ sub validateBonusTag {
          qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
-         LstTidy::Parse::parseJep(
-            $formula,
-            $tag->fullTag,
-            $tag->file,
-            $tag->line
-         )
+         LstTidy::Parse::extractVariables($formula, $tag)
       ];
    }
    elsif ( $tag->id eq 'BONUS:SLOTS' ) {
@@ -1318,12 +1303,7 @@ sub validateBonusTag {
          qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
-         LstTidy::Parse::parseJep(
-            $formula,
-            $tag->fullTag,
-            $tag->file,
-            $tag->line
-         )
+         LstTidy::Parse::extractVariables($formula, $tag)
       ];
    }
    elsif ( $tag->id eq 'BONUS:VAR' ) {
@@ -1366,12 +1346,7 @@ sub validateBonusTag {
             qq{@@" in "} . $tag->fullTag,
             $tag->file,
             $tag->line,
-            LstTidy::Parse::parseJep(
-               $formula,
-               $tag->fullTag,
-               $tag->file,
-               $tag->line
-            )
+            LstTidy::Parse::extractVariables($formula, $tag)
          ];
       }
    }
@@ -1400,12 +1375,7 @@ sub validateBonusTag {
          qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
-         LstTidy::Parse::parseJep(
-            $formula,
-            $tag->fullTag,
-            $tag->file,
-            $tag->line
-         )
+         LstTidy::Parse::extractVariables($formula, $tag)
       ];
 
    }
@@ -1774,7 +1744,7 @@ sub validateTag {
                                 $tag->file,
                                 $tag->line,
                                 grep {
-                                                uc($_) ne 'ANY'
+                                           uc($_) ne 'ANY'
                                         && uc($_) ne 'ARCANE'
                                         && uc($_) ne 'DIVINE'
                                         && uc($_) ne 'PSIONIC'
@@ -1789,12 +1759,7 @@ sub validateTag {
                                 qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
-                                LstTidy::Parse::parseJep(
-                                        $formula,
-                                        $tag->fullTag,
-                                        $tag->file,
-                                        $tag->line
-                                )
+                                LstTidy::Parse::extractVariables($formula, $tag)
                                 ];
                 }
                 else {
@@ -1833,12 +1798,7 @@ sub validateTag {
                                 qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
-                                LstTidy::Parse::parseJep(
-                                        $formula,
-                                        $tag->fullTag,
-                                        $tag->file,
-                                        $tag->line
-                                )
+                                LstTidy::Parse::extractVariables($formula, $tag)
                                 ];
                 }
                 else {
@@ -1935,19 +1895,16 @@ sub validateTag {
                                 #               s/&comma;/,/g for @feats;
 
                                 # Here we deal with the formula part
-                                push @LstTidy::Report::xcheck_to_process,
-                                        [
-                                        'DEFINE Variable',
-                                        qq{@@" in "} . $tag->fullTag,
-                                        $tag->file,
-                                        $tag->line,
-                                        LstTidy::Parse::parseJep(
-                                                $formula,
-                                                $tag->fullTag,
-                                                $tag->file,
-                                                $tag->line
-                                        )
-                                        ] if $formula;
+                                if ($formula) {
+                                   push @LstTidy::Report::xcheck_to_process,
+                                   [
+                                      'DEFINE Variable',
+                                      qq{@@" in "} . $tag->fullTag,
+                                      $tag->file,
+                                      $tag->line,
+                                      LstTidy::Parse::extractVariables($formula, $tag)
+                                   ]
+                                }
                         }
                         else {
                                 $logger->notice(
@@ -2210,12 +2167,7 @@ sub validateTag {
                                 qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
-                                LstTidy::Parse::parseJep(
-                                        $formula,
-                                        $tag->fullTag,
-                                        $tag->file,
-                                        $tag->line
-                                ),
+                                LstTidy::Parse::extractVariables($formula, $tag)
                                 ];
                 }
                 else {
@@ -2252,12 +2204,7 @@ sub validateTag {
                                                    qq{@@" in "} . $tag->fullTag,
                                                    $tag->file,
                                                    $tag->line,
-                                                   LstTidy::Parse::parseJep(
-                                                      $2,
-                                                      $tag->fullTag,
-                                                      $tag->file,
-                                                      $tag->line
-                                                   )
+                                                   LstTidy::Parse::extractVariables($2, $tag)
                                                 ];
 
                                         } elsif ( $1 eq 'TIMEUNIT' ) {
@@ -2280,12 +2227,7 @@ sub validateTag {
                                                    qq{@@" in "} . $tag->fullTag,
                                                    $tag->file,
                                                    $tag->line,
-                                                   LstTidy::Parse::parseJep(
-                                                      $2,
-                                                      $tag->fullTag,
-                                                      $tag->file,
-                                                      $tag->line
-                                                   )
+                                                   LstTidy::Parse::extractVariables($2, $tag)
                                                 ];
                                         }
 
@@ -2316,12 +2258,7 @@ sub validateTag {
                                                 qq{@@" in "} . $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line,
-                                                LstTidy::Parse::parseJep(
-                                                        $dc,
-                                                        $tag->fullTag,
-                                                        $tag->file,
-                                                        $tag->line
-                                                )
+                                                LstTidy::Parse::extractVariables($dc, $tag)
                                                 ];
                                 }
                                 else {
@@ -2765,24 +2702,17 @@ sub validateTag {
                 }
                 ######################################################################
                 # Tag with numerical values
-                elsif ( $tag->id eq 'STARTSKILLPTS'
-                        || $tag->id eq 'SR'
-                        ) {
+                elsif ( $tag->id eq 'STARTSKILLPTS' || $tag->id eq 'SR') {
 
-                # These tags should only have a numeribal value
-                push @LstTidy::Report::xcheck_to_process,
-                        [
-                                'DEFINE Variable',
-                                qq{@@" in "} . $tag->fullTag,
-                                $tag->file,
-                                $tag->line,
-                                LstTidy::Parse::parseJep(
-                                $tag->value,
-                                $tag->fullTag,
-                                $tag->file,
-                                $tag->line
-                                ),
-                        ];
+                   # These tags should only have a numeribal value
+                   push @LstTidy::Report::xcheck_to_process,
+                   [
+                      'DEFINE Variable',
+                      qq{@@" in "} . $tag->fullTag,
+                      $tag->file,
+                      $tag->line,
+                      LstTidy::Parse::extractVariables($tag->value, $tag)
+                   ];
                 }
                 elsif ( $tag->id eq 'DEFINE' ) {
                         my ( $var_name, @formulas ) = split '\|', $tag->value;
@@ -2821,19 +2751,14 @@ sub validateTag {
 
                         # Second we deal with the formula
                         for my $formula (@formulas) {
-                                push @LstTidy::Report::xcheck_to_process,
-                                        [
-                                                'DEFINE Variable',
-                                                qq{@@" in "} . $tag->fullTag,
-                                                $$tag->file,
-                                                $tag->line,
-                                                LstTidy::Parse::parseJep(
-                                                        $formula,
-                                                        $tag->fullTag,
-                                                        $$tag->file,
-                                                        $tag->line
-                                                )
-                                        ];
+                           push @LstTidy::Report::xcheck_to_process,
+                           [
+                              'DEFINE Variable',
+                              qq{@@" in "} . $tag->fullTag,
+                              $$tag->file,
+                              $tag->line,
+                              LstTidy::Parse::extractVariables($formula, $tag)
+                           ];
                         }
                 }
                 elsif ( $tag->id eq 'SA' ) {
@@ -2859,18 +2784,13 @@ sub validateTag {
                                         }
 
                                         push @LstTidy::Report::xcheck_to_process,
-                                                [
-                                                        'DEFINE Variable',
-                                                        qq{@@" in "} . $tag->fullTag,
-                                                        $$tag->file,
-                                                        $tag->line,
-                                                        LstTidy::Parse::parseJep(
-                                                                $formula,
-                                                                $tag->fullTag,
-                                                                $$tag->file,
-                                                                $tag->line
-                                                        )
-                                                ];
+                                        [
+                                           'DEFINE Variable',
+                                           qq{@@" in "} . $tag->fullTag,
+                                           $$tag->file,
+                                           $tag->line,
+                                           LstTidy::Parse::extractVariables($formula, $tag)
+                                        ];
                                 }
                         }
                 }
@@ -2884,31 +2804,28 @@ sub validateTag {
 
                         FIND_BRACKETS:
                         while ( pos $value < length $value ) {
-                                my $result;
-                                # Find the first set of ()
-                                if ( (($result) = Text::Balanced::extract_bracketed( $value, '()' ))
-                                        && $result
-                                ) {
-                                        # Is there a CASTERLEVEL inside?
-                                        if ( $result =~ / CASTERLEVEL /xmsi ) {
-                                        push @LstTidy::Report::xcheck_to_process,
-                                                [
-                                                        'DEFINE Variable',
-                                                        qq{@@" in "} . $tag->fullTag,
-                                                        $$tag->file,
-                                                        $tag->line,
-                                                        LstTidy::Parse::parseJep(
-                                                        $result,
-                                                        $tag->fullTag,
-                                                        $$tag->file,
-                                                        $tag->line
-                                                        )
-                                                ];
-                                        }
-                                }
-                                else {
-                                        last FIND_BRACKETS;
-                                }
+
+                           my $result;
+
+                           # Find the first set of ()
+                           if ( (($result) = Text::Balanced::extract_bracketed( $value, '()' )) && $result) {
+
+                              # Is there a CASTERLEVEL inside?
+                              if ( $result =~ / CASTERLEVEL /xmsi ) {
+                                 push @LstTidy::Report::xcheck_to_process,
+                                 [
+                                    'DEFINE Variable',
+                                    qq{@@" in "} . $tag->fullTag,
+                                    $$tag->file,
+                                    $tag->line,
+                                    LstTidy::Parse::extractVariables($result, $tag)
+                                 ];
+                              }
+                           
+                           } else {
+
+                              last FIND_BRACKETS;
+                           }
                         }
                 }
                 elsif ( $tag->id eq 'NATURALATTACKS' ) {

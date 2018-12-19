@@ -45,7 +45,7 @@ use constant {
 # List of keywords Jep functions names. The fourth and fifth rows are for
 # functions defined by the PCGen libraries that do not exists in
 # the standard Jep library.
-my %is_jep_function = map { $_ => 1 } qw(
+my %isJepFunction = map { $_ => 1 } qw(
    sin     cos     tan     asin    acos    atan    atan2   sinh
    cosh    tanh    asinh   acosh   atanh   ln      log     exp
    abs     rand    mod     sqrt    sum     if      str
@@ -56,18 +56,17 @@ my %is_jep_function = map { $_ => 1 } qw(
 
 # Definition of a valid Jep identifiers. Note that all functions are
 # identifiers followed by a parentesis.
-my $is_ident = qr{ [a-z_][a-z_0-9]* }xmsi;
+my $isIdentRegex = qr{ [a-z_][a-z_0-9]* }xmsi;
 
 # Valid Jep operators
-my $is_operators_text = join( '|', map { quotemeta } (
-      '^', '%',  '/',  '*',  '+',  '-', '<=', '>=',
-      '<', '>', '!=', '==', '&&', '||', '=',  '!', '.',
+my $isOperatorsText = join( '|', map { quotemeta } (
+      '^', '%',  '/',  '*',  '+',  '-', '<=', '>=', '<', '>', '!=', '==', '&&', '||', '=',  '!', '.',
    )
 );
 
-my $is_operator = qr{ $is_operators_text }xms;
+my $isOperatorRegex = qr{ $isOperatorsText }xms;
 
-my $is_number = qr{ (?: \d+ (?: [.] \d* )? ) | (?: [.] \d+ ) }xms;
+my $isNumberRegex = qr{ (?: \d+ (?: [.] \d* )? ) | (?: [.] \d+ ) }xms;
 
 # Will hold the tags that do not have defined headers for each linetype.
 my %missing_headers;
@@ -136,16 +135,6 @@ my %tagProperValue = (
    'R'     =>  'REQUIRED',
    'true'  =>  'YES',
    'false' =>  'NO',
-);
-
-# [ 832171 ] AUTO:* needs to be separate tags
-my @token_AUTO_tag = (
-   'ARMORPROF',
-   'EQUIP',
-   'FEAT',
-   'LANG',
-   'SHIELDPROF',
-   'WEAPONPROF',
 );
 
 # List of default for values defined in system files
@@ -2033,39 +2022,30 @@ sub parseAutoTag {
 }
 
 
-=head2 parseJep
+=head2 extractVariables
 
-   Parse a Jep formula expression and return a list of variables found.
-
-   parseJep is just a stub to call _parseJepRec the first time
+   Parse an expression and return a list of variables found.
 
    Parameter:  $formula : String containing the formula
-               $tag     : Tag containing the formula
-               $file    : Filename to use with ewarn
-               $line    : Line number to use with ewarn
-
-   Return a list of variables names found in the formula
+               $tag     : The Tag object
 
 =cut
 
-sub parseJep {
+sub extractVariables {
 
-   # We abosulutely need to be called in array context.
+   # We absolutely need to be called in array context.
    if (!wantarray) {
-      croak q{parseJep must be called in list context}
+      croak q{extractVariables must be called in list context}
    };
 
-   # Sanity check on the number of parameters
-   if (scalar @_ != 4) {
-      croak q{Wrong number of parameters for parseJep}
-   };
+   my ($toParse, $tag) = @_;
 
    # If the -nojep command line option was used, we
    # call the old parser
    if ( getOption('nojep') ) {
-      return _extract_var_name(@_);
+      return _oldExtractVariables($toParse, $tag->fullRealTag, $tag->file, $tag->line);
    } else {
-      return _parseJepRec( @_, 0 );
+      return _parseJepFormula($toParse, $tag->fullRealTag, $tag->file, $tag->line, 0 );
    }
 }
 
@@ -2733,14 +2713,14 @@ sub updateValidity {
 
 };
 
-=head2 _extract_var_name
+=head2 _oldExtractVariables
 
-   The prejep variable parser. This is used when the jep optin is turned off.
-   It is also used by the jep parser.
+   The prejep variable parser. This is used both by the jep parser and when the
+   jep option is turned off.
 
 =cut
 
-sub _extract_var_name {
+sub _oldExtractVariables {
 
    my ( $formula, $tag, $file, $line ) = @_;
 
@@ -2823,7 +2803,7 @@ sub _extract_var_name {
    return @variable_names;
 }
 
-=head2 _parseJepRec
+=head2 _parseJepFormula
 
    Parse a Jep formula expression and return a list of variables
    found.
@@ -2836,7 +2816,7 @@ sub _extract_var_name {
 
 =cut
 
-sub _parseJepRec {
+sub _parseJepFormula {
    my ($formula, $tag, $file, $line, $is_param) = @_;
 
    return () if !defined $formula;
@@ -2853,7 +2833,7 @@ sub _parseJepRec {
    while ( pos $formula < length $formula ) {
 
       # If it's an identifier or a function
-      if ( my ($ident) = ( $formula =~ / \G ( $is_ident ) /xmsgc ) ) {
+      if ( my ($ident) = ( $formula =~ / \G ( $isIdentRegex ) /xmsgc ) ) {
 
          # Identifiers are only valid after an operator or a separator
          if ( $last_token_type && $last_token_type ne 'operator' && $last_token_type ne 'separator' ) {
@@ -2870,7 +2850,7 @@ sub _parseJepRec {
          } elsif ( $formula =~ / \G [(] /xmsgc ) {
 
             # It's a function, is it valid?
-            if ( !$is_jep_function{$ident} ) {
+            if ( !$isJepFunction{$ident} ) {
                $logger->notice(
                   qq{Not a valid Jep function: $ident() found in $tag},
                   $file,
@@ -2915,12 +2895,12 @@ sub _parseJepRec {
                }
 
                # It's a variable, use the old varname operation.
-               push @variables_found, _extract_var_name($var_text, $tag, $file, $line);
+               push @variables_found, _oldExtractVariables($var_text, $tag, $file, $line);
 
             } else {
 
                # Otherwise, each of the function parameters should be a valid Jep expression
-               push @variables_found, _parseJepRec( $extracted_text, $tag, $file, $line, 1 );
+               push @variables_found, _parseJepFormula( $extracted_text, $tag, $file, $line, 1 );
             }
 
          } else {
@@ -2931,7 +2911,7 @@ sub _parseJepRec {
             $last_token_type = 'ident';
          }
 
-      } elsif ( my ($operator) = ( $formula =~ / \G ( $is_operator ) /xmsgc ) ) {
+      } elsif ( my ($operator) = ( $formula =~ / \G ( $isOperatorRegex ) /xmsgc ) ) {
          # It's an operator
 
          if ( $operator eq '=' ) {
@@ -2973,7 +2953,7 @@ sub _parseJepRec {
             ($extracted_text) = ( $extracted_text =~ / \A [(] ( .* ) [)] \z /xms );
 
             # Recursive call
-            push @variables_found, _parseJepRec( $extracted_text, $tag, $file, $line, 0 );
+            push @variables_found, _parseJepFormula( $extracted_text, $tag, $file, $line, 0 );
 
          } else {
 
@@ -2986,7 +2966,7 @@ sub _parseJepRec {
             );
          }
 
-      } elsif ( my ($number) = ( $formula =~ / \G ( $is_number ) /xmsgc ) ) {
+      } elsif ( my ($number) = ( $formula =~ / \G ( $isNumberRegex ) /xmsgc ) ) {
 
          # It's a number
          $last_token = $number;

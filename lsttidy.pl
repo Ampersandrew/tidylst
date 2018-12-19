@@ -6151,8 +6151,8 @@ missing/inconsistant values.
 
 =head2 B<-nojep>
 
-Disable the new LstTidy::Parse::parseJep function for the formula. This makes the script use the
-old style formula parser.
+Disable the new LstTidy::Parse::extractVariables function for the formula. This
+makes the script use the old style formula parser.
 
 =head2 B<-noxcheck> or B<-nx>
 
