@@ -1182,7 +1182,7 @@ sub validateBonusTag {
       if ( ( shift @list_of_param ) ne 'POOL' ) {
 
          # For now, only POOL is valid here
-         $logger->notice(
+         LestTidy::LogFactory::getLogger->notice(
             qq{Only POOL is valid as second paramater for BONUS:FEAT "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1225,7 +1225,7 @@ sub validateBonusTag {
 
          } else {
 
-            $logger->notice(
+            LestTidy::LogFactory::getLogger->notice(
                qq{Invalid parameter "$param" found in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1234,7 +1234,7 @@ sub validateBonusTag {
       }
 
       if ( $type_present > 1 ) {
-         $logger->notice(
+         LestTidy::LogFactory::getLogger->notice(
             qq{There should be only one "TYPE=" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1266,7 +1266,7 @@ sub validateBonusTag {
             ];
          }
          else {
-            $logger->notice(
+            LestTidy::LogFactory::getLogger->notice(
                qq{Missing "TYPE=" for "$type" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1297,6 +1297,8 @@ sub validateBonusTag {
       # <number of slots> could be a formula.
 
       my ( undef, $type_list, $formula ) = ( split '\|', $tag->value );
+
+      my $logger = LestTidy::LogFactory::getLogger();
 
       # We first check the slot types
       for my $type ( split ',', $type_list ) {
@@ -1346,7 +1348,7 @@ sub validateBonusTag {
             }
          }
          else {
-            $logger->notice(
+            LestTidy::LogFactory::getLogger->notice(
                qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1377,6 +1379,8 @@ sub validateBonusTag {
 
       # BONUS:WIELDCATEGORY|<List of category>|<formula>
       my ( undef, $category_list, $formula ) = ( split '\|', $tag->value );
+
+      my $logger = LestTidy::LogFactory::getLogger();
 
       # Validate the category to see if valid
       for my $category ( split ',', $category_list ) {
@@ -1647,7 +1651,7 @@ sub validateTag {
                                         }
                                         else {
                                                 $logger->warning(
-                                                        qq{Missing "=level" after "} . $tag->id . ":$level"},
+                                                        qq{Missing "=level" after "} . $tag->id . ":$level",
                                                         $tag->file,
                                                         $tag->line
                                                 );
@@ -2609,7 +2613,7 @@ sub validateTag {
                                 }
                                 else {
                                         $logger->notice(
-                                                qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"};
+                                                qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
