@@ -21,7 +21,6 @@ use Pod::Text    ();     # the modules other than "system" modules
 use Pod::Usage   ();
 use File::Find   ();
 use File::Basename ();
-use Text::Balanced ();
 
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
@@ -45,7 +44,6 @@ sub additionnal_file_parsing;
 sub check_clear_tag_order;
 sub find_full_path;
 sub create_dir;
-sub embedded_coma_split;
 sub record_bioset_tags;
 sub generate_bioset_files;
 sub generate_css;
@@ -5218,60 +5216,6 @@ sub create_dir {
                 # Create the curent level directory
                 mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
         }
-}
-
-###############################################################
-# embedded_coma_split
-# -------------------
-#
-# split a list using the comma but part of the list may be
-# between brackets and the comma must be ignored there.
-#
-# Parameter: $list      List that need to be splited
-#               $separator      optionnal expression used for the
-#                               split, ',' is the default.
-#
-# Return the splited list.
-
-sub embedded_coma_split {
-
-        # The list may contain other lists between brackets.
-        # We will first change all the , in within brackets
-        # before doing our split.
-        my ( $list, $separator ) = ( @_, ',' );
-
-        return () unless $list;
-
-        my $newlist;
-        my @result;
-
-        BRACE_LIST:
-        while ($list) {
-
-                # We find the next text within ()
-                @result = Text::Balanced::extract_bracketed( $list, '()', qr([^()]*) );
-
-                # If we didn't find any (), it's over
-                if ( !$result[0] ) {
-                $newlist .= $list;
-                last BRACE_LIST;
-                }
-
-                # The prefix is added to $newlist
-                $newlist .= $result[2];
-
-                # We replace every , with &comma;
-                $result[0] =~ s/,/&coma;/xmsg;
-
-                # We add the bracket section
-                $newlist .= $result[0];
-
-                # We start again with what's left
-                $list = $result[1];
-        }
-
-        # Now we can split
-        return map { s/&coma;/,/xmsg; $_ } split $separator, $newlist;
 }
 
 
