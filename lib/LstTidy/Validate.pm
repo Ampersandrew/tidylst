@@ -12,7 +12,7 @@ use LstTidy::Parse;
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
 # line type will get the same sort order.
-my @PRE_Tags = (
+my @PreTags = (
         'PRE:.CLEAR',
         'PREABILITY:*',
         '!PREABILITY',
@@ -240,20 +240,21 @@ my @PRE_Tags = (
         #       'PREVAR',
 );
 
-# Hash used by validate_pre_tag to verify if a PRExxx tag exists
-my %PRE_Tags = (
+# Hash used by validatePreTag to verify if a PRExxx tag exists
+my %PreTags = (
    'PREAPPLY'          => 1,   # Only valid when embeded - THIS IS DEPRECATED
    'PREDEFAULTMONSTER' => 1,   # Only valid when embeded
 );
 
-for my $pre_tag (@PRE_Tags) {
-        # We need a copy since we don't want to modify the original
-        my $pre_tag_name = $pre_tag;
+for my $preTag (@PreTags) {
 
-        # We strip the :* at the end to get the real name for the lookup table
-        $pre_tag_name =~ s/ [:][*] \z//xms;
+   # We need a copy since we don't want to modify the original
+   my $preTagName = $preTag;
 
-        $PRE_Tags{$pre_tag_name} = 1;
+   # We strip the :* at the end to get the real name for the lookup table
+   $preTagName =~ s/ [:][*] \z//xms;
+
+   $PreTags{$preTagName} = 1;
 }
 
 
@@ -1062,11 +1063,11 @@ sub processPREVAR {
 
    my ( $var_name, @formulas ) = split ',', $tag->value;
 
-   LstTidy::Report::registerXCheck('DEFINE Variable', qq(@@" in ") . $tag->fullRealTag, $tag->file, $tag->line, $var_name,);
+   LstTidy::Report::registerXCheck('DEFINE Variable', qq{@@" in "} . $tag->fullRealTag, $tag->file, $tag->line, $var_name,);
 
    for my $formula (@formulas) {
       my @values = LstTidy::Parse::parseJep( $formula, $tag->fullRealTag, $tag->file, $tag->line);
-      LstTidy::Report::registerXCheck('DEFINE Variable', qq(@@" in ") . $tag->fullRealTag, $tag->file, $tag->line, @values);
+      LstTidy::Report::registerXCheck('DEFINE Variable', qq{@@" in "} . $tag->fullRealTag, $tag->file, $tag->line, @values);
    }
 }
 
@@ -1139,9 +1140,9 @@ sub validateBonusTag {
       validatePreTag($subTag, $tag->fullRealTag);
    }
 
-   if ( $tag_name eq 'BONUS:CHECKS' ) {
+   if ( $tag->id eq 'BONUS:CHECKS' ) {
       # BONUS:CHECKS|<check list>|<jep> {|TYPE=<bonus type>} {|<pre tags>}
-      # BONUS:CHECKS|ALL|<jep>                {|TYPE=<bonus type>} {|<pre tags>}
+      # BONUS:CHECKS|ALL|<jep>          {|TYPE=<bonus type>} {|<pre tags>}
       # <check list> :=   ( <check name 1> { | <check name 2> } { | <check name 3>} )
       #                       | ( BASE.<check name 1> { | BASE.<check name 2> } { | BASE.<check name 3>} )
 
@@ -1169,7 +1170,7 @@ sub validateBonusTag {
          )
       ];
 
-   } elsif ( $tag_name eq 'BONUS:FEAT' ) {
+   } elsif ( $tag->id eq 'BONUS:FEAT' ) {
 
       # BONUS:FEAT|POOL|<formula>|<prereq list>|<bonus type>
 
@@ -1192,12 +1193,12 @@ sub validateBonusTag {
       push @LstTidy::Report::xcheck_to_process,
       [
          'DEFINE Variable',
-         qq(@@" in "$tag_name$tag->value),
+         qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
          LstTidy::Parse::parseJep(
             ( shift @list_of_param ),
-            "$tag_name$tag->value",
+            $tag->fullTag,
             $tag->file,
             $tag->line
          )
@@ -1225,7 +1226,7 @@ sub validateBonusTag {
          } else {
 
             $logger->notice(
-               qq{Invalid parameter "$param" found in "$tag_name$tag->value"},
+               qq{Invalid parameter "$param" found in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
             );
@@ -1234,15 +1235,15 @@ sub validateBonusTag {
 
       if ( $type_present > 1 ) {
          $logger->notice(
-            qq{There should be only one "TYPE=" in "$tag_name$tag->value"},
+            qq{There should be only one "TYPE=" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
          );
       }
    }
-   if (   $tag_name eq 'BONUS:MOVEADD'
-      || $tag_name eq 'BONUS:MOVEMULT'
-      || $tag_name eq 'BONUS:POSTMOVEADD' )
+   if (   $tag->id eq 'BONUS:MOVEADD'
+      || $tag->id eq 'BONUS:MOVEMULT'
+      || $tag->id eq 'BONUS:POSTMOVEADD' )
    {
 
       # BONUS:MOVEMULT|<list of move types>|<number to add or mult>
@@ -1258,7 +1259,7 @@ sub validateBonusTag {
             push @LstTidy::Report::xcheck_to_process,
             [
                'MOVE Type',
-               qq(TYPE$1@@" in "$tag_name$tag_value),
+               qq{TYPE$1@@" in "} . $tag->fullTag,
                $tag->file,
                $tag->line,
                $2
@@ -1266,7 +1267,7 @@ sub validateBonusTag {
          }
          else {
             $logger->notice(
-               qq(Missing "TYPE=" for "$type" in "} . $tag->fullTag . q{"),
+               qq{Missing "TYPE=" for "$type" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
             );
@@ -1277,7 +1278,7 @@ sub validateBonusTag {
       push @LstTidy::Report::xcheck_to_process,
       [
          'DEFINE Variable',
-         qq(@@" in "$tag_name$tag_value),
+         qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
          LstTidy::Parse::parseJep(
@@ -1288,7 +1289,7 @@ sub validateBonusTag {
          )
       ];
    }
-   elsif ( $tag_name eq 'BONUS:SLOTS' ) {
+   elsif ( $tag->id eq 'BONUS:SLOTS' ) {
 
       # BONUS:SLOTS|<slot types>|<number of slots>
       # <slot types> is a comma separated list.
@@ -1312,7 +1313,7 @@ sub validateBonusTag {
       push @LstTidy::Report::xcheck_to_process,
       [
          'DEFINE Variable',
-         qq(@@" in "$tag_name$tag_value),
+         qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
          LstTidy::Parse::parseJep(
@@ -1323,7 +1324,7 @@ sub validateBonusTag {
          )
       ];
    }
-   elsif ( $tag_name eq 'BONUS:VAR' ) {
+   elsif ( $tag->id eq 'BONUS:VAR' ) {
 
       # BONUS:VAR|List of Names|Formula|... only the first two values are variable related.
       my ( undef, $var_name_list, @formulas ) = ( split '\|', $tag->value );
@@ -1337,7 +1338,7 @@ sub validateBonusTag {
                push @LstTidy::Report::xcheck_to_process,
                [
                   'DEFINE Variable',
-                  qq(@@" in "$tag_name$tag_value),
+                  qq{@@" in "} . $tag->fullTag,
                   $tag->file,
                   $tag->line,
                   $var_name,
@@ -1360,7 +1361,7 @@ sub validateBonusTag {
          push @LstTidy::Report::xcheck_to_process,
          [
             'DEFINE Variable',
-            qq(@@" in "$tag_name$tag_value),
+            qq{@@" in "} . $tag->fullTag,
             $tag->file,
             $tag->line,
             LstTidy::Parse::parseJep(
@@ -1372,7 +1373,7 @@ sub validateBonusTag {
          ];
       }
    }
-   elsif ( $tag_name eq 'BONUS:WIELDCATEGORY' ) {
+   elsif ( $tag->id eq 'BONUS:WIELDCATEGORY' ) {
 
       # BONUS:WIELDCATEGORY|<List of category>|<formula>
       my ( undef, $category_list, $formula ) = ( split '\|', $tag->value );
@@ -1392,7 +1393,7 @@ sub validateBonusTag {
       push @LstTidy::Report::xcheck_to_process,
       [
          'DEFINE Variable',
-         qq(@@" in "$tag_name$tag_value),
+         qq{@@" in "} . $tag->fullTag,
          $tag->file,
          $tag->line,
          LstTidy::Parse::parseJep(
@@ -1554,7 +1555,7 @@ sub validatePreTag {
    # Check for PRExxx that do not exist. We only check the
    # tags that are embeded since parse_tag already took care
    # of the PRExxx tags on the entry lines.
-   elsif ( $enclosingTag && !exists $PRE_Tags{$tag->id} ) {
+   elsif ( $enclosingTag && !exists $PreTags{$tag->id} ) {
 
       LstTidy::LogFactory::getLogger()->notice(
          qq{Unknown PRExxx tag "} . $tag->id . q{" found in "$enclosingTag"},
@@ -1575,12 +1576,6 @@ sub validatePreTag {
 #
 # The %referrer hash must be populated following this format
 # $referrer{$lintype}{$name} = [ $err_desc, $file, $line ]
-#
-# Paramter: $tag_name   Name of the tag (before the :)
-#           $tag_value  Value of the tag (after the :)
-#           $linetype   Type for the current file
-#           $file       Name of the current file
-#           $line       Number of the current line
 
 sub validateTag {
 
@@ -1588,34 +1583,30 @@ sub validateTag {
 
    my $logger = LstTidy::LogFactory::getLogger();
 
-   my ( $tag_name, $tag_value, $linetype, $file, $line ) = @_;
-
-   study $tag_value;
-
-   if ($tag_name eq 'STARTPACK')
+   if ($tag->id eq 'STARTPACK')
    {
-      LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:$tag_value");
-      LstTidy::Validate::setEntityValid('KIT', "KIT:$tag_value"          );
+      LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:" . $tag->value);
+      LstTidy::Validate::setEntityValid('KIT', "KIT:" . $tag->value);
 
-   } elsif ( $tag_name =~ /^\!?PRE/ ) {
+   } elsif ( $tag->id =~ /^\!?PRE/ ) {
 
       # It's a PRExxx tag, we delegate
       return LstTidy::Validate::validatePreTag( $tag, "");
 
-   } elsif (index( $tag_name, 'PROFICIENCY' ) == 0 ) {
+   } elsif (index( $tag->id, 'PROFICIENCY' ) == 0 ) {
 
-   } elsif ( index( $tag_name, 'BONUS' ) == 0 ) {
+   } elsif ( index( $tag->id, 'BONUS' ) == 0 ) {
 
       validateBonusTag($tag);
 
-   } elsif ( $tag_name eq 'CLASSES' || $tag_name eq 'DOMAINS' ) {
+   } elsif ( $tag->id eq 'CLASSES' || $tag->id eq 'DOMAINS' ) {
 
                 if ( $tag->lineType eq 'SPELL' ) {
                         my %seen;
-                        my $tag_to_check = $tag_name eq 'CLASSES' ? 'CLASS' : 'DOMAIN';
+                        my $tag_to_check = $tag->id eq 'CLASSES' ? 'CLASS' : 'DOMAIN';
 
                         # First we find all the classes used
-                        for my $level ( split '\|', $tag_value ) {
+                        for my $level ( split '\|', $tag->value ) {
                                 if ( $level =~ /(.*)=(\d+)/ ) {
                                 for my $entity ( split ',', $1 ) {
 
@@ -1634,7 +1625,7 @@ sub validateTag {
                                                 push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 $tag_to_check,
-                                                $tag_name,
+                                                $tag->id,
                                                 $tag->file,
                                                 $tag->line,
                                                 $entity
@@ -1642,7 +1633,7 @@ sub validateTag {
 
                                                 if ( $seen{$entity}++ ) {
                                                 $logger->notice(
-                                                        qq{"$entity" found more then once in $tag_name},
+                                                        qq{"$entity" found more then once in } . $tag->id,
                                                         $tag->file,
                                                         $tag->line
                                                 );
@@ -1651,12 +1642,12 @@ sub validateTag {
                                 }
                                 }
                                 else {
-                                        if ( "$tag_name:$level" eq 'CLASSES:.CLEARALL' ) {
+                                        if ( $tag->id . ":$level" eq 'CLASSES:.CLEARALL' ) {
                                                 # Nothing to see here. Move on.
                                         }
                                         else {
                                                 $logger->warning(
-                                                        qq{Missing "=level" after "$tag_name:$level"},
+                                                        qq{Missing "=level" after "} . $tag->id . ":$level"},
                                                         $tag->file,
                                                         $tag->line
                                                 );
@@ -1668,7 +1659,7 @@ sub validateTag {
 
                         # Only CLASSES in SKILL
                         CLASS_FOR_SKILL:
-                        for my $class ( split '\|', $tag_value ) {
+                        for my $class ( split '\|', $tag->value ) {
 
                                 # ALL is valid here
                                 next CLASS_FOR_SKILL if $class eq 'ALL';
@@ -1676,7 +1667,7 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'CLASS',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 $class
@@ -1685,11 +1676,11 @@ sub validateTag {
                 }
                 elsif (   $tag->lineType eq 'DEITY' ) {
                         # Only DOMAINS in DEITY
-                        if ($tag_value =~ /\|/ ) {
-                        $tag_value = substr($tag_value, 0, rindex($tag_value, "\|"));
+                        if ($tag->value =~ /\|/ ) {
+                           $tag->value(substr($tag->value, 0, rindex($tag->value, "\|")));
                         }
                         DOMAIN_FOR_DEITY:
-                        for my $domain ( split ',', $tag_value ) {
+                        for my $domain ( split ',', $tag->value ) {
 
                                 # ALL is valid here
                                 next DOMAIN_FOR_DEITY if $domain eq 'ALL';
@@ -1697,7 +1688,7 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DOMAIN',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 $domain
@@ -1705,7 +1696,7 @@ sub validateTag {
                         }
                 }
                 }
-                elsif ( $tag_name eq 'CLASS'
+                elsif ( $tag->id eq 'CLASS'
                         && $tag->lineType ne 'PCC'
                 ) {
                 # Note: The CLASS linetype doesn't have any CLASS tag, it's
@@ -1714,60 +1705,60 @@ sub validateTag {
                 # CLASS:<class name>,<class name>,...[BASEAGEADD:<dice expression>]
 
                 # We remove and ignore [BASEAGEADD:xxx] if present
-                my $list_of_class = $tag_value;
+                my $list_of_class = $tag->value;
                 $list_of_class =~ s{ \[ BASEAGEADD: [^]]* \] }{}xmsg;
 
                 push @LstTidy::Report::xcheck_to_process,
                         [
                                 'CLASS',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 (split /[|,]/, $list_of_class),
                         ];
                 }
-                elsif ( $tag_name eq 'DEITY'
+                elsif ( $tag->id eq 'DEITY'
                         && $tag->lineType ne 'PCC'
                 ) {
                 # DEITY:<deity name>|<deity name>|etc.
                 push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DEITY',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
-                                (split /[|]/, $tag_value),
+                                (split /[|]/, $tag->value),
                         ];
                 }
-                elsif ( $tag_name eq 'DOMAIN'
+                elsif ( $tag->id eq 'DOMAIN'
                         && $tag->lineType ne 'PCC'
                 ) {
                 # DOMAIN:<domain name>|<domain name>|etc.
                 push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DOMAIN',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
-                                (split /[|]/, $tag_value),
+                                (split /[|]/, $tag->value),
                         ];
                 }
-                elsif ( $tag_name eq 'ADDDOMAINS' ) {
+                elsif ( $tag->id eq 'ADDDOMAINS' ) {
 
                 # ADDDOMAINS:<domain1>.<domain2>.<domain3>. etc.
                 push @LstTidy::Report::xcheck_to_process,
                         [
                         'DOMAIN',
-                        $tag_name,
+                        $tag->id,
                         $tag->file,
                         $tag->line,
-                        split '\.', $tag_value
+                        split '\.', $tag->value
                         ];
                 }
-                elsif ( $tag_name eq 'ADD:SPELLCASTER' ) {
+                elsif ( $tag->id eq 'ADD:SPELLCASTER' ) {
 
                 # ADD:SPELLCASTER(<list of classes>)<formula>
-                if ( $tag_value =~ /\((.*)\)(.*)/ ) {
+                if ( $tag->value =~ /\((.*)\)(.*)/ ) {
                         my ( $list, $formula ) = ( $1, $2 );
 
                         # First the list of classes
@@ -1775,7 +1766,7 @@ sub validateTag {
                         # the ADD:SPELLCASTER tag.
                         push @LstTidy::Report::xcheck_to_process, [
                                 'CLASS',
-                                qq(@@" in "$tag_name$tag_value),
+                                qq{@@" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 grep {
@@ -1791,12 +1782,12 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
-                                qq(@@" from "$formula" in "$tag_name$tag_value),
+                                qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 LstTidy::Parse::parseJep(
                                         $formula,
-                                        "$tag_name$tag_value",
+                                        $tag->fullTag,
                                         $tag->file,
                                         $tag->line
                                 )
@@ -1804,16 +1795,16 @@ sub validateTag {
                 }
                 else {
                         $logger->notice(
-                                qq{Invalid syntax: "$tag_name$tag_value"},
+                                qq{Invalid syntax: "} . $tag->fullTag . q{"},
                                 $tag->file,
                                 $tag->line
                         );
                 }
                 }
-                elsif ( $tag_name eq 'ADD:EQUIP' ) {
+                elsif ( $tag->id eq 'ADD:EQUIP' ) {
 
                 # ADD:EQUIP(<list of equipments>)<formula>
-                if ( $tag_value =~ m{ [(]   # Opening brace
+                if ( $tag->value =~ m{ [(]   # Opening brace
                                                 (.*)  # Everything between braces include other braces
                                                 [)]   # Closing braces
                                                 (.*)  # The rest
@@ -1825,7 +1816,7 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'EQUIPMENT',
-                                qq(@@" in "$tag_name$tag_value),
+                                qq{@@" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 grep { uc($_) ne 'ANY' } split ',', $list
@@ -1835,12 +1826,12 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
-                                qq(@@" from "$formula" in "$tag_name$tag_value),
+                                qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 LstTidy::Parse::parseJep(
                                         $formula,
-                                        "$tag_name$tag_value",
+                                        $tag->fullTag,
                                         $tag->file,
                                         $tag->line
                                 )
@@ -1848,24 +1839,24 @@ sub validateTag {
                 }
                 else {
                         $logger->notice(
-                                qq{Invalid syntax: "$tag_name$tag_value"},
+                                qq{Invalid syntax: "} . $tag->fullTag . q{"},
                                 $tag->file,
                                 $tag->line
                         );
                 }
                 }
-                elsif ($tag_name eq 'EQMOD'
-                || $tag_name eq 'IGNORES'
-                || $tag_name eq 'REPLACES'
-                || ( $tag_name =~ /!?PRETYPE/ && $tag_value =~ /(\d+,)?EQMOD=/ )
+                elsif ($tag->id eq 'EQMOD'
+                || $tag->id eq 'IGNORES'
+                || $tag->id eq 'REPLACES'
+                || ( $tag->id =~ /!?PRETYPE/ && $tag->value =~ /(\d+,)?EQMOD=/ )
                 ) {
 
                 # This section check for any reference to an EQUIPMOD key
-                if ( $tag_name eq 'EQMOD' ) {
+                if ( $tag->id eq 'EQMOD' ) {
 
                         # The higher level for the EQMOD is the . (who's the genius who
                         # dreamed that up...
-                        my @key_list = split '\.', $tag_value;
+                        my @key_list = split '\.', $tag->value;
 
                         # The key name is everything found before the first |
                         for $_ (@key_list) {
@@ -1876,7 +1867,7 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'EQUIPMOD Key',
-                                        qq(@@" in "$tag_name:$tag_value),
+                                        qq{@@" in "} . $tag->fullTag,
                                         $tag->file,
                                         $tag->line,
                                         $key
@@ -1884,35 +1875,35 @@ sub validateTag {
                                 }
                                 else {
                                 $logger->warning(
-                                        qq(Cannot find the key for "$_" in "$tag_name:$tag_value"),
+                                        qq{Cannot find the key for "$_" in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
                                 }
                         }
                 }
-                elsif ( $tag_name eq "IGNORES" || $tag_name eq "REPLACES" ) {
+                elsif ( $tag->id eq "IGNORES" || $tag->id eq "REPLACES" ) {
 
                         # Comma separated list of KEYs
                         # To be processed later
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'EQUIPMOD Key',
-                                qq(@@" in "$tag_name:$tag_value),
+                                qq{@@" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
-                                split ',', $tag_value
+                                split ',', $tag->value
                                 ];
                 }
                 }
                 elsif (
                 $tag->lineType ne 'PCC'
-                && (   $tag_name eq 'ADD:FEAT'
-                        || $tag_name eq 'AUTO:FEAT'
-                        || $tag_name eq 'FEAT'
-                        || $tag_name eq 'FEATAUTO'
-                        || $tag_name eq 'VFEAT'
-                        || $tag_name eq 'MFEAT' )
+                && (   $tag->id eq 'ADD:FEAT'
+                        || $tag->id eq 'AUTO:FEAT'
+                        || $tag->id eq 'FEAT'
+                        || $tag->id eq 'FEATAUTO'
+                        || $tag->id eq 'VFEAT'
+                        || $tag->id eq 'MFEAT' )
                 )
                 {
                 my @feats;
@@ -1925,8 +1916,8 @@ sub validateTag {
                 # VFEAT:feat|feat|feat(xxx)|PRExxx:yyy
                 # MFEAT:feat|feat|feat(xxx)|...
                 # All these type may have embeded [PRExxx tags]
-                if ( $tag_name eq 'ADD:FEAT' ) {
-                        if ( $tag_value =~ /^\((.*)\)(.*)?$/ ) {
+                if ( $tag->id eq 'ADD:FEAT' ) {
+                        if ( $tag->value =~ /^\((.*)\)(.*)?$/ ) {
                                 $parent = 1;
                                 my $formula = $2;
 
@@ -1943,12 +1934,12 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'DEFINE Variable',
-                                        qq(@@" in "$tag_name$tag_value),
+                                        qq{@@" in "} . $tag->fullTag,
                                         $tag->file,
                                         $tag->line,
                                         LstTidy::Parse::parseJep(
                                                 $formula,
-                                                "$tag_name$tag_value",
+                                                $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line
                                         )
@@ -1956,31 +1947,31 @@ sub validateTag {
                         }
                         else {
                                 $logger->notice(
-                                qq{Invalid systax: "$tag_name$tag_value"},
+                                qq{Invalid syntax: "} . $tag->fullTag . q{"},
                                 $tag->file,
                                 $tag->line
-                                ) if $tag_value;
+                                ) if $tag->value;
                         }
                 }
-                elsif ( $tag_name eq 'FEAT' ) {
+                elsif ( $tag->id eq 'FEAT' ) {
 
                         # FEAT tags sometime use , and sometime use | as separator.
 
                         # We can now safely split on the ,
-                        @feats = embedded_coma_split( $tag_value, qr{,|\|} );
+                        @feats = embedded_coma_split( $tag->value, qr{,|\|} );
 
                         #       # We put the , back in place
                         #       s/&coma;/,/g for @feats;
                 }
                 else {
-                        @feats = split '\|', $tag_value;
+                        @feats = split '\|', $tag->value;
                 }
 
                 FEAT:
                 for my $feat (@feats) {
 
                         # If it is a PRExxx tag section, we validate the PRExxx tag.
-                        if ( $tag_name eq 'VFEAT' && $feat =~ /^(!?PRE[A-Z]+):(.*)/ ) {
+                        if ( $tag->id eq 'VFEAT' && $feat =~ /^(!?PRE[A-Z]+):(.*)/ ) {
 
                            my $subTag = LstTidy::Tag->new(
                               fullTag  => "$1:$2",
@@ -2012,19 +2003,19 @@ sub validateTag {
 
                 }
 
-                my $message_format = $tag_name;
+                my $message_format = $tag->id;
                 if ($parent) {
-                        $message_format = "$tag_name(@@)";
+                        $message_format = $tag->id . "(@@)";
                 }
 
                 # To be processed later
                 push @LstTidy::Report::xcheck_to_process,
                         [ 'FEAT', $message_format, $tag->file, $tag->line, @feats ];
                 }
-                elsif ( $tag_name eq 'KIT' && $tag->lineType ne 'PCC' ) {
+                elsif ( $tag->id eq 'KIT' && $tag->lineType ne 'PCC' ) {
                 # KIT:<number of choice>|<kit name>|<kit name>|etc.
                 # KIT:<kit name>
-                my @kit_list = split /[|]/, $tag_value;
+                my @kit_list = split /[|]/, $tag->value;
 
                 # The first item might be a number
                 if ( $kit_list[0] =~ / \A \d+ \z /xms ) {
@@ -2035,13 +2026,13 @@ sub validateTag {
                 push @LstTidy::Report::xcheck_to_process,
                         [
                                 'KIT STARTPACK',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 @kit_list,
                         ];
                 }
-                elsif ( $tag_name eq 'LANGAUTOxxx' || $tag_name eq 'LANGBONUS' ) {
+                elsif ( $tag->id eq 'LANGAUTOxxx' || $tag->id eq 'LANGBONUS' ) {
 
                 # To be processed later
                 # The ALL keyword is removed here since it is not usable everywhere there are language
@@ -2049,16 +2040,16 @@ sub validateTag {
                 push @LstTidy::Report::xcheck_to_process,
                         [
                         'LANGUAGE',
-                        $tag_name,
+                        $tag->id,
                         $tag->file,
                         $tag->line,
-                        grep { $_ ne 'ALL' } split ',', $tag_value
+                        grep { $_ ne 'ALL' } split ',', $tag->value
                         ];
                 }
-                elsif ( $tag_name eq 'ADD:LANGUAGE' ) {
+                elsif ( $tag->id eq 'ADD:LANGUAGE' ) {
 
                         # Syntax: ADD:LANGUAGE(<coma separated list of languages)<number>
-                        if ( $tag_value =~ /\((.*)\)/ ) {
+                        if ( $tag->value =~ /\((.*)\)/ ) {
                                 push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'LANGUAGE', 'ADD:LANGUAGE(@@)', $tag->file, $tag->line, split ',',  $1
@@ -2066,18 +2057,18 @@ sub validateTag {
                         }
                         else {
                                 $logger->notice(
-                                        qq{Invalid syntax for "$tag_name$tag_value"},
+                                        qq{Invalid syntax "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
                         }
                 }
-                elsif ( $tag_name eq 'MOVE' ) {
+                elsif ( $tag->id eq 'MOVE' ) {
 
                         # MOVE:<move type>,<value>
                         # ex. MOVE:Walk,30,Fly,20,Climb,10,Swim,10
 
-                        my @list = split ',', $tag_value;
+                        my @list = split ',', $tag->value;
 
                         MOVE_PAIR:
                         while (@list) {
@@ -2087,7 +2078,7 @@ sub validateTag {
                                 # $type should be a word and $value should be a number
                                 if ( $type =~ /^\d+$/ ) {
                                         $logger->notice(
-                                        qq{I was expecting a move type where I found "$type" in "$tag_name:$tag_value"},
+                                        qq{I was expecting a move type where I found "$type" in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                         );
@@ -2101,7 +2092,7 @@ sub validateTag {
 
                                 unless ( $value =~ /^\d+$/ ) {
                                         $logger->notice(
-                                        qq{I was expecting a number after "$type" and found "$value" in "$tag_name:$tag_value"},
+                                        qq{I was expecting a number after "$type" and found "$value" in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                         );
@@ -2109,13 +2100,13 @@ sub validateTag {
                                 }
                         }
                 }
-                elsif ( $tag_name eq 'MOVECLONE' ) {
+                elsif ( $tag->id eq 'MOVECLONE' ) {
                 # MOVECLONE:A,B,formula  A and B must be valid move types.
-                        if ( $tag_value =~ /^(.*),(.*),(.*)/ ) {
+                        if ( $tag->value =~ /^(.*),(.*),(.*)/ ) {
                                 # Error if more parameters (Which will show in the first group)
                                 if ( $1 =~ /,/ ) {
                                         $logger->warning(
-                                        qq{Found too many parameters in "$tag_name:$tag_value"},
+                                        qq{Found too many parameters in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                         );
@@ -2125,7 +2116,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'MOVE Type',
-                                                $tag_name,
+                                                $tag->id,
                                                 $tag->file,
                                                 $tag->line,
                                                 $1,
@@ -2136,7 +2127,7 @@ sub validateTag {
                         else {
                                 # Report missing requisite parameters.
                                 $logger->warning(
-                                qq{Missing a parameter in in "$tag_name:$tag_value"},
+                                qq{Missing a parameter in in "} . $tag->fullTag . q{"},
                                 $tag->file,
                                 $tag->line
                                 );
@@ -2144,57 +2135,57 @@ sub validateTag {
 
 
                 }
-                elsif ( $tag_name eq 'RACE' && $tag->lineType ne 'PCC' ) {
+                elsif ( $tag->id eq 'RACE' && $tag->lineType ne 'PCC' ) {
                 # There is only one race per RACE tag
                 push @LstTidy::Report::xcheck_to_process,
                         [  'RACE',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
-                                $tag_value,
+                                $tag->value,
                         ];
                 }
-                elsif ( $tag_name eq 'SWITCHRACE' ) {
+                elsif ( $tag->id eq 'SWITCHRACE' ) {
 
                 # To be processed later
                 # Note: SWITCHRACE actually switch the race TYPE
                 push @LstTidy::Report::xcheck_to_process,
                         [   'RACE TYPE',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
-                                (split '\|',  $tag_value),
+                                (split '\|',  $tag->value),
                         ];
                 }
-                elsif ( $tag_name eq 'CSKILL'
-                        || $tag_name eq 'CCSKILL'
-                        || $tag_name eq 'MONCSKILL'
-                        || $tag_name eq 'MONCCSKILL'
-                        || ($tag_name eq 'SKILL' && $tag->lineType ne 'PCC')
+                elsif ( $tag->id eq 'CSKILL'
+                        || $tag->id eq 'CCSKILL'
+                        || $tag->id eq 'MONCSKILL'
+                        || $tag->id eq 'MONCCSKILL'
+                        || ($tag->id eq 'SKILL' && $tag->lineType ne 'PCC')
                 ) {
-                my @skills = split /[|]/, $tag_value;
+                my @skills = split /[|]/, $tag->value;
 
                 # ALL is a valid use in BONUS:SKILL, xCSKILL  - [ 1593872 ] False warning: No SKILL entry for CSKILL:ALL
                 @skills = grep { $_ ne 'ALL' } @skills;
 
                 # We need to filter out %CHOICE for the SKILL tag
-                if ( $tag_name eq 'SKILL' ) {
+                if ( $tag->id eq 'SKILL' ) {
                         @skills = grep { $_ ne '%CHOICE' } @skills;
                 }
 
                 # To be processed later
                 push @LstTidy::Report::xcheck_to_process,
                         [   'SKILL',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 @skills,
                         ];
                 }
-                elsif ( $tag_name eq 'ADD:SKILL' ) {
+                elsif ( $tag->id eq 'ADD:SKILL' ) {
 
                 # ADD:SKILL(<list of skills>)<formula>
-                if ( $tag_value =~ /\((.*)\)(.*)/ ) {
+                if ( $tag->value =~ /\((.*)\)(.*)/ ) {
                         my ( $list, $formula ) = ( $1, $2 );
 
                         # First the list of skills
@@ -2202,7 +2193,7 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'SKILL',
-                                qq(@@" in "$tag_name$tag_value),
+                                qq{@@" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 grep { uc($_) ne 'ANY' } split ',', $list
@@ -2212,12 +2203,12 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'DEFINE Variable',
-                                qq(@@" from "$formula" in "$tag_name$tag_value),
+                                qq{@@" from "$formula" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 LstTidy::Parse::parseJep(
                                         $formula,
-                                        "$tag_name$tag_value",
+                                        $tag->fullTag,
                                         $tag->file,
                                         $tag->line
                                 ),
@@ -2225,17 +2216,17 @@ sub validateTag {
                 }
                 else {
                         $logger->notice(
-                                qq{Invalid syntax: "$tag_name$tag_value"},
+                                qq{Invalid syntax: "} . $tag->fullTag . q{"},
                                 $tag->file,
                                 $tag->line
                         );
                 }
                 }
-                elsif ( $tag_name eq 'SPELLS' ) {
+                elsif ( $tag->id eq 'SPELLS' ) {
                 if ( $tag->lineType ne 'KIT SPELLS' ) {
  # Syntax: SPELLS:<spellbook>|[TIMES=<times per day>|][TIMEUNIT=<unit of time>|][CASTERLEVEL=<CL>|]<Spell list>[|<prexxx tags>]
  # <Spell list> = <Spell name>,<DC> [|<Spell list>]
-                        my @list_of_param = split '\|', $tag_value;
+                        my @list_of_param = split '\|', $tag->value;
                         my @spells;
 
                         # We drop the Spell book name
@@ -2254,12 +2245,12 @@ sub validateTag {
                                                 push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                    'DEFINE Variable',
-                                                   qq(@@" in "$tag_name:$tag_value),
+                                                   qq{@@" in "} . $tag->fullTag,
                                                    $tag->file,
                                                    $tag->line,
                                                    LstTidy::Parse::parseJep(
                                                       $2,
-                                                      "$tag_name:$tag_value",
+                                                      $tag->fullTag,
                                                       $tag->file,
                                                       $tag->line
                                                    )
@@ -2282,12 +2273,12 @@ sub validateTag {
                                                 push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                    'DEFINE Variable',
-                                                   qq(@@" in "$tag_name:$tag_value),
+                                                   qq{@@" in "} . $tag->fullTag,
                                                    $tag->file,
                                                    $tag->line,
                                                    LstTidy::Parse::parseJep(
                                                       $2,
-                                                      "$tag_name:$tag_value",
+                                                      $tag->fullTag,
                                                       $tag->file,
                                                       $tag->line
                                                    )
@@ -2318,12 +2309,12 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'DEFINE Variable',
-                                                qq(@@" in "$tag_name:$tag_value),
+                                                qq{@@" in "} . $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line,
                                                 LstTidy::Parse::parseJep(
                                                         $dc,
-                                                        "$tag_name:$tag_value",
+                                                        $tag->fullTag,
                                                         $tag->file,
                                                         $tag->line
                                                 )
@@ -2335,7 +2326,7 @@ sub validateTag {
                                         push @spells, $param;
 
                                         $logger->info(
-                                                qq(the DC value is missing for "$param" in "$tag_name:$tag_value"),
+                                                qq{the DC value is missing for "$param" in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
@@ -2346,7 +2337,7 @@ sub validateTag {
                         push @LstTidy::Report::xcheck_to_process,
                                 [
                                 'SPELL',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
                                 @spells
@@ -2356,14 +2347,14 @@ sub validateTag {
                         if ( $nb_times != 1 ) {
                                 if ($nb_times) {
                                         $logger->notice(
-                                                qq{TIMES= should not be used more then once in "$tag_name:$tag_value"},
+                                                qq{TIMES= should not be used more then once in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
                                 }
                                 else {
                                         $logger->info(
-                                                qq(the TIMES= parameter is missing in "$tag_name:$tag_value"),
+                                                qq{the TIMES= parameter is missing in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
@@ -2373,7 +2364,7 @@ sub validateTag {
                         if ( $nb_timeunit != 1 ) {
                                 if ($nb_timeunit) {
                                         $logger->notice(
-                                                qq{TIMEUNIT= should not be used more then once in "$tag_name:$tag_value"},
+                                                qq{TIMEUNIT= should not be used more then once in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
@@ -2386,7 +2377,7 @@ sub validateTag {
                                         else {
                                                 # [ 1997408 ] False positive: TIMEUNIT= parameter is missing
                                                 # $logger->info(
-                                                #       qq(the TIMEUNIT= parameter is missing in "$tag_name:$tag_value"),
+                                                #       qq{the TIMEUNIT= parameter is missing in "} . $tag->fullTag . q{"},
                                                 #       $tag->file,
                                                 #       $tag->line
                                                 # );
@@ -2397,14 +2388,14 @@ sub validateTag {
                         if ( $nb_casterlevel != 1 ) {
                                 if ($nb_casterlevel) {
                                 $logger->notice(
-                                        qq{CASTERLEVEL= should not be used more then once in "$tag_name:$tag_value"},
+                                        qq{CASTERLEVEL= should not be used more then once in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
                                 }
                                 else {
                                 $logger->info(
-                                        qq(the CASTERLEVEL= parameter is missing in "$tag_name:$tag_value"),
+                                        qq{the CASTERLEVEL= parameter is missing in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
@@ -2418,7 +2409,7 @@ sub validateTag {
                         # <spell list> := <spell name> { = <number> } { | <spell list> }
                         my @spells = ();
 
-                        for my $spell_or_param (split q{\|}, $tag_value) {
+                        for my $spell_or_param (split q{\|}, $tag->value) {
                                 # Is it a parameter?
                                 if ( $spell_or_param =~ / \A ([^=]*) = (.*) \z/xms ) {
                                 my ($param_id,$param_value) = ($1,$2);
@@ -2427,7 +2418,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'CLASS',
-                                                qq{@@" in "$tag_name:$tag_value},
+                                                qq{@@" in "} . $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line,
                                                 $param_value,
@@ -2443,7 +2434,7 @@ sub validateTag {
                                 }
                                 else {
                                         $logger->notice(
-                                                qq{Invalide SPELLS parameter: "$spell_or_param" found in "$tag_name:$tag_value"},
+                                                qq{Invalide SPELLS parameter: "$spell_or_param" found in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                         );
@@ -2459,7 +2450,7 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                         [
                                         'SPELL',
-                                        $tag_name,
+                                        $tag->id,
                                         $tag->file,
                                         $tag->line,
                                         @spells,
@@ -2467,8 +2458,8 @@ sub validateTag {
                         }
                 }
                 }
-                elsif ( index( $tag_name, 'SPELLLEVEL:' ) == 0
-                        || index( $tag_name, 'SPELLKNOWN:' ) == 0
+                elsif ( index( $tag->id, 'SPELLLEVEL:' ) == 0
+                        || index( $tag->id, 'SPELLKNOWN:' ) == 0
                 ) {
 
                 # [ 813504 ] SPELLLEVEL:DOMAIN in domains.lst
@@ -2482,8 +2473,8 @@ sub validateTag {
                 #
                 # SPELLKNOWN has exact same syntax as SPELLLEVEL, so doing both checks at once.
 
-                if ( $tag_name eq "SPELLLEVEL:CLASS"
-                        || $tag_name eq "SPELLKNOWN:CLASS"
+                if ( $tag->id eq "SPELLLEVEL:CLASS"
+                        || $tag->id eq "SPELLKNOWN:CLASS"
                 ) {
 
                         # The syntax for SPELLLEVEL:CLASS is
@@ -2499,7 +2490,7 @@ sub validateTag {
 
                         # [ 1958872 ] trim PRExxx before checking SPELLLEVEL
                         # Work with a copy because we do not want to change the original
-                        my $tag_line = $tag_value;
+                        my $tag_line = $tag->value;
                         study $tag_line;
                         # Remove the PRExxx tags at the end of the line.
                         $tag_line =~ s/\|PRE\w+\:.+$//;
@@ -2521,7 +2512,7 @@ sub validateTag {
                                                         push @LstTidy::Report::xcheck_to_process,
                                                         [
                                                         'CLASS',
-                                                        qq(@@" in "$tag_name$tag_value),
+                                                        qq{@@" in "} . $tag->fullTag,
                                                         $tag->file,
                                                         $tag->line,
                                                         $1
@@ -2529,7 +2520,7 @@ sub validateTag {
                                                 }
                                                 else {
                                                         $logger->notice(
-                                                                qq{Invalid syntax for "$class" in "$tag_name$tag_value"},
+                                                                qq{Invalid syntax for "$class" in "} . $tag->fullTag . q{"},
                                                                 $tag->file,
                                                                 $tag->line
                                                         );
@@ -2540,7 +2531,7 @@ sub validateTag {
                                                 push @LstTidy::Report::xcheck_to_process,
                                                         [
                                                         'SPELL',
-                                                        qq(@@" in "$tag_name$tag_value),
+                                                        qq{@@" in "} . $tag->fullTag,
                                                         $tag->file,
                                                         $tag->line,
                                                         split ',', $spells
@@ -2548,7 +2539,7 @@ sub validateTag {
                                         }
                                         else {
                                                 $logger->notice(
-                                                        qq{Invalid class/spell list paring in "$tag_name$tag_value"},
+                                                        qq{Invalid class/spell list paring in "} . $tag->fullTag . q{"},
                                                         $tag->file,
                                                         $tag->line
                                                 );
@@ -2558,14 +2549,14 @@ sub validateTag {
                         }
                         else {
                                 $logger->notice(
-                                qq{No value found for "$tag_name"},
+                                qq{No value found for "} . $tag->id . q{"},
                                 $tag->file,
                                 $tag->line
                                 );
                         }
                 }
-                if ( $tag_name eq "SPELLLEVEL:DOMAIN"
-                        || $tag_name eq "SPELLKNOWN:DOMAIN"
+                if ( $tag->id eq "SPELLLEVEL:DOMAIN"
+                        || $tag->id eq "SPELLKNOWN:DOMAIN"
                 ) {
 
                         # The syntax for SPELLLEVEL:DOMAIN is
@@ -2580,7 +2571,7 @@ sub validateTag {
                         # ex. SPELLLEVEL:DOMAIN|Air=1|Obscuring Mist|Animal=4|Repel Vermin
 
                         # We extract the classes and the spell names
-                        if ( my $working_value = $tag_value ) {
+                        if ( my $working_value = $tag->value ) {
                                 while ($working_value) {
                                 if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
                                         my $domain = $1;
@@ -2591,7 +2582,7 @@ sub validateTag {
                                                 push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'DOMAIN',
-                                                qq(@@" in "$tag_name$tag_value),
+                                                qq{@@" in "} . $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line,
                                                 $1
@@ -2599,7 +2590,7 @@ sub validateTag {
                                         }
                                         else {
                                                 $logger->notice(
-                                                qq{Invalid syntax for "$domain" in "$tag_name$tag_value"},
+                                                qq{Invalid syntax for "$domain" in "} . $tag->fullTag . q{"},
                                                 $tag->file,
                                                 $tag->line
                                                 );
@@ -2610,7 +2601,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                 'SPELL',
-                                                qq(@@" in "$tag_name$tag_value),
+                                                qq{@@" in "} . $tag->fullTag,
                                                 $tag->file,
                                                 $tag->line,
                                                 split ',', $spells
@@ -2618,7 +2609,7 @@ sub validateTag {
                                 }
                                 else {
                                         $logger->notice(
-                                                qq{Invalid domain/spell list paring in "$tag_name$tag_value"},
+                                                qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"};
                                                 $tag->file,
                                                 $tag->line
                                         );
@@ -2628,25 +2619,25 @@ sub validateTag {
                         }
                         else {
                                 $logger->notice(
-                                qq{No value found for "$tag_name"},
+                                qq{No value found for "} . $tag->id . q{"},
                                 $tag->file,
                                 $tag->line
                                 );
                         }
                 }
                 }
-                elsif ( $tag_name eq 'STAT' ) {
+                elsif ( $tag->id eq 'STAT' ) {
                 if ( $tag->lineType eq 'KIT STAT' ) {
                         # STAT:STR=17|DEX=10|CON=14|INT=8|WIS=12|CHA=14
                         my %stat_count_for = map { $_ => 0 } @{LstTidy::Parse::getValidSystemArr('stats')};
 
                         STAT:
-                        for my $stat_expression (split /[|]/, $tag_value) {
+                        for my $stat_expression (split /[|]/, $tag->value) {
                                 my ($stat) = ( $stat_expression =~ / \A ([A-Z]{3}) [=] (\d+|roll\(\"\w+\"\)((\+|\-)var\(\"STAT.*\"\))*) \z /xms );
                                 if ( !defined $stat ) {
                                 # Syntax error
                                 $logger->notice(
-                                        qq{Invalid syntax for "$stat_expression" in "$tag_name:$tag_value"},
+                                        qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
@@ -2657,7 +2648,7 @@ sub validateTag {
                                 if ( !exists $stat_count_for{$stat} ) {
                                 # The stat is not part of the official list
                                 $logger->notice(
-                                        qq{Invalid attribute name "$stat" in "$tag_name:$tag_value"},
+                                        qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
@@ -2671,7 +2662,7 @@ sub validateTag {
                         for my $stat ( @{LstTidy::Parse::getValidSystemArr('stats')}) {
                                 if ( $stat_count_for{$stat} > 1 ) {
                                 $logger->notice(
-                                        qq{Found $stat more then once in "$tag_name:$tag_value"},
+                                        qq{Found $stat more then once in "} . $tag->fullTag . q{"},
                                         $tag->file,
                                         $tag->line
                                 );
@@ -2679,20 +2670,20 @@ sub validateTag {
                         }
                 }
                 }
-                elsif ( $tag_name eq 'TEMPLATE' && $tag->lineType ne 'PCC' ) {
+                elsif ( $tag->id eq 'TEMPLATE' && $tag->lineType ne 'PCC' ) {
                 # TEMPLATE:<template name>|<template name>|etc.
                 push @LstTidy::Report::xcheck_to_process,
                         [  'TEMPLATE',
-                                $tag_name,
+                                $tag->id,
                                 $tag->file,
                                 $tag->line,
-                                (split /[|]/, $tag_value),
+                                (split /[|]/, $tag->value),
                         ];
                 }
                 ######################################################################
                 # Here we capture data for later validation
-                elsif ( $tag_name eq 'RACESUBTYPE' ) {
-                for my $race_subtype (split /[|]/, $tag_value) {
+                elsif ( $tag->id eq 'RACESUBTYPE' ) {
+                for my $race_subtype (split /[|]/, $tag->value) {
                         my $new_race_subtype = $race_subtype;
                         if ( $tag->lineType eq 'RACE' ) {
                                 # The RACE sub-type are created in the RACE file
@@ -2701,7 +2692,7 @@ sub validateTag {
                                 # to modify existing data and not create new one
                                 push @LstTidy::Report::xcheck_to_process,
                                         [  'RACESUBTYPE',
-                                                $tag_name,
+                                                $tag->id,
                                                 $tag->file,
                                                 $tag->line,
                                                 $race_subtype,
@@ -2718,7 +2709,7 @@ sub validateTag {
 
                                 push @LstTidy::Report::xcheck_to_process,
                                         [  'RACESUBTYPE',
-                                        $tag_name,
+                                        $tag->id,
                                         $tag->file,
                                         $tag->line,
                                         $race_subtype,
@@ -2726,8 +2717,8 @@ sub validateTag {
                         }
                 }
                 }
-                elsif ( $tag_name eq 'RACETYPE' ) {
-                for my $race_type (split /[|]/, $tag_value) {
+                elsif ( $tag->id eq 'RACETYPE' ) {
+                for my $race_type (split /[|]/, $tag->value) {
                         if ( $tag->lineType eq 'RACE' ) {
                                 # The RACE type are created in the RACE file
                                 if ( $race_type =~ m{ \A [.] REMOVE [.] }xmsi ) {
@@ -2735,7 +2726,7 @@ sub validateTag {
                                 # to modify existing data and not create new one
                                 push @LstTidy::Report::xcheck_to_process,
                                         [  'RACETYPE',
-                                                $tag_name,
+                                                $tag->id,
                                                 $tag->file,
                                                 $tag->line,
                                                 $race_type,
@@ -2752,7 +2743,7 @@ sub validateTag {
 
                                 push @LstTidy::Report::xcheck_to_process,
                                         [  'RACETYPE',
-                                        $tag_name,
+                                        $tag->id,
                                         $tag->file,
                                         $tag->line,
                                         $race_type,
@@ -2760,37 +2751,37 @@ sub validateTag {
                         }
                 }
                 }
-                elsif ( $tag_name eq 'TYPE' ) {
+                elsif ( $tag->id eq 'TYPE' ) {
                         # The types go into valid_types
-                        $valid_types{$tag->lineType}{$_}++ for ( split '\.', $tag_value );
+                        $valid_types{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
                 }
-                elsif ( $tag_name eq 'CATEGORY' ) {
+                elsif ( $tag->id eq 'CATEGORY' ) {
                         # The categories go into valid_categories
-                        $valid_categories{$tag->lineType}{$_}++ for ( split '\.', $tag_value );
+                        $valid_categories{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
                 }
                 ######################################################################
                 # Tag with numerical values
-                elsif ( $tag_name eq 'STARTSKILLPTS'
-                        || $tag_name eq 'SR'
+                elsif ( $tag->id eq 'STARTSKILLPTS'
+                        || $tag->id eq 'SR'
                         ) {
 
                 # These tags should only have a numeribal value
                 push @LstTidy::Report::xcheck_to_process,
                         [
                                 'DEFINE Variable',
-                                qq(@@" in "$tag_name:$tag_value),
+                                qq{@@" in "} . $tag->fullTag,
                                 $tag->file,
                                 $tag->line,
                                 LstTidy::Parse::parseJep(
-                                $tag_value,
-                                "$tag_name:$tag_value",
+                                $tag->value,
+                                $tag->fullTag,
                                 $tag->file,
                                 $tag->line
                                 ),
                         ];
                 }
-                elsif ( $tag_name eq 'DEFINE' ) {
-                        my ( $var_name, @formulas ) = split '\|', $tag_value;
+                elsif ( $tag->id eq 'DEFINE' ) {
+                        my ( $var_name, @formulas ) = split '\|', $tag->value;
 
                         # First we store the DEFINE variable name
                         if ($var_name) {
@@ -2810,7 +2801,7 @@ sub validateTag {
                                 # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
                                 elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
                                         $logger->notice(
-                                                qq{Invalid variable name "$var_name" in "$tag_name:$tag_value"},
+                                                qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
                                                 $$tag->file,
                                                 $tag->line
                                         );
@@ -2818,7 +2809,7 @@ sub validateTag {
                         }
                         else {
                                 $logger->notice(
-                                        qq{I was not able to find a proper variable name in "$tag_name:$tag_value"},
+                                        qq{I was not able to find a proper variable name in "} . $tag->fullTag . q{"},
                                         $$tag->file,
                                         $tag->line
                                 );
@@ -2829,20 +2820,20 @@ sub validateTag {
                                 push @LstTidy::Report::xcheck_to_process,
                                         [
                                                 'DEFINE Variable',
-                                                qq(@@" in "$tag_name:$tag_value),
+                                                qq{@@" in "} . $tag->fullTag,
                                                 $$tag->file,
                                                 $tag->line,
                                                 LstTidy::Parse::parseJep(
                                                         $formula,
-                                                        "$tag_name:$tag_value",
+                                                        $tag->fullTag,
                                                         $$tag->file,
                                                         $tag->line
                                                 )
                                         ];
                         }
                 }
-                elsif ( $tag_name eq 'SA' ) {
-                        my ($var_string) = ( $tag_value =~ /[^|]\|(.*)/ );
+                elsif ( $tag->id eq 'SA' ) {
+                        my ($var_string) = ( $tag->value =~ /[^|]\|(.*)/ );
                         if ($var_string) {
                                 FORMULA:
                                 for my $formula ( split '\|', $var_string ) {
@@ -2866,12 +2857,12 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'DEFINE Variable',
-                                                        qq(@@" in "$tag_name:$tag_value),
+                                                        qq{@@" in "} . $tag->fullTag,
                                                         $$tag->file,
                                                         $tag->line,
                                                         LstTidy::Parse::parseJep(
                                                                 $formula,
-                                                                "$tag_name:$tag_value",
+                                                                $tag->fullTag,
                                                                 $$tag->file,
                                                                 $tag->line
                                                         )
@@ -2879,13 +2870,12 @@ sub validateTag {
                                 }
                         }
                 }
-                elsif ( $tag->lineType eq 'SPELL'
-                        && ( $tag_name eq 'TARGETAREA' || $tag_name eq 'DURATION' || $tag_name eq 'DESC' ) )
+                elsif ( $tag->lineType eq 'SPELL' && ( $tag->id eq 'TARGETAREA' || $tag->id eq 'DURATION' || $tag->id eq 'DESC' ) )
                 {
 
                         # Inline f*#king tags.
                         # We need to find CASTERLEVEL between ()
-                        my $value = $tag_value;
+                        my $value = $tag->value;
                         pos $value = 0;
 
                         FIND_BRACKETS:
@@ -2900,12 +2890,12 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'DEFINE Variable',
-                                                        qq(@@" in "$tag_name:$tag_value),
+                                                        qq{@@" in "} . $tag->fullTag,
                                                         $$tag->file,
                                                         $tag->line,
                                                         LstTidy::Parse::parseJep(
                                                         $result,
-                                                        "$tag_name:$tag_value",
+                                                        $tag->fullTag,
                                                         $$tag->file,
                                                         $tag->line
                                                         )
@@ -2917,14 +2907,14 @@ sub validateTag {
                                 }
                         }
                 }
-                elsif ( $tag_name eq 'NATURALATTACKS' ) {
+                elsif ( $tag->id eq 'NATURALATTACKS' ) {
 
                         # NATURALATTACKS:<Natural weapon name>,<List of type>,<attacks>,<damage>|...
                         #
                         # We must make sure that there are always four , separated parameters
                         # between the |.
 
-                        for my $entry ( split '\|', $tag_value ) {
+                        for my $entry ( split '\|', $tag->value ) {
                                 my @parameters = split ',', $entry;
 
                                 my $NumberOfParams = scalar @parameters;
@@ -2952,7 +2942,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'EQUIPMENT TYPE', 
-                                                        qq(@@" in "$tag_name:$entry),
+                                                        qq{@@" in "} . $tag->id . q{:$entry},
                                                         $$tag->file,  
                                                         $tag->line,
                                                         grep { !$validNaturalAttacksType{$_} } split '\.', $parameters[1]
@@ -2967,12 +2957,12 @@ sub validateTag {
                                 }
                         }
                 }
-                elsif ( $tag_name eq 'CHANGEPROF' ) {
+                elsif ( $tag->id eq 'CHANGEPROF' ) {
 
                 # "CHANGEPROF:" <list of weapons> "=" <new prof> { "|"  <list of weapons> "=" <new prof> }*
                 # <list of weapons> := ( <weapon> | "TYPE=" <weapon type> ) { "," ( <weapon> | "TYPE=" <weapon type> ) }*
 
-                        for my $entry ( split '\|', $tag_value ) {
+                        for my $entry ( split '\|', $tag->value ) {
                                 if ( $entry =~ /^([^=]+)=([^=]+)$/ ) {
                                         my ( $list_of_weapons, $new_prof ) = ( $1, $2 );
 
@@ -2980,7 +2970,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'EQUIPMENT', 
-                                                        $tag_name, 
+                                                        $tag->id, 
                                                         $$tag->file, 
                                                         $tag->line,
                                                         split ',', $list_of_weapons
@@ -2990,7 +2980,7 @@ sub validateTag {
                                         push @LstTidy::Report::xcheck_to_process,
                                                 [
                                                         'WEAPONPROF', 
-                                                        $tag_name, 
+                                                        $tag->id, 
                                                         $$tag->file, 
                                                         $tag->line,
                                                         $new_prof
