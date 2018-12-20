@@ -26,9 +26,10 @@ use File::Basename ();
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
-
+                        
+use LstTidy::Convert qw(convertEntities);
 use LstTidy::Log;
-use LstTidy::LogFactory;
+use LstTidy::LogFactory qw(getLogger);
 use LstTidy::LogHeader;
 use LstTidy::Options qw(getOption setOption isConversionActive);
 use LstTidy::Parse;
@@ -86,7 +87,7 @@ setOption('warninglevel', $level);
 $error_message .= $mess if defined $mess;
 
 # Create the singleton logging object using the warning level verified above.
-my $log = LstTidy::LogFactory::getLogger();
+my $log = getLogger();
 
 # Path options
 
@@ -1714,7 +1715,7 @@ sub FILETYPE_parse {
       # Convert the non-ascii character in the line if that conversion is
       # active, otherwise just copy it. 
       my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
-                        ? LstTidy::Convert::convertEntities($thisLine)
+                        ? convertEntities($thisLine)
                         : $thisLine;
 
       # Remove spaces at the end of the line

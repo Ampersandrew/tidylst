@@ -3,13 +3,18 @@ package LstTidy::Convert;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(convertEntities doTagConversions);
+
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::LogFactory;
-use LstTidy::Options;
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption);
 
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
@@ -322,7 +327,7 @@ sub convertAddTags {
       # the tag wasn't recognised as a valid ADD and is not a comment
       if ( index( $tag->fullTag, '#' ) != 0 ) {
 
-         LstTidy::LogFactory::getLogger->notice(
+         getLogger()->notice(
             qq{Invalid ADD tag "} . $tag->fullTag . q{" found in } . $tag->lineType,
             $tag->file,
             $tag->line
@@ -385,7 +390,7 @@ sub convertBonusCombatBAB {
             # We add the TYPE= statement at the end
             $tag->value($tag->value .= '|TYPE=Base.REPLACE');
 
-            LstTidy::LogFactory::getLogger->warning(
+            getLogger()->warning(
                q{Adding "|TYPE=Base.REPLACE" to "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -396,7 +401,7 @@ sub convertBonusCombatBAB {
 
             # We add the .REPLACE part
             $tag->value($tag->value =~ s/\|TYPE=Base/\|TYPE=Base.REPLACE/r);
-            LstTidy::LogFactory::getLogger->warning(
+            getLogger()->warning(
                qq{Adding ".REPLACE" to "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -404,7 +409,7 @@ sub convertBonusCombatBAB {
 
          } elsif ( !$is_type_base ) {
 
-            LstTidy::LogFactory::getLogger->info(
+            getLogger()->info(
                qq{Verify the TYPE of "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -415,7 +420,7 @@ sub convertBonusCombatBAB {
 
          # If there is a BONUS:COMBAT elsewhere, we report it for manual
          # inspection.
-         LstTidy::LogFactory::getLogger->info(
+         getLogger()->info(
             qq{Verify this tag "} . $tag->origTag . q{"}, 
             $tag->file, 
             $tag->line
@@ -580,7 +585,7 @@ sub convertEqModKeys {
 
             $tag->value($tag->value =~ s/\Q$old_key\E/$convertEquipmodKey{$old_key}/r);
 
-            LstTidy::LogFactory::getLogger->notice(
+            getLogger()->notice(
                qq(=> Replacing "$old_key" with "$convertEquipmodKey{$old_key}" in ") . $tag->origTag . q("),
                $tag->file,
                $tag->line
@@ -752,7 +757,7 @@ sub convertPreSpellType {
             $value .= ",$st=$num_levels";
          }
 
-         LstTidy::LogFactory::getLogger()->notice(
+         getLogger()->notice(
             qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:} . $tag->value . qq{" found and converted in } . $tag->lineType,
             $tag->file,
             $tag->line
@@ -770,7 +775,7 @@ sub convertPreSpellType {
 
       $tag->value($tag->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
-      LstTidy::LogFactory::getLogger()->notice(
+      getLogger()->notice(
          qq{Invalid embedded PRESPELLTYPE tag "} . $tag->fullTag . q{" found and converted } . $tag->lineType . q{.},
          $tag->file,
          $tag->line
@@ -1011,7 +1016,7 @@ sub removePreAlign {
    if ( $tag->value =~ /PREALIGN/ ) {
 
       if ( $tag->value =~ /PREMULT/ ) {
-         LstTidy::LogFactory::getLogger->warning(
+         getLogger()->warning(
             qq(PREALIGN found in PREMULT, you will have to remove it yourself ") . $tag->origTag . q("),
             $tag->file,
             $tag->line
@@ -1025,7 +1030,7 @@ sub removePreAlign {
 
       } else {
 
-         LstTidy::LogFactory::getLogger->warning(
+         getLogger()->warning(
             qq(Found PREALIGN where I was not expecting it ") . $tag->origTag . q("),
             $tag->file,
             $tag->line
@@ -1046,7 +1051,7 @@ sub reportRaceCSkill {
    my ($tag) = @_;
 
    if ($tag->lineType eq "RACE" && $tag->id eq "CSKILL") {
-      LstTidy::LogFactory::getLogger->warning(
+      getLogger()->warning(
          qq{Found CSKILL in RACE file},
          $tag->file,
          $tag->line
@@ -1066,7 +1071,7 @@ sub reportReplacement {
    my $output = (defined $suffix) ? qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . qq(" $suffix)
                                   : qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . q(");
 
-   LstTidy::LogFactory::getLogger->warning($output, $tag->file, $tag->line);
+   getLogger()->warning($output, $tag->file, $tag->line);
 }
 
 =head2 reportWillpower

@@ -3,6 +3,11 @@ package LstTidy::Validate;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(isValidCategory isValidEntity isValidType setEntityValid);
+
 use Text::Balanced ();
 
 use File::Basename qw(dirname);
@@ -10,6 +15,7 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use LstTidy::Parse;
+use LstTidy::LogFactory qw(getLogger);
 
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
@@ -412,18 +418,18 @@ sub embedded_coma_split {
    return map { s/&coma;/,/xmsg; $_ } split $separator, $newlist;
 }
 
+=head2 isValidType
 
+   C<isValidType($myEntity, $myType);>
 
-=head2 getValidTypes
-
-   Return a reference to the has of valid types for cross checking.
-
-   Format validTypes{$entitytype}{$typename}
+   Returns true if the given type is valid for the given entity.
 
 =cut
 
-sub getValidTypes {
-   return \%validTypes;
+sub isValidType {
+   my ($entity, $type) = @_;
+
+   return exists $validTypes{$entity}{$type};
 }
 
 =head2 getValidCategories
@@ -438,15 +444,27 @@ sub getValidCategories {
    return \%validCategories;
 }
 
+=head2 isValidCategory
 
+   c<isValidCategory($lineType, $category)>
 
-=head2 isEntityValid
+   Return true if the category is valid for this linetype
+
+=cut
+
+sub isValidCategory {
+   my ($lineType, $category) = @_;
+
+   return exists $validCategories{$lineType}{$category};
+}
+
+=head2 isValidEntity
 
    Returns true if the entity is valid.
 
 =cut
 
-sub isEntityValid {
+sub isValidEntity {
    my ($entitytype, $entityname) = @_;
 
    return exists $validEntities{$entitytype}{$entityname};
@@ -467,7 +485,7 @@ sub isEntityValid {
 sub scanForDeprecatedTags {
    my ( $line, $linetype, $file, $lineNum ) = @_ ;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # Deprecated tags
    if ( $line =~ /\scl\(/ ) {
@@ -737,7 +755,7 @@ sub warnDeprecate {
       $message .= qq{ found in "} . $enclosing_tag . q{"};
    }
 
-   LstTidy::LogFactory::getLogger->info( $message, $tag->file, $tag->line );
+   getLogger()->info( $message, $tag->file, $tag->line );
 }
 
 
@@ -815,7 +833,7 @@ sub processPRECHECK {
    }
 
    # Get the logger once outside the loop
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    for my $item ( @values ) {
 
@@ -923,7 +941,7 @@ sub processPREMOVE {
             my $message = qq{Not a number after the = for "$move" in "} . $tag->fullRealTag . q{"};
             $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
 
-            LstTidy::LogFactory::getLogger()->notice($message, $tag->file, $tag->line);
+            getLogger()->notice($message, $tag->file, $tag->line);
          }
 
       } else {
@@ -931,7 +949,7 @@ sub processPREMOVE {
          my $message = qq{Invalid "$move" in "} . $tag->fullRealTag . q{"};
          $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
 
-         LstTidy::LogFactory::getLogger()->notice($message, $tag->file, $tag->line);
+         getLogger()->notice($message, $tag->file, $tag->line);
 
       }
    }
@@ -982,7 +1000,7 @@ sub processPREMULT {
       } else {
 
          # No PRExxx tag found inside the PREMULT
-         LstTidy::LogFactory::getLogger()->warning(
+         getLogger()->warning(
             qq{No valid PRExxx tag found in "$inside" inside "PREMULT:} . $tag->value . q{"},
             $tag->file,
             $tag->line
@@ -1024,7 +1042,7 @@ sub processPRERACE {
 
          if ( $after_wild ne q{} ) {
 
-            LstTidy::LogFactory::getLogger()->notice(
+            getLogger()->notice(
                qq{% used in wild card context should end the race name in "$race"},
                $tag->file,
                $tag->line
@@ -1038,7 +1056,7 @@ sub processPRERACE {
 
                ## Matches everything, no reason to warn.
 
-            } elsif ($validEntities{'RACE'}{$race_wild}) {
+            } elsif (isValidEntity('RACE', $race_wild)) {
 
                ## Matches an existing race, no reason to warn.
 
@@ -1054,7 +1072,7 @@ sub processPRERACE {
                   $racePartialMatch{$race_wild} = 1;
                } else {
 
-                  LstTidy::LogFactory::getLogger()->info(
+                  getLogger()->info(
                      qq{Not able to validate "$race" in "PRERACE:} . $tag->value. q{." This warning is order dependent.} .
                      q{ If the race is defined in a later file, this warning may not be accurate.},
                      $tag->file,
@@ -1135,7 +1153,7 @@ sub validateBonusChecks {
 
       my ($base, $non_base) = ( 0, 0 );
 
-      my $logger = LstTidy::LogFactory::getLogger();
+      my $logger = getLogger();
 
       for my $check ( split q{,}, $checks ) {
 
@@ -1210,7 +1228,7 @@ sub validateBonusTag {
       if ( ( shift @list_of_param ) ne 'POOL' ) {
 
          # For now, only POOL is valid here
-         LestTidy::LogFactory::getLogger->notice(
+         LestTidy::LogFactory::getLogger()->notice(
             qq{Only POOL is valid as second paramater for BONUS:FEAT "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1242,7 +1260,7 @@ sub validateBonusTag {
 
          } else {
 
-            LestTidy::LogFactory::getLogger->notice(
+            LestTidy::LogFactory::getLogger()->notice(
                qq{Invalid parameter "$param" found in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1251,7 +1269,7 @@ sub validateBonusTag {
       }
 
       if ( $type_present > 1 ) {
-         LestTidy::LogFactory::getLogger->notice(
+         LestTidy::LogFactory::getLogger()->notice(
             qq{There should be only one "TYPE=" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1284,7 +1302,7 @@ sub validateBonusTag {
             ];
          }
          else {
-            LestTidy::LogFactory::getLogger->notice(
+            LestTidy::LogFactory::getLogger()->notice(
                qq{Missing "TYPE=" for "$type" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1356,7 +1374,7 @@ sub validateBonusTag {
             }
          }
          else {
-            LestTidy::LogFactory::getLogger->notice(
+            LestTidy::LogFactory::getLogger()->notice(
                qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1436,7 +1454,7 @@ sub validateClearTag {
 
    } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
 
-      LstTidy::LogFactory::getLogger->notice(
+      getLogger()->notice(
          q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
          $tag->file,
          $tag->line
@@ -1479,7 +1497,7 @@ sub validatePreTag {
       return;
    }
 
-   LstTidy::LogFactory::getLogger()->debug(
+   getLogger()->debug(
       q{validatePreTag: } . $tag->id . q{; } . $tag->value . q{; } . $enclosingTag .q{; } . $tag->lineType .q{;},
       $tag->file,
       $tag->line
@@ -1559,7 +1577,7 @@ sub validatePreTag {
    # of the PRExxx tags on the entry lines.
    elsif ( $enclosingTag && !exists $PreTags{$tag->id} ) {
 
-      LstTidy::LogFactory::getLogger()->notice(
+      getLogger()->notice(
          qq{Unknown PRExxx tag "} . $tag->id . q{" found in "$enclosingTag"},
          $tag->file,
          $tag->line
@@ -1583,7 +1601,7 @@ sub validateTag {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    if ($tag->id eq 'STARTPACK')
    {

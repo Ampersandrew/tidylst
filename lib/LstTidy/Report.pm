@@ -7,6 +7,9 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Validate qw(isValidCategory isValidEntity isValidType);
+
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
 
@@ -514,7 +517,7 @@ sub add_to_xcheck_tables {
                while ( $validSubEntities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
                   $feat_to_check = $1;
                   if ( !exists $validSubEntities{'FEAT'}{$feat_to_check} ) {
-                     LstTidy::LogFactory::getLogger()->notice(
+                     getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
                         $line
@@ -578,7 +581,7 @@ sub add_to_xcheck_tables {
                while ( $validSubEntities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
                   $feat_to_check = $1;
                   if ( !exists $validSubEntities{'ABILITY'}{$feat_to_check} ) {
-                     LstTidy::LogFactory::getLogger()->notice(
+                     getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
                         $line
@@ -824,7 +827,7 @@ sub add_to_xcheck_tables {
       }
 
    } else {
-      LstTidy::LogFactory::getLogger()->error(
+      getLogger()->error(
          "Invalid Entry type for $tagName (add_to_xcheck_tables): $entityType",
          $file,
          $line
@@ -886,7 +889,7 @@ sub doXCheck {
                # This looks wrong, everything else gets added to the report if its
                # not valid!!! Still this is what pretty lst used to do.
 
-               if (LstTidy::Validate::isEntityValid($item, $entry)) {
+               if (isValidEntity($item, $entry)) {
                   $addToReport = 1;
                   last ITEM;
                }
@@ -902,14 +905,14 @@ sub doXCheck {
 
          } else {
 
-            $addToReport = !LstTidy::Validate::isEntityValid($linetype, $entry);
+            $addToReport = !isValidEntity($linetype, $entry);
 
             # Special case for EQUIPMOD Key
             # -----------------------------
             # If an EQUIPMOD Key entry doesn't exists, we can use the EQUIPMOD
             # name 
             $message =   ($linetype ne 'EQUIPMOD Key' )                         ? $linetype
-                       : (LstTidy::Validate::isEntityValid('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 
+                       : (isValidEntity('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 
                        : 'EQUIPMOD Key or EQUIPMOD';
          }
 
@@ -919,7 +922,7 @@ sub doXCheck {
       }
    }
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # Print the report sorted by file name and line number.
    $logger->header(LstTidy::LogHeader::get('CrossRef'));
@@ -938,8 +941,6 @@ sub doXCheck {
          }
       }
    }
-   
-   my %valid_types = LstTidy::Validate::getValidTypes();
 
    ###############################################
    # Type report
@@ -948,7 +949,7 @@ sub doXCheck {
    %to_report = ();
    for my $linetype ( sort %referrer_types ) {
       for my $entry ( sort keys %{ $referrer_types{$linetype} } ) {
-         if (! exists $valid_types{$linetype}{$entry} ) {
+         if (! isValidType($linetype, $entry) ) {
             for my $array ( @{ $referrer_types{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
@@ -968,8 +969,6 @@ sub doXCheck {
          );
       }
    }
-   
-   my %valid_categories = LstTidy::Validate::getValidCategories();
 
    ###############################################
    # Category report
@@ -978,7 +977,7 @@ sub doXCheck {
    %to_report = ();
    for my $linetype ( sort %referrer_categories ) {
       for my $entry ( sort keys %{ $referrer_categories{$linetype} } ) {
-         if (!exists $valid_categories{$linetype}{$entry} ) {
+         if (isValidCategory($linetype, $entry) ) {
             for my $array ( @{ $referrer_categories{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
@@ -1005,7 +1004,7 @@ sub doXCheck {
    # Print the tag that do not have defined headers if requested
    if ( getOption('missingheader') ) {
 
-      my $logger = LstTidy::LogFactory::getLogger();
+      my $logger = getLogger();
       $logger->header(LstTidy::LogHeader::get('Missing Header'));
 
       my %missing_headers = %{ LstTidy::Parse::getMissingHeaders() };
