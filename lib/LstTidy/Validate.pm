@@ -262,20 +262,20 @@ for my $preTag (@PreTags) {
 
 # Will hold the portions of a race that have been matched with wildcards.
 # For example, if Elf% has been matched (given no default Elf races).
-my %race_partial_match;
+my %racePartialMatch;
 
 # Will hold the entries that may be refered to by other tags Format
-# $valid_entities{$entitytype}{$entityname} We initialise the hash with global
+# $validEntities{$entitytype}{$entityname} We initialise the hash with global
 # system values that are valid but never defined in the .lst files.
-my %valid_entities;
+my %validEntities;
 
 # Will hold the valid types for the TYPE. or TYPE= found in different tags.
-# Format valid_types{$entitytype}{$typename}
-my %valid_types;
+# Format validTypes{$entitytype}{$typename}
+my %validTypes;
 
 # Will hold the valid categories for CATEGORY= found in abilities.
-# Format valid_categories{$entitytype}{$categoryname}
-my %valid_categories;
+# Format validCategories{$entitytype}{$categoryname}
+my %validCategories;
 
 my %validNaturalAttacksType = map { $_ => 1 } (
 
@@ -418,24 +418,24 @@ sub embedded_coma_split {
 
    Return a reference to the has of valid types for cross checking.
 
-   Format valid_types{$entitytype}{$typename}
+   Format validTypes{$entitytype}{$typename}
 
 =cut
 
 sub getValidTypes {
-   return \%valid_types;
+   return \%validTypes;
 }
 
 =head2 getValidCategories
 
    Return a reference to the hash of valid categories for cross checking.
 
-   Format valid_categories{$entitytype}{$categoryname}
+   Format validCategories{$entitytype}{$categoryname}
 
 =cut
 
 sub getValidCategories {
-   return \%valid_categories;
+   return \%validCategories;
 }
 
 
@@ -449,7 +449,7 @@ sub getValidCategories {
 sub isEntityValid {
    my ($entitytype, $entityname) = @_;
 
-   return exists $valid_entities{$entitytype}{$entityname};
+   return exists $validEntities{$entitytype}{$entityname};
 }
 
 =head2 scanForDeprecatedTags
@@ -537,7 +537,7 @@ sub scanForDeprecatedTags {
       );
    }
 
-   if ( $line =~ /\sSPELl\s/ && $linetype ne 'PCC' ) {
+   if ( $line =~ /\sSPELL\s/ && $linetype ne 'PCC' ) {
       $logger->info(
          qq{SPELL is deprecated, use SPELLS instead},
          $file,
@@ -679,7 +679,7 @@ sub scanForDeprecatedTags {
 sub setEntityValid {
    my ($entitytype, $entityname) = @_;
 
-   $valid_entities{$entitytype}{$entityname}++;
+   $validEntities{$entitytype}{$entityname}++;
 }
 
 =head2 splitAndAddToValidEntities
@@ -694,8 +694,8 @@ sub splitAndAddToValidEntities {
    my ($entitytype, $ability, $value) = @_;
 
    for my $abil ( split '\|', $value ) {
-      $valid_entities{'ABILITY'}{"$ability($abil)"}  = $value;
-      $valid_entities{'ABILITY'}{"$ability ($abil)"} = $value;
+      $validEntities{'ABILITY'}{"$ability($abil)"}  = $value;
+      $validEntities{'ABILITY'}{"$ability ($abil)"} = $value;
    }
 }
 
@@ -709,7 +709,7 @@ sub splitAndAddToValidEntities {
 sub searchRace {
    my ($race_wild) = @_;
 
-   for my $toCheck (keys %{$valid_entities{'RACE'}} ) {
+   for my $toCheck (keys %{$validEntities{'RACE'}} ) {
       if ($toCheck =~  m/^\Q$race_wild/) {
          return 1;
       }
@@ -722,25 +722,24 @@ sub searchRace {
 
    Generate a warning message about a deprecated tag.
 
-   Parameters: $bad_tag         Tag that has been deprecated
-               $file            File name where the error was found
-               $line            Line number where the error was found
-               $enclosing_tag   (Optionnal) tag into which the deprecated tag is included
+   Parameters: $tag            Tag that has been deprecated
+               $enclosing_tag  (Optionnal) tag into which the deprecated tag is included
 
 =cut
 
 sub warnDeprecate {
 
+   my ($tag, $enclosing_tag) = @_;
+
    my ($bad_tag, $file, $line, $enclosing_tag) = (@_, "");
 
-   my $message = qq{Deprecated syntax: "$bad_tag"};
+   my $message = qq{Deprecated syntax: "} . $$tag->fullRealTag . q{"};
 
    if($enclosing_tag) {
-      $message .= qq{ found in "$enclosing_tag"};
+      $message .= qq{ found in "} . $enclosing_tag . q{"};
    }
 
-   LstTidy::LogFactory::getLogger->info( $message, $file, $line );
-
+   LstTidy::LogFactory::getLogger->info( $message, $tag->file, $tag->line );
 }
 
 
@@ -787,7 +786,7 @@ sub processGenericPRE {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag,, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    LstTidy::Report::registerXCheck($preType, $tag->id, $tag->file, $tag->line, @values);
@@ -814,7 +813,7 @@ sub processPRECHECK {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag,, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    # Get the logger once outside the loop
@@ -886,7 +885,7 @@ sub processPRELANG {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    LstTidy::Report::registerXCheck('LANGUAGE', $tag->id, $tag->file, $tag->line, grep { $_ ne 'ANY' } @values);
@@ -909,7 +908,7 @@ sub processPREMOVE {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    for my $move (@values) {
@@ -1018,7 +1017,7 @@ sub processPRERACE {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    my ( @races, @races_wild );
@@ -1048,11 +1047,11 @@ sub processPRERACE {
 
                ## Matches everything, no reason to warn.
 
-            } elsif ($valid_entities{'RACE'}{$race_wild}) {
+            } elsif ($validEntities{'RACE'}{$race_wild}) {
 
                ## Matches an existing race, no reason to warn.
 
-            } elsif ($race_partial_match{$race_wild}) {
+            } elsif ($racePartialMatch{$race_wild}) {
 
                ## Partial match already confirmed, no need to confirm.
                #
@@ -1061,7 +1060,7 @@ sub processPRERACE {
                my $found = searchRace($race_wild) ;
 
                if ($found) {
-                  $race_partial_match{$race_wild} = 1;
+                  $racePartialMatch{$race_wild} = 1;
                } else {
 
                   LstTidy::LogFactory::getLogger()->info(
@@ -1099,7 +1098,7 @@ sub processPRESPELL {
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
-      warnDeprecate($tag->fullRealTag, $tag->file, $tag->line, $enclosingTag);
+      warnDeprecate($tag, $enclosingTag);
    }
 
    LstTidy::Report::registerXCheck('SPELL', $tag->id . ":@@", $tag->file, $tag->line, @values);
@@ -2745,12 +2744,12 @@ sub validateTag {
                 }
                 }
                 elsif ( $tag->id eq 'TYPE' ) {
-                        # The types go into valid_types
-                        $valid_types{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
+                        # The types go into validTypes
+                        $validTypes{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
                 }
                 elsif ( $tag->id eq 'CATEGORY' ) {
-                        # The categories go into valid_categories
-                        $valid_categories{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
+                        # The categories go into validCategories
+                        $validCategories{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
                 }
                 ######################################################################
                 # Tag with numerical values

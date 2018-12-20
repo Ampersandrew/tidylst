@@ -28,7 +28,7 @@ my %referrer_categories;
 # Format: push @{$referrer_types{$EntityType}{$typename}}, [ $tags{$column}, $file_for_error, $line_for_error ]
 my %referrer_types;
 
-my %valid_sub_entities;
+my %validSubEntities;
 
 # Will hold the information for the entries that must be added in %referrer or
 # %referrer_types. The array is needed because all the files must have been
@@ -235,9 +235,9 @@ sub registerReferrer {
 =cut
 
 sub registerXCheck {
-   my ($preType, $tag, $file, $line, @values) = @_;
+   my ($entityType, $tag, $file, $line, @values) = @_;
    
-   push @xcheck_to_process, [ $preType, $tag, $file, $line, @values ];
+   push @xcheck_to_process, [ $entityType, $tag, $file, $line, @values ];
 }
 
 =head2 reportInvalid
@@ -502,7 +502,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $valid_sub_entities{'FEAT'}{$1} ) {
+            if ( $validSubEntities{'FEAT'}{$1} ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -511,9 +511,9 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                FEAT_ENTITY:
-               while ( $valid_sub_entities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
+               while ( $validSubEntities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $valid_sub_entities{'FEAT'}{$feat_to_check} ) {
+                  if ( !exists $validSubEntities{'FEAT'}{$feat_to_check} ) {
                      LstTidy::LogFactory::getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
@@ -525,7 +525,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'FEAT'}{$feat_to_check},
+                  $validSubEntities{'FEAT'}{$feat_to_check},
                   $sub_tagName,
                   $file,
                   $line,
@@ -566,7 +566,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $valid_sub_entities{'ABILITY'}{$1} ) {
+            if ( $validSubEntities{'ABILITY'}{$1} ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -575,9 +575,9 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                ABILITY_ENTITY:
-               while ( $valid_sub_entities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
+               while ( $validSubEntities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $valid_sub_entities{'ABILITY'}{$feat_to_check} ) {
+                  if ( !exists $validSubEntities{'ABILITY'}{$feat_to_check} ) {
                      LstTidy::LogFactory::getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
@@ -589,7 +589,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'ABILITY'}{$feat_to_check},
+                  $validSubEntities{'ABILITY'}{$feat_to_check},
                   $sub_tagName,
                   $file,
                   $line,
@@ -737,7 +737,7 @@ sub add_to_xcheck_tables {
          if ( $skill =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the SKILL is a compond tag
-            if ( $valid_sub_entities{'SKILL'}{$1} ) {
+            if ( $validSubEntities{'SKILL'}{$1} ) {
                $skill = $1;
                my $entity = $2;
 
@@ -745,7 +745,7 @@ sub add_to_xcheck_tables {
                $sub_tagName =~ s/@@/$skill (@@)/;
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'SKILL'}{$skill},
+                  $validSubEntities{'SKILL'}{$skill},
                   $sub_tagName,
                   $file,
                   $line,

@@ -881,24 +881,12 @@ my %token_CHOOSE_tag = map { $_ => 1 } (
 ################################################################################
 # Global variables used by the validation code
 
-# Will hold the portions of a race that have been matched with wildcards.
-# For example, if Elf% has been matched (given no default Elf races).
-my %race_partial_match; 
-
-# Will hold the valid types for the TYPE. or TYPE= found in different tags.
-# Format valid_types{$entitytype}{$typename}
-my %valid_types;
-
-# Will hold the valid categories for CATEGORY=
-# found in abilities.
-my %valid_categories;   
-
-my %valid_sub_entities; # Will hold the entities that are allowed to include
-                                # a sub-entity between () in their name.
-                                # e.g. Skill Focus(Spellcraft)
-                                # Format: $valid_sub_entities{$entity_type}{$entity_name}
-                                #               = $sub_entity_type;
-                                # e.g. :  $valid_sub_entities{'FEAT'}{'Skill Focus'} = 'SKILL';
+my %validSubEntities; # Will hold the entities that are allowed to include
+                      # a sub-entity between () in their name.
+                      # e.g. Skill Focus(Spellcraft)
+                      # Format: $validSubEntities{$entity_type}{$entity_name}
+                      #               = $sub_entity_type;
+                      # e.g. :  $validSubEntities{'FEAT'}{'Skill Focus'} = 'SKILL';
 
 
 # Add pre-defined valid entities
@@ -2692,22 +2680,22 @@ sub validate_line {
                         $ability_name =~ s/.MOD$//;
 
                         if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = $1;
+                                $validSubEntities{'ABILITY'}{$ability_name} = $1;
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'FEAT';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'FEAT';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'WEAPONPROF';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'WEAPONPROF';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SKILL';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'SKILL';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SPELL_SCHOOL';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'SPELL_SCHOOL';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SPELL';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'SPELL';
                         }
                         elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/
                                 || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ )
@@ -2715,7 +2703,7 @@ sub validate_line {
 
                                 # Ad-Lib is a special case that means "Don't look for
                                 # anything else".
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'Ad-Lib';
+                                $validSubEntities{'ABILITY'}{$ability_name} = 'Ad-Lib';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
 
@@ -2802,22 +2790,22 @@ sub validate_line {
                         $feat_name =~ s/.MOD$//;
 
                         if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = $1;
+                                $validSubEntities{'FEAT'}{$feat_name} = $1;
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'FEAT';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'FEAT';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'WEAPONPROF';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'WEAPONPROF';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SKILL';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'SKILL';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SPELL_SCHOOL';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'SPELL_SCHOOL';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SPELL';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'SPELL';
                         }
                         elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/
                                 || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ )
@@ -2825,7 +2813,7 @@ sub validate_line {
 
                                 # Ad-Lib is a special case that means "Don't look for
                                 # anything else".
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'Ad-Lib';
+                                $validSubEntities{'FEAT'}{$feat_name} = 'Ad-Lib';
                         }
                         elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
 
@@ -2976,7 +2964,7 @@ sub validate_line {
                         $skill_name =~ s/.MOD$//;
 
                         if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?Language/ ) {
-                                $valid_sub_entities{'SKILL'}{$skill_name} = 'LANGUAGE';
+                                $validSubEntities{'SKILL'}{$skill_name} = 'LANGUAGE';
                         }
                 }
         }
