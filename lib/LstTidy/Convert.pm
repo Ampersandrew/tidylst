@@ -14,7 +14,7 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption);
+use LstTidy::Options qw(getOption isConversionActive);
 
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
@@ -315,7 +315,7 @@ sub convertAddTags {
          $tag->value("($theRest)$addCount");
       }
 
-      if (LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix') && ($type == 1 || $type == 2)) {
+      if (isConversionActive('ALL:ADD Syntax Fix') && ($type == 1 || $type == 2)) {
 
          $tag->id("ADD:");
          $addTag =~ s/ADD://;
@@ -935,28 +935,28 @@ sub doTagConversions {
 
    my ($tag) = @_;
 
-   if (LstTidy::Options::isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($tag)      }
-   if (LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($tag)    }
-   if (LstTidy::Options::isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($tag)           }
-   if (LstTidy::Options::isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($tag)     }
-   if (LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:Find Willpower'))                  { reportWillpower($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($tag)              }
-   if (LstTidy::Options::isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($tag)      }
-   if (LstTidy::Options::isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($tag)           }
-   if (LstTidy::Options::isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($tag)        }
-   if (LstTidy::Options::isConversionActive('ALL:Willpower to Will') )              { convertWillpower($tag)         }
-   if (LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($tag)  }
-   if (LstTidy::Options::isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($tag)     }
-   if (LstTidy::Options::isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($tag)               }
-   if (LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($tag)         }
-   if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($tag) }
-   if (LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($tag)        }
+   if (isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($tag)      }
+   if (isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($tag)         }
+   if (isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($tag)    }
+   if (isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($tag)         }
+   if (isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($tag)           }
+   if (isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($tag)     }
+   if (isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($tag)         }
+   if (isConversionActive('ALL:Find Willpower'))                  { reportWillpower($tag)          }
+   if (isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($tag)              }
+   if (isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($tag)          }
+   if (isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($tag)          }
+   if (isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($tag)          }
+   if (isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($tag)      }
+   if (isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($tag)           }
+   if (isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($tag)        }
+   if (isConversionActive('ALL:Willpower to Will') )              { convertWillpower($tag)         }
+   if (isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($tag)  }
+   if (isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($tag)     }
+   if (isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($tag)               }
+   if (isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($tag)         }
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($tag) }
+   if (isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($tag)        }
 }
 
 =head2 ensureLeadingDigit

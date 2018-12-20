@@ -16,6 +16,7 @@ use lib dirname(dirname abs_path $0);
 
 use LstTidy::Parse;
 use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption isConversionActive);
 
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
@@ -2752,7 +2753,7 @@ sub validateTag {
 
                                         #####################################################
                                         # Export a list of variable names if requested
-                                        if ( LstTidy::Options::isConversionActive('Export lists') ) {
+                                        if ( isConversionActive('Export lists') ) {
                                                 my $file = $$tag->file;
                                                 $file =~ tr{/}{\\};
                                                 LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$tag->line","$file"\n});

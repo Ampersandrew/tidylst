@@ -221,21 +221,21 @@ if ( getOption('htmlhelp') ) {
    exit;
 }
 
-my %source_tags        = ()  if LstTidy::Options::isConversionActive('SOURCE line replacement');
-my $source_curent_file = q{} if LstTidy::Options::isConversionActive('SOURCE line replacement');
+my %source_tags        = ()  if isConversionActive('SOURCE line replacement');
+my $source_curent_file = q{} if isConversionActive('SOURCE line replacement');
 
-my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS');
+my %classskill_files   = ()  if isConversionActive('CLASSSKILL conversion to CLASS');
 
-my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL');
+my %classspell_files   = ()  if isConversionActive('CLASSSPELL conversion to SPELL');
 
-my %class_files        = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
-my %class_spelltypes   = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
+my %class_files        = ()  if isConversionActive('SPELL:Add TYPE tags');
+my %class_spelltypes   = ()  if isConversionActive('SPELL:Add TYPE tags');
 
-my %Spells_For_EQMOD   = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
-my %Spell_Files        = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                                || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
+my %Spells_For_EQMOD   = ()  if isConversionActive('EQUIPMENT: generate EQMOD');
+my %Spell_Files        = ()  if isConversionActive('EQUIPMENT: generate EQMOD')
+                                || isConversionActive('CLASS: SPELLLIST from Spell.MOD');
 
-my %bonus_prexxx_tag_report = ()  if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
+my %bonus_prexxx_tag_report = ()  if isConversionActive('Generate BONUS and PRExxx report');
 
 my %PREALIGN_conversion_5715 = qw(
    0   LG
@@ -249,11 +249,11 @@ my %PREALIGN_conversion_5715 = qw(
    8   CE
    9   NONE
    10  Deity
-) if LstTidy::Options::isConversionActive('ALL:PREALIGN conversion');
+) if isConversionActive('ALL:PREALIGN conversion');
 
 my %Key_conversion_56 = qw(
         BIND            BLIND
-) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
+) if isConversionActive('ALL:EQMOD has new keys');
 #       ABENHABON       BNS_ENHC_AB
 #       ABILITYMINUS    BNS_ENHC_AB
 #       ABILITYPLUS     BNS_ENHC_AB
@@ -450,9 +450,9 @@ my %Key_conversion_56 = qw(
 #       WEAPMITH        MTHRL
 #       WILDA           WILD_A
 #       WILDS           WILD_S
-#       ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
+#       ) if isConversionActive('ALL:EQMOD has new keys');
 
-if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
+if(isConversionActive('ALL:EQMOD has new keys'))
 {
    my ($old_key,$new_key);
    while (($old_key,$new_key) = each %Key_conversion_56)
@@ -485,7 +485,7 @@ my %srd_weapon_name_conversion_433 = (
    q{Trident (Fish Command)}       => q{Trident of Fish Command},
    q{Trident (Warning)}            => q{Trident of Warning},
    q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
-) if LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change');
+) if isConversionActive('ALL: 4.3.3 Weapon name change');
 
 
 # Constants for master_line_type
@@ -949,14 +949,14 @@ if (getOption('inputpath')) {
    ##########################################################
    # Files that needs to be open for special conversions
 
-   if ( LstTidy::Options::isConversionActive('Export lists') ) {
+   if ( isConversionActive('Export lists') ) {
       LstTidy::Report::openExportListFileHandles();
    }
 
         ##########################################################
         # Cross-checking must be activated for the CLASSSPELL
         # conversion to work
-        if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+        if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
            setOption('xcheck', 1);
         }
 
@@ -1102,15 +1102,15 @@ if (getOption('inputpath')) {
                             $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
                             delete $files_to_parse{$lstfile};
 
-                         } elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
+                         } elsif (isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
 
                             # [ 653596 ] Add a TYPE tag for all SPELLs
                             #
                             # The CLASS files must be read before any other
                             $class_files{$lstfile} = 1;
 
-                         } elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                               || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
+                         } elsif ( $tag eq 'SPELL' && ( isConversionActive('EQUIPMENT: generate EQMOD')
+                               || isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
 
                             #[ 677962 ] The DMG wands have no charge.
                             #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
@@ -1120,7 +1120,7 @@ if (getOption('inputpath')) {
 
                             $Spell_Files{$lstfile} = 1;
 
-                         } elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
+                         } elsif ( isConversionActive('CLASSSPELL conversion to SPELL')
                             && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) ) {
 
                             # CLASSSPELL conversion
@@ -1140,7 +1140,7 @@ if (getOption('inputpath')) {
                                );
                             }
 
-                         } elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
+                         } elsif (isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
 
                             # CLASSSKILL conversion
                             # We keep the list of CLASSSKILL files
@@ -1166,7 +1166,7 @@ if (getOption('inputpath')) {
                          # All the tags that do not have file should be cought here
 
                          # Get the SOURCExxx tags for future ref.
-                         if (LstTidy::Options::isConversionActive('SOURCE line replacement')
+                         if (isConversionActive('SOURCE line replacement')
                               && (    $tag eq 'SOURCELONG'
                                    || $tag eq 'SOURCESHORT'
                                    || $tag eq 'SOURCEWEB'
@@ -1238,7 +1238,7 @@ if (getOption('inputpath')) {
                             # Found a TYPE tag
                             $BOOKTYPE_found = YES;
 
-                         } elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+                         } elsif ( $tag eq 'GAME' && isConversionActive('PCC:GAME to GAMEMODE') ) {
 
                             # [ 707325 ] PCC: GAME is now GAMEMODE
                             $pcc_lines[-1] = "GAMEMODE:$value";
@@ -1264,7 +1264,7 @@ if (getOption('inputpath')) {
 
                 close $pcc_fh;
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
+                if ( isConversionActive('CLASSSPELL conversion to SPELL')
                         && $found_filetype{'CLASSSPELL'}
                         && !$found_filetype{'SPELL'} )
                 {
@@ -1274,7 +1274,7 @@ if (getOption('inputpath')) {
                         );
                 }
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
+                if ( isConversionActive('CLASSSKILL conversion to CLASS')
                         && $found_filetype{'CLASSSKILL'}
                         && !$found_filetype{'CLASS'} )
                 {
@@ -1370,7 +1370,7 @@ $log->header(LstTidy::LogHeader::get('LST'));
 my @files_to_parse_sorted = ();
 my %temp_files_to_parse   = %files_to_parse;
 
-if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
+if ( isConversionActive('SPELL:Add TYPE tags') ) {
 
         # The CLASS files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1382,7 +1382,7 @@ if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
 
         # The CLASS and DOMAIN files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1410,7 +1410,7 @@ if ( keys %Spell_Files ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
 
         # The CLASSSKILL files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1591,7 +1591,7 @@ for my $file (@files_to_parse_sorted) {
 ###########################################
 # Generate the new BIOSET files
 
-if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
+if ( isConversionActive('BIOSET:generate the new files') ) {
         print STDERR "\n================================================================\n";
         print STDERR "List of new BIOSET files generated\n";
         print STDERR "----------------------------------------------------------------\n";
@@ -1619,7 +1619,7 @@ if ( getOption('outputpath') && scalar(@modified_files) ) {
 
 ###########################################
 # Print a report for the BONUS and PRExxx usage
-if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
+if ( isConversionActive('Generate BONUS and PRExxx report') ) {
 
         print STDERR "\n================================================================\n";
         print STDERR "List of BONUS and PRExxx tags by linetype\n";
@@ -1655,7 +1655,7 @@ if (getOption('xcheck')) {
 # Close the files that were opened for
 # special conversion
 
-if (LstTidy::Options::isConversionActive('Export lists')) {
+if (isConversionActive('Export lists')) {
    LstTidy::Report::closeExportListFileHandles();
 }
 
@@ -1714,7 +1714,7 @@ sub FILETYPE_parse {
      
       # Convert the non-ascii character in the line if that conversion is
       # active, otherwise just copy it. 
-      my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
+      my $new_line = isConversionActive('ALL:Fix Common Extended ASCII')
                         ? convertEntities($thisLine)
                         : $thisLine;
 
@@ -3069,7 +3069,7 @@ BEGIN {
         #
         # In most files, take ADD:SA and replace with ADD:SAB
 
-        if (   LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
+        if (   isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
                 && exists $line_ref->{'ADD:SA'}
         ) {
                 $log->warning(
@@ -3091,7 +3091,7 @@ BEGIN {
         # Gawaine42 (Richard Bowers)
         # Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
         # This should remove the whole tag.
-        if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
+        if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
                         && $filetype eq "RACE"
         ) {
         for my $key ( keys %$line_ref ) {
@@ -3119,7 +3119,7 @@ BEGIN {
         #
         # In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT'
 
-        if (   LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
+        if (   isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'ALTCRITICAL'}
         ) {
@@ -3154,7 +3154,7 @@ BEGIN {
         # there is a MONSTERCLASS present.
 
         # We remove MFEAT or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
+        if (   isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MFEAT'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -3176,7 +3176,7 @@ BEGIN {
         }
 
         # We remove HITDICE or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
+        if (   isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'HITDICE'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -3203,7 +3203,7 @@ BEGIN {
         ## Note: Makes simplifying assumption that FOLLOWERALIGN
         ## will occur only once in a given line, although DOMAINS may
         ## occur multiple times.
-        if ((LstTidy::Options::isConversionActive('DEITY:Followeralign conversion'))
+        if ((isConversionActive('DEITY:Followeralign conversion'))
                 && $filetype eq "DEITY"
                 && (exists $line_ref->{'FOLLOWERALIGN'}))
         {
@@ -3276,7 +3276,7 @@ BEGIN {
                 }
                 };
 
-                if (   LstTidy::Options::isConversionActive('RACE:TYPE to RACETYPE')
+                if (   isConversionActive('RACE:TYPE to RACETYPE')
                 && ( $filetype eq "RACE"
                         || $filetype eq "TEMPLATE" )
                 && not (exists $line_ref->{'RACETYPE'})
@@ -3300,7 +3300,7 @@ BEGIN {
                 # The SOURCELONG tags found on any linetype but the SOURCE line type must
                 # be converted to use tab if | are found.
 
-                if (   LstTidy::Options::isConversionActive('ALL:New SOURCExxx tag format')
+                if (   isConversionActive('ALL:New SOURCExxx tag format')
                 && exists $line_ref->{'SOURCELONG'} ) {
                 my @new_tags;
 
@@ -3333,7 +3333,7 @@ BEGIN {
                 # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
                 # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
 
-                if ( LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS')
+                if ( isConversionActive('ALL:Convert SPELL to SPELLS')
                 && exists $line_ref->{'SPELL'} )
                 {
                 my %spellbooks;
@@ -3404,7 +3404,7 @@ BEGIN {
                 #
                 # This is needed by my good CMP friends.
 
-                if ( LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN') ) {
+                if ( isConversionActive('ALL:CMP remove PREALIGN') ) {
                 if ( exists $line_ref->{'PREALIGN'} ) {
                         my $number = +@{ $line_ref->{'PREALIGN'} };
                         delete $line_ref->{'PREALIGN'};
@@ -3432,7 +3432,7 @@ BEGIN {
                 # We add it if there is only one Melee attack and the
                 # bonus is not already present.
 
-                if ( LstTidy::Options::isConversionActive('ALL:CMP NatAttack fix')
+                if ( isConversionActive('ALL:CMP NatAttack fix')
                 && exists $line_ref->{'NATURALATTACKS'} )
                 {
 
@@ -3510,7 +3510,7 @@ BEGIN {
                 # No conversion needed. We just have to remove the MOVE tags that
                 # are doing nothing anyway.
 
-                if (   LstTidy::Options::isConversionActive('EQUIP:no more MOVE')
+                if (   isConversionActive('EQUIP:no more MOVE')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -3518,7 +3518,7 @@ BEGIN {
                 delete $line_ref->{'MOVE'};
                 }
 
-                if (   LstTidy::Options::isConversionActive('CLASS:no more HASSPELLFORMULA')
+                if (   isConversionActive('CLASS:no more HASSPELLFORMULA')
                 && $filetype eq "CLASS"
                 && exists $line_ref->{'HASSPELLFORMULA'} )
                 {
@@ -3533,7 +3533,7 @@ BEGIN {
                 # BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
                 # removed or lowered by 8.
 
-                if (   LstTidy::Options::isConversionActive('RACE:BONUS SKILL Climb and Swim')
+                if (   isConversionActive('RACE:BONUS SKILL Climb and Swim')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -3677,7 +3677,7 @@ BEGIN {
                 # The SIZE tag must be removed from all WEAPONPROF files since it
                 # cause loading problems with the latest versio of PCGEN.
 
-                if (   LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE')
+                if (   isConversionActive('WEAPONPROF:No more SIZE')
                 && $filetype eq "WEAPONPROF"
                 && exists $line_ref->{'SIZE'} )
                 {
@@ -3697,7 +3697,7 @@ BEGIN {
                 # NoProfReq must be added to AUTO:WEAPONPROF if the race has
                 # at least one hand and if NoProfReq is not already there.
 
-                if (   LstTidy::Options::isConversionActive('RACE:NoProfReq')
+                if (   isConversionActive('RACE:NoProfReq')
                 && $filetype eq "RACE" )
                 {
                 my $needNoProfReq = 1;
@@ -3751,7 +3751,7 @@ BEGIN {
                 # but only if MONSTERCLASS is present and there is not already a
                 # MONCSKILL present.
 
-                if (   LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL')
+                if (   isConversionActive('RACE:CSKILL to MONCSKILL')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'CSKILL'}
                 && exists $line_ref->{'MONSTERCLASS'}
@@ -3776,7 +3776,7 @@ BEGIN {
                 #   VISION:1,Darkvision (60')
                 #   VISION:.ADD,See Invisibility (120'),See Etheral (120'),Darkvision (120')
 
-                if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION')
+                if (   isConversionActive('ALL: , to | in VISION')
                 && exists $line_ref->{'VISION'}
                 && $line_ref->{'VISION'}[0] =~ /(\.ADD,|1,)(.*)/i )
                 {
@@ -3821,7 +3821,7 @@ BEGIN {
                 # For items with TYPE:Boot, Glove, Bracer, we must check for plural
                 # form and add a SLOTS:2 tag is the item is plural.
 
-                if (   LstTidy::Options::isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
+                if (   isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
                 && $filetype            eq 'EQUIPMENT'
                 && $line_info->[0] eq 'EQUIPMENT'
                 && !exists $line_ref->{'SLOTS'} )
@@ -3868,7 +3868,7 @@ BEGIN {
                 # The $spell_level will also be extracted from the CLASSES tag.
                 # The $caster_level will be $spell_level * 2 -1
 
-                if ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD') ) {
+                if ( isConversionActive('EQUIPMENT: generate EQMOD') ) {
                 if (   $filetype eq 'SPELL'
                         && $line_info->[0] eq 'SPELL'
                         && ( exists $line_ref->{'CLASSES'} ) )
@@ -3963,7 +3963,7 @@ BEGIN {
                 # we must call record_bioset_tags to record the AGE, HEIGHT and
                 # WEIGHT tags.
 
-                if (   LstTidy::Options::isConversionActive('BIOSET:generate the new files')
+                if (   isConversionActive('BIOSET:generate the new files')
                 && $filetype            eq 'RACE'
                 && $line_info->[0] eq 'RACE'
                 && (   exists $line_ref->{'AGE'}
@@ -4000,7 +4000,7 @@ BEGIN {
                 # [ 653596 ] Add a TYPE tag for all SPELLs
                 # .
 
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
+                if (   isConversionActive('SPELL:Add TYPE tags')
                 && exists $line_ref->{'SPELLTYPE'}
                 && $filetype            eq 'CLASS'
                 && $line_info->[0] eq 'CLASS'
@@ -4022,7 +4022,7 @@ BEGIN {
                 }
                 }
 
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
+                if (   isConversionActive('SPELL:Add TYPE tags')
                 && $filetype                    eq 'SPELL'
                 && $line_info->{Linetype} eq 'SPELL' )
                 {
@@ -4040,7 +4040,7 @@ BEGIN {
                 #
                 # Only the first SOURCE line found is replaced.
 
-                if (   LstTidy::Options::isConversionActive('SOURCE line replacement')
+                if (   isConversionActive('SOURCE line replacement')
                 && defined $line_info
                 && $line_info->[0] eq 'SOURCE'
                 && $source_curent_file ne $file_for_error )
@@ -4075,7 +4075,7 @@ BEGIN {
                 # Export each file name and log them with the filename and the
                 # line number
 
-                if ( LstTidy::Options::isConversionActive('Export lists') ) {
+                if ( isConversionActive('Export lists') ) {
                 my $filename = $file_for_error;
                 $filename =~ tr{/}{\\};
 
@@ -4185,7 +4185,7 @@ BEGIN {
                 ######################## Conversion ########################
                 # We manipulate the tags for the line here
 
-                if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
+                if ( isConversionActive('Generate BONUS and PRExxx report') ) {
                 for my $tag_type ( sort keys %$line_ref ) {
                         if ( $tag_type =~ /^BONUS|^!?PRE/ ) {
                                 $bonus_prexxx_tag_report{$filetype}{$_} = 1 for ( @{ $line_ref->{$tag_type} } );
@@ -4235,7 +4235,7 @@ BEGIN {
                 # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
                 #
 
-#  if(LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
+#  if(isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
 #  {
 #       if($filetype eq 'SPELL')
 #       {
@@ -4302,7 +4302,7 @@ BEGIN {
                 # with multiple lines (for clarity) and then want them formatted
                 # properly for submission.
 
-                if ( LstTidy::Options::isConversionActive('ALL:Multiple lines to one') ) {
+                if ( isConversionActive('ALL:Multiple lines to one') ) {
                 my %valid_line_type = (
                         'RACE'  => 1,
                         'TEMPLATE' => 1,
@@ -4428,7 +4428,7 @@ BEGIN {
                 #   '000ClassSpellLevel',
                 #   '001ClassSpells'
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+                if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
                 if ( $filetype eq 'CLASSSPELL' ) {
 
                         # Here we will put aside all the CLASSSPELL that
@@ -4657,7 +4657,7 @@ BEGIN {
                 #
                 # 2003.07.11: a fourth line was added for the SPELL related tags
 
-                if (   LstTidy::Options::isConversionActive('CLASS:Four lines')
+                if (   isConversionActive('CLASS:Four lines')
                 && $filetype eq 'CLASS' )
                 {
                 my $last_main_line = -1;
@@ -4830,7 +4830,7 @@ BEGIN {
                                 # that have a SPELLTYPE tag except if there is also an
                                 # ITEMCREATE tag present.
 
-                                if (   LstTidy::Options::isConversionActive('CLASS:CASTERLEVEL for all casters')
+                                if (   isConversionActive('CLASS:CASTERLEVEL for all casters')
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
@@ -4911,7 +4911,7 @@ BEGIN {
                 # directory, entries with class name.MOD must be generated
                 # at the end of the first CLASS file in the same directory.
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+                if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
                 if ( $filetype eq 'CLASSSKILL' ) {
 
                         # Here we will put aside all the CLASSSKILL that

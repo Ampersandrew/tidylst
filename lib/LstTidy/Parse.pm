@@ -4,6 +4,11 @@ use strict;
 use warnings;
 use English;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(getHeaderMissingOnLineType getMissingHeaderLineTypes );
+
 use Carp;
 
 
@@ -1694,6 +1699,29 @@ sub getHeader {
 
    $header;
 }
+
+
+=head2 getMissingHeaderLineTypes
+
+   Get a list of the line types with missing headers.
+
+=cut
+
+sub getMissingHeaderLineTypes {
+   return keys %missing_headers;
+}
+
+=head2 getHeaderMissingOnLineType
+
+   Get a list of the line types with missing headers.
+
+=cut
+
+sub  getHeaderMissingOnLineType {
+   my ($lineType) = @_;
+   return keys %{ $missing_headers{$lineType} };
+}
+
 
 =head2 getMissingHeaders
 
