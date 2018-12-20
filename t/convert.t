@@ -65,7 +65,7 @@ LstTidy::Options::parseOptions(@arr);
 LstTidy::Options::enableConversion('ALL:PRESPELLTYPE Syntax');
 
 warnings_like { LstTidy::Convert::convertPreSpellType($tag) } [
-   qr{Warning: something's wrong at /mnt/c/github/lst-tidy/lib/LstTidy/Log.pm line 270.},
+   qr{Warning: something's wrong at /mnt/c/github/lst-tidy/lib/LstTidy/Log.pm line 73.},
    qr{foo_spells.lst},
    qr{   Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:Arcane|Divine,2,3" found and converted in SPELL}
 ], "Throws warnings";
