@@ -56,8 +56,9 @@ my %isJepFunction = map { $_ => 1 } qw(
    cosh    tanh    asinh   acosh   atanh   ln      log     exp
    abs     rand    mod     sqrt    sum     if      str
 
-   ceil    cl      classlevel      count   floor   min
-   max     roll    skillinfo       var     mastervar       APPLIEDAS
+   charbonusto ceil    cl      classlevel      count   floor
+   min         max     roll    skillinfo       var     mastervar
+   APPLIEDAS
 );
 
 # Definition of a valid Jep identifiers. Note that all functions are
@@ -125,15 +126,16 @@ my %tagProcessor = (
    ADD         => \&LstTidy::Convert::convertAddTags,
    AUTO        => \&LstTidy::Parse::parseAutoTag,
    BONUS       => \&LstTidy::Parse::parseSubTag,
-   FACT        => \&LstTidy::Parse::parseSubTag,
-   FACTSET     => \&LstTidy::Parse::parseSubTag,
-   INFO        => \&LstTidy::Parse::parseSubTag,
+   FACT        => \&LstTidy::Parse::parseProteanSubTag,
+   FACTSET     => \&LstTidy::Parse::parseProteanSubTag,
+   INFO        => \&LstTidy::Parse::parseProteanSubTag,
    PROFICIENCY => \&LstTidy::Parse::parseSubTag,
    QUALIFY     => \&LstTidy::Parse::parseSubTag,
-   QUALITY     => \&LstTidy::Parse::parseSubTag,
+   QUALITY     => \&LstTidy::Parse::parseProteanSubTag,
    SPELLKNOWN  => \&LstTidy::Parse::parseSubTag,
    SPELLLEVEL  => \&LstTidy::Parse::parseSubTag,
 );
+
 
 # This hash is used to convert 1 character choices to proper fix values.
 my %tagProperValue = (
@@ -2134,6 +2136,55 @@ sub extractVariables {
    }
 }
 
+
+=head2 parseProteanSubTag
+
+   Parse the sub set of tokens where data can freely define sub tokens.  Such
+   as FACT or QUALITY.
+
+   Sume of these are standard and become tags with embeded colons (Similar to
+   ADD). Others are accepted as valid as is, no token munging is done.
+
+=cut
+
+sub parseProteanSubTag {
+
+   my ($tag) = @_;
+
+   my $logger = getLogger();
+
+   # If this is s a subTag, the subTag is currently on the front of the value.
+   my ($subTag) = ($tag->value =~ /^([^=:|]+)/ );
+
+   my $potentialTag = $tag->id . ':' . $subTag;
+
+   if ($subTag && exists $validSubTags{$tag->id}{$subTag}) {
+
+      $tag->id($potentialTag);
+      $tag->value($tag->value =~ s/^$subTag(.*)/$1/r);
+
+   } elsif ($subTag) {
+     
+      # Give a really low priority note that we saw this. Mostly we don't care,
+      # the data team can freely define these and they don't want to hear that
+      # they've done that.
+      $logger->info(
+         qq{Non-standard } . $tag->id . qq{ tag $potentialTag in "} . $tag->origTag . q{" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+
+   } else {
+
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $tag->id);
+      $logger->notice(
+         q{Invalid } . $tag->id . q{ tag "} . $tag->origTag . q{" found in } . $tag->lineType,
+         $tag->file,
+         $tag->line
+      );
+      $tag->noMoreErrors(1);
+   }
+}
 
 =head2 parseSubTag
 
