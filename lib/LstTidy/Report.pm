@@ -995,7 +995,7 @@ sub doXCheck {
    %to_report = ();
    for my $linetype ( sort %referrer_categories ) {
       for my $entry ( sort keys %{ $referrer_categories{$linetype} } ) {
-         if (isValidCategory($linetype, $entry) ) {
+         if (! isValidCategory($linetype, $entry) ) {
             for my $array ( @{ $referrer_categories{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
