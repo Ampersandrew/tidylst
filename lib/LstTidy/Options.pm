@@ -13,7 +13,7 @@ our (@ISA, @EXPORT_OK);
 @EXPORT_OK = qw(getOption setOption isConversionActive);
 
 # Default command line options
-my (%clOptions, %activate, %conversionEnabled, %numeric_warning_level);
+my (%clOptions, %activate, %conversionEnabled);
 
 our $error;
 
@@ -107,27 +107,6 @@ our $error;
    'CLASS:no more HASSPELLFORMULA'      => 0,    # [ 1973497 ] HASSPELLFORMULA is deprecated
 );
 
-%numeric_warning_level = (
-   debug         => 7,
-   d             => 7,
-   7             => 7,
-   info          => 6,
-   informational => 6,
-   i             => 6,
-   6             => 6,
-   notice        => 5,
-   n             => 5,
-   5             => 5,
-   warning       => 4,
-   warn          => 4,
-   w             => 4,
-   4             => 4,
-   error         => 3,
-   err           => 3,
-   e             => 3,
-   3             => 3,
-);
-
 =head2 parseOptions
 
    Paarse a passed array for the command line arguments.
@@ -161,7 +140,7 @@ sub parseOptions {
    my $report         = 0;       # Generate tag usage report
    my $systemPath     = q{};     # Path to the system (game mode) files
    my $test           = 0;       # Internal; for tests only
-   my $warningLevel   = 'info';  # Warning level for error output
+   my $warningLevel   = 'notice';  # Warning level for error output
    my $xCheck         = 1;       # Perform cross-check validation
 
    my $errorMessage = "";
