@@ -94,6 +94,14 @@ my @globalBONUSTags = (
    'BONUS:WIELDCATEGORY:*',
 );
 
+my @INFO_Tags = (
+   'INFO:Prerequisite',
+   'INFO:Normal',
+   'INFO:Special',
+   'INFO:*',
+);
+
+
 # The PRExxx tags. These are used in many of the line types, but they are only
 # defined once and every line type will get the same sort order.
 
@@ -337,6 +345,18 @@ our @QUALIFYTags = (
    'QUALIFY:WEAPONPROF',
 );
 
+my @QUALITY_Tags = (
+   'QUALITY:Capacity:*',
+   'QUALITY:Usage:*',
+   'QUALITY:Aura:*',
+   'QUALITY:Caster Level:*',
+   'QUALITY:Slot:*',
+   'QUALITY:Construction Craft DC:*',
+   'QUALITY:Construction Cost:*',
+   'QUALITY:Construction Requirements:*',
+   'QUALITY:*',
+);
+
 our @SOURCETags = (
    'SOURCELONG',
    'SOURCESHORT',
@@ -344,6 +364,7 @@ our @SOURCETags = (
    'SOURCEPAGE:.CLEAR',
    'SOURCEPAGE',
    'SOURCELINK',
+   'SOURCEDATE',
 );
 
 # Order for the tags for each line type.
@@ -358,6 +379,7 @@ our %masterOrder = (
       'TYPE:.CLEAR',
       'TYPE:*',
       'VISIBLE',
+      'INFO:Prerequisite',
       @PRETags,
       @QUALIFYTags,
       'SERVESAS',
@@ -417,6 +439,8 @@ our %masterOrder = (
       'NATURALATTACKS',
       'ASPECT:*',
       'BENEFIT:*',
+      'INFO:Normal',
+      'INFO:Special',
       'TEMPDESC',
       'SPELLKNOWN:CLASS:*',
       'SPELLKNOWN:DOMAIN:*',
@@ -725,9 +749,8 @@ our %masterOrder = (
       'DOMAINS:*',
       'FOLLOWERALIGN',
       'DESCISPI',
+      'DESC:.CLEAR',
       'DESC',
-      'FACT:*',
-      'FACTSET:*',
       'DEITYWEAP',
       'ALIGN',
       @SOURCETags,
@@ -743,6 +766,13 @@ our %masterOrder = (
       'SAB:*',
       'ABILITY:*',
       'UNENCUMBEREDMOVE',
+      'FACT:Article',
+      'FACT:Symbol',
+      'FACTSET:Pantheon',
+      'FACT:Title',
+      'FACT:Worshippers',
+      'FACT:Appearance',
+      'FACTSET:Race',
       'SYMBOL',                        # Deprecated 6.05.01
       'PANTHEON',                      # Deprecated 6.05.01
       'TITLE',                         # Deprecated 6.05.01
@@ -882,7 +912,7 @@ our %masterOrder = (
       'BONUS:ESIZE:*',
       'BONUS:ITEMCOST:*',
       'BONUS:WEAPON:*',
-      'QUALITY:*',                     # [ 1593868 ] New equipment tag "QUALITY"
+      @QUALITY_Tags,
       'SPROP:.CLEAR',
       'SPROP:*',
       'SAB:.CLEAR',
@@ -1041,6 +1071,7 @@ our %masterOrder = (
       'NATURALATTACKS',
       'ASPECT:*',
       'BENEFIT:*',
+      @INFO_Tags,
       'TEMPDESC',
       'SPELLKNOWN:CLASS:*',
       'SPELLKNOWN:DOMAIN:*',
@@ -1329,7 +1360,7 @@ our %masterOrder = (
       'FAVCLASS',
       'XTRASKILLPTSPERLVL',
       'STARTFEATS',
-      'FACT:*',
+      'FACT:BaseSize',
       'SIZE',
       'MOVE',
       'MOVECLONE',
@@ -1507,6 +1538,7 @@ our %masterOrder = (
       'VARIANTS:.CLEAR',
       'VARIANTS:*',
       'COMPS',
+      'FACT:CompMaterial',
       'CASTTIME:.CLEAR',
       'CASTTIME:*',
       'RANGE:.CLEAR',

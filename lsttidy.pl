@@ -919,6 +919,10 @@ INIT {
 
 my $tablength = 6;      # Tabulation each 6 characters
 
+my $HeaderPattern = qr{ \A \# .* CVS .* Revision }xmsi;
+my $TidiedPattern = qr{ \A [#] .* reformatted by }xmsi;
+my $LstTidyHeader = "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+
 my %files_to_parse;     # Will hold the file to parse (including path)
 my @lines;                      # Will hold all the lines of the file
 my @modified_files;     # Will hold the name of the modified files
@@ -1037,6 +1041,7 @@ if (getOption('inputpath')) {
                 my $SOURCELONG_found    = q{};          #
                 my $SOURCESHORT_found   = q{};          #
                 my $LST_found           = NO;
+                my $CVS_tag_found       = NO;
                 my @pcc_lines           = ();
                 my %found_filetype;
                 my $continue            = YES;
@@ -1160,6 +1165,12 @@ if (getOption('inputpath')) {
                          delete $filelist_notpcc{$lstfile} if exists $filelist_notpcc{$lstfile};
                          $LST_found = YES;
 
+                      } elsif ( $tag =~ m/^\#/ ) {
+
+                         if ($tag =~ m/ \A \# .* CVS .* Revision/xmsi) {
+                            $CVS_tag_found = YES;
+                         }
+
                       } elsif (LstTidy::Reformat::isValidTag('PCC', $tag)) {
 
                          # All the tags that do not have file should be cought here
@@ -1228,8 +1239,9 @@ if (getOption('inputpath')) {
                                # We set the variables that will kick us out of the
                                # while loop that read the file and that will
                                # prevent the file from being written.
-                               $continue               = NO;
-                               $must_write     = NO;
+                               $continue      = NO;
+                               $must_write    = NO;
+                               $CVS_tag_found = NO;
                             }
 
                          } elsif ( $tag eq 'BOOKTYPE' || $tag eq 'TYPE' ) {
@@ -1249,6 +1261,12 @@ if (getOption('inputpath')) {
                             $GAMEMODE_found = $value;
                             $must_write     = YES;
                          }
+                      }
+
+                   } elsif ( m/ \A [#] /xms ) {
+                         
+                      if (m/ \A \# .* CVS .* Revision /xmsi) {
+                         $CVS_tag_found = YES;
                       }
 
                    } elsif ( m/ <html> /xmsi ) {
@@ -1296,7 +1314,7 @@ if (getOption('inputpath')) {
                 }
 
                 # Do we copy the .PCC???
-                if ( getOption('outputpath') && ( $must_write ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
+                if ( getOption('outputpath') && ( $must_write || !$CVS_tag_found ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
                         my $new_pcc_file = $pcc_file_name;
                         my $inputpath  = getOption('inputpath');
                         my $outputpath = getOption('outputpath');
@@ -1310,8 +1328,12 @@ if (getOption('inputpath')) {
                         # We keep track of the files we modify
                         push @modified_files, $pcc_file_name;
 
+                        if ($pcc_lines[0] !~ $TidiedPattern) {
+                           print {$new_pcc_fh} "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+                        }
+
                         for my $line (@pcc_lines) {
-                                print {$new_pcc_fh} "$line\n";
+                           print {$new_pcc_fh} "$line\n";
                         }
 
                         close $new_pcc_fh;
@@ -1359,9 +1381,9 @@ if (getOption('inputpath')) {
                         $log->notice(  "$file\n", "" );
                 }
         }
-}
-else {
-        $files_to_parse{'STDIN'} = getOption('filetype');
+
+} else {
+   $files_to_parse{'STDIN'} = getOption('filetype');
 }
 
 $log->header(LstTidy::LogHeader::get('LST'));
@@ -1425,166 +1447,171 @@ push @files_to_parse_sorted, sort keys %temp_files_to_parse;
 
 FILE_TO_PARSE:
 for my $file (@files_to_parse_sorted) {
-        my $numberofcf = 0;     # Number of extra CF found in the file.
+   my $numberofcf = 0;     # Number of extra CF found in the file.
 
-        my $filetype = "tab-based";   # can be either 'tab-based' or 'multi-line'
+   my $filetype = "tab-based";   # can be either 'tab-based' or 'multi-line'
 
-        if ( $file eq "STDIN" ) {
+   if ( $file eq "STDIN" ) {
 
-                # We read from STDIN
-                # henkslaaf - Multiline parsing
-                #       1) read all to a buffer (files are not so huge that it is a memory hog)
-                #       2) send the buffer to a method that splits based on the type of file
-                #       3) let the method return split and normalized entries
-                #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
-                local $/ = undef; # read all from buffer
-                my $buffer = <>;
+      # We read from STDIN
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
+      local $/ = undef; # read all from buffer
+      my $buffer = <>;
 
-                (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
-                @lines = @$lines;
+      (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+      @lines = @$lines;
 
-        } else {
+   } else {
 
-                # We read only what we know needs to be processed
-                my $parseable = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
+      # We read only what we know needs to be processed
+      my $parseable = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
 
-                next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
+      next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
 
-                # We try to read the file and continue to the next one even if we
-                # encounter problems
-                #
-                # henkslaaf - Multiline parsing
-                #       1) read all to a buffer (files are not so huge that it is a memory hog)
-                #       2) send the buffer to a method that splits based on the type of file
-                #       3) let the method return split and normalized entries
-                #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
+      # We try to read the file and continue to the next one even if we
+      # encounter problems
+      #
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
 
-                eval {
-                        local $/ = undef; # read all from buffer
-                        open my $lst_fh, '<', $file;
-                        my $buffer = <$lst_fh>;
-                        close $lst_fh;
+      eval {
 
-                        (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
-                        @lines = @$lines;
-                };
+         local $/ = undef; # read all from buffer
+         open my $lst_fh, '<', $file;
+         my $buffer = <$lst_fh>;
+         close $lst_fh;
 
-                if ( $EVAL_ERROR ) {
-                # There was an error in the eval
-                $log->error( $EVAL_ERROR, $file );
-                next FILE_TO_PARSE;
-                }
-        }
+         (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+         @lines = @$lines;
+      };
 
-        # If the file is empty, we skip it
-        unless (@lines) {
-                $log->notice(  "Empty file.", $file );
-                next FILE_TO_PARSE;
-        }
+      if ( $EVAL_ERROR ) {
+         # There was an error in the eval
+         $log->error( $EVAL_ERROR, $file );
+         next FILE_TO_PARSE;
+      }
+   }
 
-        # Check to see if we deal with a HTML file
-        if ( grep /<html>/i, @lines ) {
-                $log->error( "HTML file detected. Maybe you had a problem with your CSV checkout.\n", $file );
-                next FILE_TO_PARSE;
-        }
+   # If the file is empty, we skip it
+   unless (@lines) {
+      $log->notice("Empty file.", $file);
+      next FILE_TO_PARSE;
+   }
 
-        # Read the full file into the @lines array
-        chomp(@lines);
+   # Check to see if we are dealing with a HTML file
+   if ( grep /<html>/i, @lines ) {
+      $log->error( "HTML file detected. Maybe you had a problem with your CSV checkout.\n", $file );
+      next FILE_TO_PARSE;
+   }
 
-        # Remove and count the abnormal EOL character i.e. anything
-        # that reminds after the chomp
-        for my $line (@lines) {
-                $numberofcf += $line =~ s/[\x0d\x0a]//g;
-        }
+   # If the first line is the LstTidy comment, we remove it
+   my $cvsPresent = ( $lines[0] =~ $HeaderPattern || $lines[0] =~ $TidiedPattern );
+   shift @lines if $cvsPresent;
 
-        if($numberofcf) {
-                $log->warning( "$numberofcf extra CF found and removed.", $file );
-        }
+   # The full file is in the @lines array, remove the normal EOL characters
+   chomp(@lines);
 
-        my $parser = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
+   # Remove and count any abnormal EOL characters i.e. anything that remains
+   # after the chomp
+   for my $line (@lines) { 
+      $numberofcf += $line =~ s/[\x0d\x0a]//g; 
+   }
 
-        if ( ref($parser) eq "CODE" ) {
+   if($numberofcf) {
+      $log->warning( "$numberofcf extra CF found and removed.", $file );
+   }
 
-                #       $file_for_error = $file;
-                my ($newlines_ref) = &{ $parser }(
-                                          $files_to_parse{$file},
-                                          \@lines,
-                                          $file
-                                       );
+   my $parser = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
 
-                # Let's remove the tralling white spaces
-                for my $line (@$newlines_ref) {
-                $line =~ s/\s+$//;
-                }
+   if ( ref($parser) eq "CODE" ) {
 
-                # henkslaaf - we need to handle this in multi-line object files
-                #       take the multi-line variable and use it to determine
-                #       if we should skip writing this file
+      # The overwhelming majority of checking, correcting and reformatting happens in this operation
+      my ($newlines_ref) = &{ $parser }( $files_to_parse{$file}, \@lines, $file);
 
-                # Some file types are never written
-                warn "SKIP rewrite for $file because it is a multi-line file" if $filetype eq 'multi-line';
-                next FILE_TO_PARSE if $filetype eq 'multi-line';                # we still need to implement rewriting for multi-line
-                next FILE_TO_PARSE if ! LstTidy::Parse::isWriteableFileType( $files_to_parse{$file} );
+      # Let's remove the tralling white spaces
+      for my $line (@$newlines_ref) {
+         $line =~ s/\s+$//;
+      }
 
-                # We compare the result with the orginal file.
-                # If there are no modification, we do not create the new files
-                my $same  = NO;
-                my $index = 0;
+      # henkslaaf - we need to handle this in multi-line object files
+      #       take the multi-line variable and use it to determine
+      #       if we should skip writing this file
 
-                # First, we check if there are obvious resons not to write the new file
-                if (    !$numberofcf                                            # No extra CRLF char. were removed
-                        && scalar(@lines) == scalar(@$newlines_ref)     # Same number of lines
-                ) {
-                        # We assume the arrays are the same ...
-                        $same = YES;
+      # Some file types are never written
+      warn "SKIP rewrite for $file because it is a multi-line file" if $filetype eq 'multi-line';
+      next FILE_TO_PARSE if $filetype eq 'multi-line';                # we still need to implement rewriting for multi-line
+      next FILE_TO_PARSE if ! LstTidy::Parse::isWriteableFileType( $files_to_parse{$file} );
 
-                        # ... but we check every line
-                        $index = -1;
-                        while ( $same && ++$index < scalar(@lines) ) {
-                                if ( $lines[$index] ne $newlines_ref->[$index] ) {
-                                        $same = NO;
-                                }
-                        }
-                }
+      # We compare the result with the orginal file.
+      # If there are no modifications, we do not create the new files
+      my $same  = NO;
+      my $index = 0;
 
-                next FILE_TO_PARSE if $same;
+      # First, we check if there are obvious resons not to write the new file
+      # No extra CRLF char. were removed
+      # Same number of lines
+      if (!$numberofcf && $cvsPresent && scalar(@lines) == scalar(@$newlines_ref)) {
 
-                my $write_fh;
+         # We assume the arrays are the same ...
+         $same = YES;
 
-                if (getOption('outputpath')) {
-                        my $newfile = $file;
-                        my $inputpath  =~ getOption('inputpath');
-                        my $outputpath =~ getOption('outputpath');
-                        $newfile =~ s/${inputpath}/${outputpath}/i;
+         # ... but we check every line
+         $index = -1;
+         while ( $same && ++$index < scalar(@lines) ) {
+            if ( $lines[$index] ne $newlines_ref->[$index] ) {
+               $same = NO;
+            }
+         }
+      }
 
-                        # Create the subdirectory if needed
-                        create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
+      next FILE_TO_PARSE if $same;
 
-                        open $write_fh, '>', $newfile;
+      my $write_fh;
 
-                        # We keep track of the files we modify
-                        push @modified_files, $file;
-                }
-                else {
-                        # Output to standard output
-                        $write_fh = *STDOUT;
-                }
+      if (getOption('outputpath')) {
 
-                # The first line of the new file will be a comment line.
-                print {$write_fh} "$today -- reformated by $SCRIPTNAME v$VERSION\n";
+         my $newfile = $file;
+         my $inputpath  =~ getOption('inputpath');
+         my $outputpath =~ getOption('outputpath');
+         $newfile =~ s/${inputpath}/${outputpath}/i;
 
-                # We print the result
-                LINE:
-                for my $line ( @{$newlines_ref} ) {
-                        #$line =~ s/\s+$//;
-                        print {$write_fh} "$line\n" if getOption('outputpath');
-                }
+         # Create the subdirectory if needed
+         create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
 
-                close $write_fh if getOption('outputpath');
-        }
-        else {
-                warn "Didn't process filetype \"$files_to_parse{$file}\".\n";
-        }
+         open $write_fh, '>', $newfile;
+
+         # We keep track of the files we modify
+         push @modified_files, $file;
+
+      } else {
+
+         # Output to standard output
+         $write_fh = *STDOUT;
+      }
+
+      # The first line of the new file will be a comment line.
+      print {$write_fh} $LstTidyHeader;
+
+      # We print the result
+      for my $line ( @{$newlines_ref} ) {
+         print {$write_fh} "$line\n"
+      }
+
+      # If we opened a filehandle, then close it
+      if (getOption('outputpath')) {
+         close $write_fh;
+      }
+
+   } else {
+      warn "Didn't process filetype \"$files_to_parse{$file}\".\n";
+   }
 }
 
 ###########################################
@@ -1601,8 +1628,12 @@ if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
 ###########################################
 # Print a report with the modified files
 if ( getOption('outputpath') && scalar(@modified_files) ) {
+
         my $outputpath = getOption('outputpath');
-        $outputpath =~ tr{/}{\\} if $^O eq "MSWin32";
+
+        if ($^O eq "MSWin32") {
+           $outputpath =~ tr{/}{\\} 
+        }
 
         $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
 

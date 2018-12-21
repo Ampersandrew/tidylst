@@ -731,8 +731,6 @@ sub warnDeprecate {
 
    my ($tag, $enclosing_tag) = @_;
 
-   my ($bad_tag, $file, $line, $enclosing_tag) = (@_, "");
-
    my $message = qq{Deprecated syntax: "} . $$tag->fullRealTag . q{"};
 
    if($enclosing_tag) {
