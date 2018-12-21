@@ -3,6 +3,11 @@ package LstTidy::Validate;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(isValidCategory isValidEntity isValidType setEntityValid);
+
 use Text::Balanced ();
 
 use File::Basename qw(dirname);
@@ -10,6 +15,8 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use LstTidy::Parse;
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption isConversionActive);
 
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
@@ -412,18 +419,18 @@ sub embedded_coma_split {
    return map { s/&coma;/,/xmsg; $_ } split $separator, $newlist;
 }
 
+=head2 isValidType
 
+   C<isValidType($myEntity, $myType);>
 
-=head2 getValidTypes
-
-   Return a reference to the has of valid types for cross checking.
-
-   Format validTypes{$entitytype}{$typename}
+   Returns true if the given type is valid for the given entity.
 
 =cut
 
-sub getValidTypes {
-   return \%validTypes;
+sub isValidType {
+   my ($entity, $type) = @_;
+
+   return exists $validTypes{$entity}{$type};
 }
 
 =head2 getValidCategories
@@ -438,15 +445,27 @@ sub getValidCategories {
    return \%validCategories;
 }
 
+=head2 isValidCategory
 
+   c<isValidCategory($lineType, $category)>
 
-=head2 isEntityValid
+   Return true if the category is valid for this linetype
+
+=cut
+
+sub isValidCategory {
+   my ($lineType, $category) = @_;
+
+   return exists $validCategories{$lineType}{$category};
+}
+
+=head2 isValidEntity
 
    Returns true if the entity is valid.
 
 =cut
 
-sub isEntityValid {
+sub isValidEntity {
    my ($entitytype, $entityname) = @_;
 
    return exists $validEntities{$entitytype}{$entityname};
@@ -467,7 +486,7 @@ sub isEntityValid {
 sub scanForDeprecatedTags {
    my ( $line, $linetype, $file, $lineNum ) = @_ ;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # Deprecated tags
    if ( $line =~ /\scl\(/ ) {
@@ -731,13 +750,13 @@ sub warnDeprecate {
 
    my ($tag, $enclosing_tag) = @_;
 
-   my $message = qq{Deprecated syntax: "} . $$tag->fullRealTag . q{"};
+   my $message = qq{Deprecated syntax: "} . $tag->fullRealTag . q{"};
 
    if($enclosing_tag) {
       $message .= qq{ found in "} . $enclosing_tag . q{"};
    }
 
-   LstTidy::LogFactory::getLogger->info( $message, $tag->file, $tag->line );
+   getLogger()->info( $message, $tag->file, $tag->line );
 }
 
 
@@ -815,7 +834,7 @@ sub processPRECHECK {
    }
 
    # Get the logger once outside the loop
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    for my $item ( @values ) {
 
@@ -879,7 +898,7 @@ sub processPRELANG {
    my ($tag, $enclosingTag) = @_;
 
    # PRELANG:number,language,language,TYPE=type
-   my ($valid, @values) = checkFirstValue(i$tag->value);
+   my ($valid, @values) = checkFirstValue($tag->value);
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
@@ -902,7 +921,7 @@ sub processPREMOVE {
    my ($tag, $enclosingTag) = @_;
 
    # PREMOVE:[<number>,]<move>=<number>,<move>=<number>,...
-   my ($valid, @values) = checkFirstValue(i$tag->value);
+   my ($valid, @values) = checkFirstValue($tag->value);
 
    # The PREtag doesn't begin with a number
    if ( not $valid ) {
@@ -923,7 +942,7 @@ sub processPREMOVE {
             my $message = qq{Not a number after the = for "$move" in "} . $tag->fullRealTag . q{"};
             $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
 
-            LstTidy::LogFactory::getLogger()->notice($message, $tag->file, $tag->line);
+            getLogger()->notice($message, $tag->file, $tag->line);
          }
 
       } else {
@@ -931,7 +950,7 @@ sub processPREMOVE {
          my $message = qq{Invalid "$move" in "} . $tag->fullRealTag . q{"};
          $message .= qq{ found in "$enclosingTag"} if $enclosingTag;
 
-         LstTidy::LogFactory::getLogger()->notice($message, $tag->file, $tag->line);
+         getLogger()->notice($message, $tag->file, $tag->line);
 
       }
    }
@@ -975,21 +994,14 @@ sub processPREMULT {
       # We extract what we need
       if ( $inside =~ /^\[(!?PRE[A-Z]+):(.*)\]$/ ) {
 
-         # A PRExxx tag is present
-         my $subTag = LstTidy::Tag->new(
-            fullTag  => $inside,
-            lineType => $tag->lineType, 
-            file     => $tag->file,
-            line     => $tag->line,
-         );
+         my $preTag = $tag->clone(id => $1, value => $2);
 
-         validatePreTag($subTag, $tag->fullRealTag);
-
+         validatePreTag($preTag, $tag->fullRealTag);
 
       } else {
 
          # No PRExxx tag found inside the PREMULT
-         LstTidy::LogFactory::getLogger()->warning(
+         getLogger()->warning(
             qq{No valid PRExxx tag found in "$inside" inside "PREMULT:} . $tag->value . q{"},
             $tag->file,
             $tag->line
@@ -1031,7 +1043,7 @@ sub processPRERACE {
 
          if ( $after_wild ne q{} ) {
 
-            LstTidy::LogFactory::getLogger()->notice(
+            getLogger()->notice(
                qq{% used in wild card context should end the race name in "$race"},
                $tag->file,
                $tag->line
@@ -1045,7 +1057,7 @@ sub processPRERACE {
 
                ## Matches everything, no reason to warn.
 
-            } elsif ($validEntities{'RACE'}{$race_wild}) {
+            } elsif (isValidEntity('RACE', $race_wild)) {
 
                ## Matches an existing race, no reason to warn.
 
@@ -1061,7 +1073,7 @@ sub processPRERACE {
                   $racePartialMatch{$race_wild} = 1;
                } else {
 
-                  LstTidy::LogFactory::getLogger()->info(
+                  getLogger()->info(
                      qq{Not able to validate "$race" in "PRERACE:} . $tag->value. q{." This warning is order dependent.} .
                      q{ If the race is defined in a later file, this warning may not be accurate.},
                      $tag->file,
@@ -1122,48 +1134,68 @@ sub processPREVAR {
 
 =head2 validateBonusChecks
 
-   Validate a Bonus checks tag. if this is called, we have already eliminated
-   BONUS:CHECKS|ALL
+   Validate a Bonus checks tag. 
+
+   BONUS:CHECKS|<check list>|<jep> {|TYPE=<bonus type>} {|<pre tags>}
+   BONUS:CHECKS|ALL|<jep>          {|TYPE=<bonus type>} {|<pre tags>}
+   <check list> :=   ( <check name 1> { | <check name 2> } { | <check name 3>} )
+                         | ( BASE.<check name 1> { | BASE.<check name 2> } { | BASE.<check name 3>} )
 
 =cut
 
 sub validateBonusChecks {
 
-   my ($tag, $checks) = @_;
-   
-   my ($base, $non_base) = ( 0, 0 );
-   
-   my $logger = LstTidy::LogFactory::getLogger();
+   my ($tag) = @_;
 
-   for my $check ( split q{,}, $checks ) {
+   # We get parameter 1 and 2 (0 is empty since $tag->value begins with a |)
+   my (undef, $checks, $formula) = (split /[|]/, $tag->value);
+      
+   if ( $checks ne 'ALL' ) {
 
-      # We keep the original name for error messages
-      my $cleanCheck = $check;
+      my ($base, $non_base) = ( 0, 0 );
 
-      # Did we use BASE.? is yes, we remove it
-      if ( $cleanCheck =~ s/ \A BASE [.] //xms ) {
-         $base = 1;
-      } else {
-         $non_base = 1;
+      my $logger = getLogger();
+
+      for my $check ( split q{,}, $checks ) {
+
+         # We keep the original name for error messages
+         my $cleanCheck = $check;
+
+         # Did we use BASE.? is yes, we remove it
+         if ( $cleanCheck =~ s/ \A BASE [.] //xms ) {
+            $base = 1;
+         } else {
+            $non_base = 1;
+         }
+
+         if ( ! LstTidy::Parse::isValidCheck($cleanCheck) ) {
+            $logger->notice(
+               qq{Invalid save check name "$check" found in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+         }
       }
 
-      if ( ! LstTidy::Parse::isValidCheck($cleanCheck) ) {
-         $logger->notice(
-            qq{Invalid save check name "$check" found in "} . $tag->fullTag . q{"},
+      # Warn the user if they're mixing base and non-base
+      if ( $base && $non_base ) {
+         $logger->info(
+            qq{Are you sure you want to mix BASE and non-BASE in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
          );
       }
    }
 
-   # Warn the user if they're mixing base and non-base
-   if ( $base && $non_base ) {
-      $logger->info(
-         qq{Are you sure you want to mix BASE and non-BASE in "} . $tag->fullTag . q{"},
-         $tag->file,
-         $tag->line
-      );
-   }
+   # The formula part
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'DEFINE Variable',
+      qq{@@" in "} . $tag->fullTag,
+      $tag->file,
+      $tag->line,
+      LstTidy::Parse::extractVariables($formula, $tag)
+   ];
 }
 
 =head2 validateBonusTag
@@ -1177,42 +1209,13 @@ sub validateBonusTag {
    # Are there any PRE tags in the BONUS tag.
    if ( $tag->value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
 
-      # A PRExxx tag is present, make a new Tag with just the PRE info.
-      my $subTag = LstTidy::Tag->new(
-         fullTag  => "$1:$2",
-         lineType => $tag->lineType, 
-         file     => $tag->file,
-         line     => $tag->line,
-      );
-
-      # validate the pre, with the full embeded tag.
-      validatePreTag($subTag, $tag->fullRealTag);
+      my $preTag = $tag->clone(id => $1, value => $2);
+      validatePreTag($preTag, $tag->fullRealTag);
    }
 
    if ( $tag->id eq 'BONUS:CHECKS' ) {
-      # BONUS:CHECKS|<check list>|<jep> {|TYPE=<bonus type>} {|<pre tags>}
-      # BONUS:CHECKS|ALL|<jep>          {|TYPE=<bonus type>} {|<pre tags>}
-      # <check list> :=   ( <check name 1> { | <check name 2> } { | <check name 3>} )
-      #                       | ( BASE.<check name 1> { | BASE.<check name 2> } { | BASE.<check name 3>} )
 
-      # We get parameter 1 and 2 (0 is empty since $tag->value begins with a |)
-      my (undef, $check_names, $formula) = (split /[|]/, $tag->value);
-
-      # The checkname part
-      if ( $check_names ne 'ALL' ) {
-
-      validateBonusChecks($tag, $check_names);
-   }
-
-      # The formula part
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'DEFINE Variable',
-         qq{@@" in "} . $tag->fullTag,
-         $tag->file,
-         $tag->line,
-         LstTidy::Parse::extractVariables($formula, $tag)
-      ];
+      validateBonusChecks($tag);
 
    } elsif ( $tag->id eq 'BONUS:FEAT' ) {
 
@@ -1226,7 +1229,7 @@ sub validateBonusTag {
       if ( ( shift @list_of_param ) ne 'POOL' ) {
 
          # For now, only POOL is valid here
-         LestTidy::LogFactory::getLogger->notice(
+         LstTidy::LogFactory::getLogger()->notice(
             qq{Only POOL is valid as second paramater for BONUS:FEAT "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1249,14 +1252,8 @@ sub validateBonusTag {
          if ( $param =~ /^(!?PRE[A-Z]+):(.*)/ ) {
 
             # It's a PRExxx tag, we delegate the validation
-            my $subTag = LstTidy::Tag->new(
-               fullTag  => "$1:$2",
-               lineType => $tag->lineType, 
-               file     => $tag->file,
-               line     => $tag->line,
-            );
-
-            validatePreTag($subTag, $tag->fullRealTag);
+            my $preTag = $tag->clone(id => $1, value => $2);
+            validatePreTag($preTag, $tag->fullRealTag);
 
          } elsif ( $param =~ /^TYPE=(.*)/ ) {
 
@@ -1264,7 +1261,7 @@ sub validateBonusTag {
 
          } else {
 
-            LestTidy::LogFactory::getLogger->notice(
+            LstTidy::LogFactory::getLogger()->notice(
                qq{Invalid parameter "$param" found in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1273,13 +1270,14 @@ sub validateBonusTag {
       }
 
       if ( $type_present > 1 ) {
-         LestTidy::LogFactory::getLogger->notice(
+         LstTidy::LogFactory::getLogger()->notice(
             qq{There should be only one "TYPE=" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
          );
       }
    }
+
    if (   $tag->id eq 'BONUS:MOVEADD'
       || $tag->id eq 'BONUS:MOVEMULT'
       || $tag->id eq 'BONUS:POSTMOVEADD' )
@@ -1305,7 +1303,7 @@ sub validateBonusTag {
             ];
          }
          else {
-            LestTidy::LogFactory::getLogger->notice(
+            LstTidy::LogFactory::getLogger()->notice(
                qq{Missing "TYPE=" for "$type" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1330,9 +1328,9 @@ sub validateBonusTag {
       # The valid types are defined in %validBonusSlots
       # <number of slots> could be a formula.
 
-      my ( undef, $type_list, $formula ) = ( split '\|', $tag->value );
+      my ($type_list, $formula) = ( split '\|', $tag->value )[1, 2];
 
-      my $logger = LestTidy::LogFactory::getLogger();
+      my $logger = LstTidy::LogFactory::getLogger();
 
       # We first check the slot types
       for my $type ( split ',', $type_list ) {
@@ -1358,7 +1356,7 @@ sub validateBonusTag {
    elsif ( $tag->id eq 'BONUS:VAR' ) {
 
       # BONUS:VAR|List of Names|Formula|... only the first two values are variable related.
-      my ( undef, $var_name_list, @formulas ) = ( split '\|', $tag->value );
+      my ($var_name_list, @formulas) = ( split '\|', $tag->value )[1, 2];
 
       # First we store the DEFINE variable name
       for my $var_name ( split ',', $var_name_list ) {
@@ -1377,7 +1375,7 @@ sub validateBonusTag {
             }
          }
          else {
-            LestTidy::LogFactory::getLogger->notice(
+            LstTidy::LogFactory::getLogger()->notice(
                qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -1402,9 +1400,9 @@ sub validateBonusTag {
    elsif ( $tag->id eq 'BONUS:WIELDCATEGORY' ) {
 
       # BONUS:WIELDCATEGORY|<List of category>|<formula>
-      my ( undef, $category_list, $formula ) = ( split '\|', $tag->value );
+      my ($category_list, $formula) = ( split '\|', $tag->value )[1, 2];
 
-      my $logger = LestTidy::LogFactory::getLogger();
+      my $logger = LstTidy::LogFactory::getLogger();
 
       # Validate the category to see if valid
       for my $category ( split ',', $category_list ) {
@@ -1457,7 +1455,7 @@ sub validateClearTag {
 
    } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
 
-      LstTidy::LogFactory::getLogger->notice(
+      getLogger()->notice(
          q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
          $tag->file,
          $tag->line
@@ -1500,7 +1498,7 @@ sub validatePreTag {
       return;
    }
 
-   LstTidy::LogFactory::getLogger()->debug(
+   getLogger()->debug(
       q{validatePreTag: } . $tag->id . q{; } . $tag->value . q{; } . $enclosingTag .q{; } . $tag->lineType .q{;},
       $tag->file,
       $tag->line
@@ -1512,7 +1510,7 @@ sub validatePreTag {
 
    } elsif ( $tag->id eq 'PRECHECK' || $tag->id eq 'PRECHECKBASE') {
 
-      processPRECHECK ($tag->id, $enclosingTag);
+      processPRECHECK ($tag, $enclosingTag);
 
    } elsif ( $tag->id eq 'PRECSKILL' ) {
 
@@ -1580,7 +1578,7 @@ sub validatePreTag {
    # of the PRExxx tags on the entry lines.
    elsif ( $enclosingTag && !exists $PreTags{$tag->id} ) {
 
-      LstTidy::LogFactory::getLogger()->notice(
+      getLogger()->notice(
          qq{Unknown PRExxx tag "} . $tag->id . q{" found in "$enclosingTag"},
          $tag->file,
          $tag->line
@@ -1604,7 +1602,7 @@ sub validateTag {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    if ($tag->id eq 'STARTPACK')
    {
@@ -1700,7 +1698,8 @@ sub validateTag {
                 elsif (   $tag->lineType eq 'DEITY' ) {
                         # Only DOMAINS in DEITY
                         if ($tag->value =~ /\|/ ) {
-                           $tag->value(substr($tag->value, 0, rindex($tag->value, "\|")));
+                           my $value = substr($tag->value, 0, rindex($tag->value, "\|"));
+                           $tag->value($value);
                         }
                         DOMAIN_FOR_DEITY:
                         for my $domain ( split ',', $tag->value ) {
@@ -1983,14 +1982,8 @@ sub validateTag {
                         # If it is a PRExxx tag section, we validate the PRExxx tag.
                         if ( $tag->id eq 'VFEAT' && $feat =~ /^(!?PRE[A-Z]+):(.*)/ ) {
 
-                           my $subTag = LstTidy::Tag->new(
-                              fullTag  => "$1:$2",
-                              lineType => $tag->lineType, 
-                              file     => $tag->file,
-                              line     => $tag->line,
-                           );
-
-                           validatePreTag($subTag, $tag->fullRealTag);
+                           my $preTag = $tag->clone(id => $1, value => $2);
+                           validatePreTag($preTag, $tag->fullRealTag);
 
                            $feat = "";
                            next FEAT;
@@ -2001,14 +1994,8 @@ sub validateTag {
 
                            $feat = $1;
 
-                           my $subTag = LstTidy::Tag->new(
-                              fullTag  => "$2:$3",
-                              lineType => $tag->lineType, 
-                              file     => $tag->file,
-                              line     => $tag->line,
-                           );
-
-                           validatePreTag($subTag, $tag->fullRealTag);
+                           my $preTag = $tag->clone(id => $2, value => $3);
+                           validatePreTag($preTag, $tag->fullRealTag);
                         }
 
                 }
@@ -2283,14 +2270,8 @@ sub validateTag {
                                 # Embeded PRExxx tags
                                 } elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
 
-                                   my $subTag = LstTidy::Tag->new(
-                                      fullTag  => "$1:$2",
-                                      lineType => $tag->lineType, 
-                                      file     => $tag->file,
-                                      line     => $tag->line,
-                                   );
-
-                                   validatePreTag($subTag, $tag->fullRealTag);
+                                   my $preTag = $tag->clone(id => $1, value => $2);
+                                   validatePreTag($preTag, $tag->fullRealTag);
 
                                 } else {
 
@@ -2615,41 +2596,41 @@ sub validateTag {
                                 );
                         }
                 }
-                }
-                elsif ( $tag->id eq 'STAT' ) {
+             } elsif ( $tag->id eq 'STAT' ) {
                 if ( $tag->lineType eq 'KIT STAT' ) {
-                        # STAT:STR=17|DEX=10|CON=14|INT=8|WIS=12|CHA=14
-                        my %stat_count_for = map { $_ => 0 } @{LstTidy::Parse::getValidSystemArr('stats')};
+                   # STAT:STR=17|DEX=10|CON=14|INT=8|WIS=12|CHA=14
+                   my %stat_count_for = map { $_ => 0 } LstTidy::Parse::getValidSystemArr('stats');
 
-                        STAT:
-                        for my $stat_expression (split /[|]/, $tag->value) {
-                                my ($stat) = ( $stat_expression =~ / \A ([A-Z]{3}) [=] (\d+|roll\(\"\w+\"\)((\+|\-)var\(\"STAT.*\"\))*) \z /xms );
-                                if ( !defined $stat ) {
-                                # Syntax error
-                                $logger->notice(
-                                        qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
-                                        $tag->file,
-                                        $tag->line
-                                );
+                   STAT:
+                   for my $stat_expression (split /[|]/, $tag->value) {
 
-                                next STAT;
-                                }
+                      my ($stat) = ( $stat_expression =~ / \A ([A-Z]{3}) [=] (\d+|roll\(\"\w+\"\)((\+|\-)var\(\"STAT.*\"\))*) \z /xms );
 
-                                if ( !exists $stat_count_for{$stat} ) {
-                                # The stat is not part of the official list
-                                $logger->notice(
-                                        qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
-                                        $tag->file,
-                                        $tag->line
-                                );
-                                }
-                                else {
-                                $stat_count_for{$stat}++;
-                                }
-                        }
+                      if ( !defined $stat ) {
+                         # Syntax error
+                         $logger->notice(
+                            qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
+                            $tag->file,
+                            $tag->line
+                         );
+
+                         next STAT;
+                      }
+
+                      if ( !exists $stat_count_for{$stat} ) {
+                         # The stat is not part of the official list
+                         $logger->notice(
+                            qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
+                            $tag->file,
+                            $tag->line
+                         );
+                      } else {
+                         $stat_count_for{$stat}++;
+                      }
+                   }
 
                         # We check to see if some stat are repeated
-                        for my $stat ( @{LstTidy::Parse::getValidSystemArr('stats')}) {
+                        for my $stat ( LstTidy::Parse::getValidSystemArr('stats')) {
                                 if ( $stat_count_for{$stat} > 1 ) {
                                 $logger->notice(
                                         qq{Found $stat more then once in "} . $tag->fullTag . q{"},
@@ -2773,8 +2754,8 @@ sub validateTag {
 
                                         #####################################################
                                         # Export a list of variable names if requested
-                                        if ( LstTidy::Options::isConversionActive('Export lists') ) {
-                                                my $file = $$tag->file;
+                                        if ( isConversionActive('Export lists') ) {
+                                                my $file = $tag->file;
                                                 $file =~ tr{/}{\\};
                                                 LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$tag->line","$file"\n});
                                         }
@@ -2785,7 +2766,7 @@ sub validateTag {
                                 elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
                                         $logger->notice(
                                                 qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
-                                                $$tag->file,
+                                                $tag->file,
                                                 $tag->line
                                         );
                                 }
@@ -2793,7 +2774,7 @@ sub validateTag {
                         else {
                                 $logger->notice(
                                         qq{I was not able to find a proper variable name in "} . $tag->fullTag . q{"},
-                                        $$tag->file,
+                                        $tag->file,
                                         $tag->line
                                 );
                         }
@@ -2804,7 +2785,7 @@ sub validateTag {
                            [
                               'DEFINE Variable',
                               qq{@@" in "} . $tag->fullTag,
-                              $$tag->file,
+                              $tag->file,
                               $tag->line,
                               LstTidy::Parse::extractVariables($formula, $tag)
                            ];
@@ -2819,15 +2800,8 @@ sub validateTag {
                                         # Are there any PRE tags in the SA tag.
                                         if ( $formula =~ /(^!?PRE[A-Z]*):(.*)/ ) {
 
-                                           # A PRExxx tag is present
-                                           my $subTag = LstTidy::Tag->new(
-                                              fullTag  => "$1:$2",
-                                              lineType => $tag->lineType, 
-                                              file     => $tag->file,
-                                              line     => $tag->line,
-                                           );
-
-                                           validatePreTag($subTag, $tag->fullRealTag);
+                                           my $preTag = $tag->clone(id => $1, value => $2);
+                                           validatePreTag($preTag, $tag->fullRealTag);
 
                                            next FORMULA;
                                         }
@@ -2836,7 +2810,7 @@ sub validateTag {
                                         [
                                            'DEFINE Variable',
                                            qq{@@" in "} . $tag->fullTag,
-                                           $$tag->file,
+                                           $tag->file,
                                            $tag->line,
                                            LstTidy::Parse::extractVariables($formula, $tag)
                                         ];
@@ -2865,7 +2839,7 @@ sub validateTag {
                                  [
                                     'DEFINE Variable',
                                     qq{@@" in "} . $tag->fullTag,
-                                    $$tag->file,
+                                    $tag->file,
                                     $tag->line,
                                     LstTidy::Parse::extractVariables($result, $tag)
                                  ];
@@ -2896,7 +2870,7 @@ sub validateTag {
                                         if (defined $parameters[4]) {
                                                 $logger->notice(
                                                         qq{5th parameter should be an SPROP in "NATURALATTACKS:$entry"},
-                                                        $$tag->file,
+                                                        $tag->file,
                                                         $tag->line
                                                 ) unless $parameters[4] =~ /^SPROP=/;
                                         }
@@ -2904,7 +2878,7 @@ sub validateTag {
                                         # Parameter 3 is a number
                                         $logger->notice(
                                                 qq{3rd parameter should be a number in "NATURALATTACKS:$entry"},
-                                                $$tag->file,
+                                                $tag->file,
                                                 $tag->line
                                         ) unless $parameters[2] =~ /^\*?\d+$/;
 
@@ -2913,7 +2887,7 @@ sub validateTag {
                                                 [
                                                         'EQUIPMENT TYPE', 
                                                         qq{@@" in "} . $tag->id . q{:$entry},
-                                                        $$tag->file,  
+                                                        $tag->file,  
                                                         $tag->line,
                                                         grep { !$validNaturalAttacksType{$_} } split '\.', $parameters[1]
                                                 ];
@@ -2921,7 +2895,7 @@ sub validateTag {
                                 else {
                                         $logger->notice(
                                                 qq{Wrong number of parameter for "NATURALATTACKS:$entry"},
-                                                $$tag->file,
+                                                $tag->file,
                                         $tag->line
                                         );
                                 }
@@ -2941,7 +2915,7 @@ sub validateTag {
                                                 [
                                                         'EQUIPMENT', 
                                                         $tag->id, 
-                                                        $$tag->file, 
+                                                        $tag->file, 
                                                         $tag->line,
                                                         split ',', $list_of_weapons
                                                 ];
@@ -2951,7 +2925,7 @@ sub validateTag {
                                                 [
                                                         'WEAPONPROF', 
                                                         $tag->id, 
-                                                        $$tag->file, 
+                                                        $tag->file, 
                                                         $tag->line,
                                                         $new_prof
                                                 ];

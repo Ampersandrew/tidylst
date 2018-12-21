@@ -26,9 +26,10 @@ use File::Basename ();
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
-
+                        
+use LstTidy::Convert qw(convertEntities);
 use LstTidy::Log;
-use LstTidy::LogFactory;
+use LstTidy::LogFactory qw(getLogger);
 use LstTidy::LogHeader;
 use LstTidy::Options qw(getOption setOption isConversionActive);
 use LstTidy::Parse;
@@ -86,7 +87,7 @@ setOption('warninglevel', $level);
 $error_message .= $mess if defined $mess;
 
 # Create the singleton logging object using the warning level verified above.
-my $log = LstTidy::LogFactory::getLogger();
+my $log = getLogger();
 
 # Path options
 
@@ -220,21 +221,21 @@ if ( getOption('htmlhelp') ) {
    exit;
 }
 
-my %source_tags        = ()  if LstTidy::Options::isConversionActive('SOURCE line replacement');
-my $source_curent_file = q{} if LstTidy::Options::isConversionActive('SOURCE line replacement');
+my %source_tags        = ()  if isConversionActive('SOURCE line replacement');
+my $source_curent_file = q{} if isConversionActive('SOURCE line replacement');
 
-my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS');
+my %classskill_files   = ()  if isConversionActive('CLASSSKILL conversion to CLASS');
 
-my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL');
+my %classspell_files   = ()  if isConversionActive('CLASSSPELL conversion to SPELL');
 
-my %class_files        = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
-my %class_spelltypes   = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
+my %class_files        = ()  if isConversionActive('SPELL:Add TYPE tags');
+my %class_spelltypes   = ()  if isConversionActive('SPELL:Add TYPE tags');
 
-my %Spells_For_EQMOD   = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
-my %Spell_Files        = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                                || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
+my %Spells_For_EQMOD   = ()  if isConversionActive('EQUIPMENT: generate EQMOD');
+my %Spell_Files        = ()  if isConversionActive('EQUIPMENT: generate EQMOD')
+                                || isConversionActive('CLASS: SPELLLIST from Spell.MOD');
 
-my %bonus_prexxx_tag_report = ()  if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
+my %bonus_prexxx_tag_report = ()  if isConversionActive('Generate BONUS and PRExxx report');
 
 my %PREALIGN_conversion_5715 = qw(
    0   LG
@@ -248,11 +249,11 @@ my %PREALIGN_conversion_5715 = qw(
    8   CE
    9   NONE
    10  Deity
-) if LstTidy::Options::isConversionActive('ALL:PREALIGN conversion');
+) if isConversionActive('ALL:PREALIGN conversion');
 
 my %Key_conversion_56 = qw(
         BIND            BLIND
-) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
+) if isConversionActive('ALL:EQMOD has new keys');
 #       ABENHABON       BNS_ENHC_AB
 #       ABILITYMINUS    BNS_ENHC_AB
 #       ABILITYPLUS     BNS_ENHC_AB
@@ -449,9 +450,9 @@ my %Key_conversion_56 = qw(
 #       WEAPMITH        MTHRL
 #       WILDA           WILD_A
 #       WILDS           WILD_S
-#       ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
+#       ) if isConversionActive('ALL:EQMOD has new keys');
 
-if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
+if(isConversionActive('ALL:EQMOD has new keys'))
 {
    my ($old_key,$new_key);
    while (($old_key,$new_key) = each %Key_conversion_56)
@@ -484,7 +485,7 @@ my %srd_weapon_name_conversion_433 = (
    q{Trident (Fish Command)}       => q{Trident of Fish Command},
    q{Trident (Warning)}            => q{Trident of Warning},
    q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
-) if LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change');
+) if isConversionActive('ALL: 4.3.3 Weapon name change');
 
 
 # Constants for master_line_type
@@ -952,14 +953,14 @@ if (getOption('inputpath')) {
    ##########################################################
    # Files that needs to be open for special conversions
 
-   if ( LstTidy::Options::isConversionActive('Export lists') ) {
+   if ( isConversionActive('Export lists') ) {
       LstTidy::Report::openExportListFileHandles();
    }
 
         ##########################################################
         # Cross-checking must be activated for the CLASSSPELL
         # conversion to work
-        if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+        if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
            setOption('xcheck', 1);
         }
 
@@ -1058,12 +1059,13 @@ if (getOption('inputpath')) {
 
                    my ( $tag, $value ) = LstTidy::Parse::extractTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
 
+
                    # if extractTag returns a defined value, no further
                    # processing is neeeded. If value is not defined then the
                    # tag that was returned should be  processed further. 
                    if (not defined $value) {
 
-                      my $tag =  LstTidy::Tag->new(
+                      my $pccTag =  LstTidy::Tag->new(
                          fullTag  => $tag,
                          lineType => 'PCC', 
                          file     => $pcc_file_name, 
@@ -1071,12 +1073,12 @@ if (getOption('inputpath')) {
                       );
 
                       # Potentally modify the tag
-                      LstTidy::Parse::parseTag( $tag );
-                      ($tag, $value) = ($tag->readId, $tag->value);
-                   }
+                      LstTidy::Parse::parseTag( $pccTag );
+                      ($tag, $value) = ($pccTag->realId, $pccTag->value);
 
-                      
-                      
+                   }
+                   getLogger()->debug($tag, $pcc_file_name, $INPUT_LINE_NUMBER );
+                   getLogger()->debug($value, $pcc_file_name, $INPUT_LINE_NUMBER );
 
                    if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
 
@@ -1106,15 +1108,15 @@ if (getOption('inputpath')) {
                             $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
                             delete $files_to_parse{$lstfile};
 
-                         } elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
+                         } elsif (isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
 
                             # [ 653596 ] Add a TYPE tag for all SPELLs
                             #
                             # The CLASS files must be read before any other
                             $class_files{$lstfile} = 1;
 
-                         } elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                               || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
+                         } elsif ( $tag eq 'SPELL' && ( isConversionActive('EQUIPMENT: generate EQMOD')
+                               || isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
 
                             #[ 677962 ] The DMG wands have no charge.
                             #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
@@ -1124,7 +1126,7 @@ if (getOption('inputpath')) {
 
                             $Spell_Files{$lstfile} = 1;
 
-                         } elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
+                         } elsif ( isConversionActive('CLASSSPELL conversion to SPELL')
                             && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) ) {
 
                             # CLASSSPELL conversion
@@ -1144,7 +1146,7 @@ if (getOption('inputpath')) {
                                );
                             }
 
-                         } elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
+                         } elsif (isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
 
                             # CLASSSKILL conversion
                             # We keep the list of CLASSSKILL files
@@ -1176,7 +1178,7 @@ if (getOption('inputpath')) {
                          # All the tags that do not have file should be cought here
 
                          # Get the SOURCExxx tags for future ref.
-                         if (LstTidy::Options::isConversionActive('SOURCE line replacement')
+                         if (isConversionActive('SOURCE line replacement')
                               && (    $tag eq 'SOURCELONG'
                                    || $tag eq 'SOURCESHORT'
                                    || $tag eq 'SOURCEWEB'
@@ -1249,7 +1251,7 @@ if (getOption('inputpath')) {
                             # Found a TYPE tag
                             $BOOKTYPE_found = YES;
 
-                         } elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+                         } elsif ( $tag eq 'GAME' && isConversionActive('PCC:GAME to GAMEMODE') ) {
 
                             # [ 707325 ] PCC: GAME is now GAMEMODE
                             $pcc_lines[-1] = "GAMEMODE:$value";
@@ -1281,7 +1283,7 @@ if (getOption('inputpath')) {
 
                 close $pcc_fh;
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
+                if ( isConversionActive('CLASSSPELL conversion to SPELL')
                         && $found_filetype{'CLASSSPELL'}
                         && !$found_filetype{'SPELL'} )
                 {
@@ -1291,7 +1293,7 @@ if (getOption('inputpath')) {
                         );
                 }
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
+                if ( isConversionActive('CLASSSKILL conversion to CLASS')
                         && $found_filetype{'CLASSSKILL'}
                         && !$found_filetype{'CLASS'} )
                 {
@@ -1391,7 +1393,7 @@ $log->header(LstTidy::LogHeader::get('LST'));
 my @files_to_parse_sorted = ();
 my %temp_files_to_parse   = %files_to_parse;
 
-if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
+if ( isConversionActive('SPELL:Add TYPE tags') ) {
 
         # The CLASS files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1403,7 +1405,7 @@ if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
 
         # The CLASS and DOMAIN files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1431,7 +1433,7 @@ if ( keys %Spell_Files ) {
         }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
 
         # The CLASSSKILL files must be put at the start of the
         # files_to_parse_sorted array in order for them
@@ -1617,7 +1619,7 @@ for my $file (@files_to_parse_sorted) {
 ###########################################
 # Generate the new BIOSET files
 
-if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
+if ( isConversionActive('BIOSET:generate the new files') ) {
         print STDERR "\n================================================================\n";
         print STDERR "List of new BIOSET files generated\n";
         print STDERR "----------------------------------------------------------------\n";
@@ -1649,7 +1651,7 @@ if ( getOption('outputpath') && scalar(@modified_files) ) {
 
 ###########################################
 # Print a report for the BONUS and PRExxx usage
-if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
+if ( isConversionActive('Generate BONUS and PRExxx report') ) {
 
         print STDERR "\n================================================================\n";
         print STDERR "List of BONUS and PRExxx tags by linetype\n";
@@ -1685,7 +1687,7 @@ if (getOption('xcheck')) {
 # Close the files that were opened for
 # special conversion
 
-if (LstTidy::Options::isConversionActive('Export lists')) {
+if (isConversionActive('Export lists')) {
    LstTidy::Report::closeExportListFileHandles();
 }
 
@@ -1744,8 +1746,8 @@ sub FILETYPE_parse {
      
       # Convert the non-ascii character in the line if that conversion is
       # active, otherwise just copy it. 
-      my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
-                        ? LstTidy::Convert::convertEntities($thisLine)
+      my $new_line = isConversionActive('ALL:Fix Common Extended ASCII')
+                        ? convertEntities($thisLine)
                         : $thisLine;
 
       # Remove spaces at the end of the line
@@ -1803,7 +1805,7 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
+      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $file, $line );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1845,7 +1847,8 @@ sub FILETYPE_parse {
          LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            my $exit = LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            last COLUMN if $exit;
          }
       }
 
@@ -1869,7 +1872,7 @@ sub FILETYPE_parse {
             # Potentally modify the tag
             LstTidy::Parse::parseTag( $tag );
 
-            my $key = $tag->readId;
+            my $key = $tag->realId;
 
             if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
                $log->notice(
@@ -3099,7 +3102,7 @@ BEGIN {
         #
         # In most files, take ADD:SA and replace with ADD:SAB
 
-        if (   LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
+        if (   isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
                 && exists $line_ref->{'ADD:SA'}
         ) {
                 $log->warning(
@@ -3121,7 +3124,7 @@ BEGIN {
         # Gawaine42 (Richard Bowers)
         # Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
         # This should remove the whole tag.
-        if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
+        if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
                         && $filetype eq "RACE"
         ) {
         for my $key ( keys %$line_ref ) {
@@ -3149,7 +3152,7 @@ BEGIN {
         #
         # In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT'
 
-        if (   LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
+        if (   isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'ALTCRITICAL'}
         ) {
@@ -3184,7 +3187,7 @@ BEGIN {
         # there is a MONSTERCLASS present.
 
         # We remove MFEAT or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
+        if (   isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MFEAT'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -3206,7 +3209,7 @@ BEGIN {
         }
 
         # We remove HITDICE or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
+        if (   isConversionActive('RACE:Remove MFEAT and HITDICE')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'HITDICE'}
                 ) { if ( exists $line_ref->{'MONSTERCLASS'}
@@ -3233,7 +3236,7 @@ BEGIN {
         ## Note: Makes simplifying assumption that FOLLOWERALIGN
         ## will occur only once in a given line, although DOMAINS may
         ## occur multiple times.
-        if ((LstTidy::Options::isConversionActive('DEITY:Followeralign conversion'))
+        if ((isConversionActive('DEITY:Followeralign conversion'))
                 && $filetype eq "DEITY"
                 && (exists $line_ref->{'FOLLOWERALIGN'}))
         {
@@ -3306,7 +3309,7 @@ BEGIN {
                 }
                 };
 
-                if (   LstTidy::Options::isConversionActive('RACE:TYPE to RACETYPE')
+                if (   isConversionActive('RACE:TYPE to RACETYPE')
                 && ( $filetype eq "RACE"
                         || $filetype eq "TEMPLATE" )
                 && not (exists $line_ref->{'RACETYPE'})
@@ -3330,7 +3333,7 @@ BEGIN {
                 # The SOURCELONG tags found on any linetype but the SOURCE line type must
                 # be converted to use tab if | are found.
 
-                if (   LstTidy::Options::isConversionActive('ALL:New SOURCExxx tag format')
+                if (   isConversionActive('ALL:New SOURCExxx tag format')
                 && exists $line_ref->{'SOURCELONG'} ) {
                 my @new_tags;
 
@@ -3363,7 +3366,7 @@ BEGIN {
                 # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
                 # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
 
-                if ( LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS')
+                if ( isConversionActive('ALL:Convert SPELL to SPELLS')
                 && exists $line_ref->{'SPELL'} )
                 {
                 my %spellbooks;
@@ -3434,7 +3437,7 @@ BEGIN {
                 #
                 # This is needed by my good CMP friends.
 
-                if ( LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN') ) {
+                if ( isConversionActive('ALL:CMP remove PREALIGN') ) {
                 if ( exists $line_ref->{'PREALIGN'} ) {
                         my $number = +@{ $line_ref->{'PREALIGN'} };
                         delete $line_ref->{'PREALIGN'};
@@ -3462,7 +3465,7 @@ BEGIN {
                 # We add it if there is only one Melee attack and the
                 # bonus is not already present.
 
-                if ( LstTidy::Options::isConversionActive('ALL:CMP NatAttack fix')
+                if ( isConversionActive('ALL:CMP NatAttack fix')
                 && exists $line_ref->{'NATURALATTACKS'} )
                 {
 
@@ -3540,7 +3543,7 @@ BEGIN {
                 # No conversion needed. We just have to remove the MOVE tags that
                 # are doing nothing anyway.
 
-                if (   LstTidy::Options::isConversionActive('EQUIP:no more MOVE')
+                if (   isConversionActive('EQUIP:no more MOVE')
                 && $filetype eq "EQUIPMENT"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -3548,7 +3551,7 @@ BEGIN {
                 delete $line_ref->{'MOVE'};
                 }
 
-                if (   LstTidy::Options::isConversionActive('CLASS:no more HASSPELLFORMULA')
+                if (   isConversionActive('CLASS:no more HASSPELLFORMULA')
                 && $filetype eq "CLASS"
                 && exists $line_ref->{'HASSPELLFORMULA'} )
                 {
@@ -3563,7 +3566,7 @@ BEGIN {
                 # BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
                 # removed or lowered by 8.
 
-                if (   LstTidy::Options::isConversionActive('RACE:BONUS SKILL Climb and Swim')
+                if (   isConversionActive('RACE:BONUS SKILL Climb and Swim')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'MOVE'} )
                 {
@@ -3707,7 +3710,7 @@ BEGIN {
                 # The SIZE tag must be removed from all WEAPONPROF files since it
                 # cause loading problems with the latest versio of PCGEN.
 
-                if (   LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE')
+                if (   isConversionActive('WEAPONPROF:No more SIZE')
                 && $filetype eq "WEAPONPROF"
                 && exists $line_ref->{'SIZE'} )
                 {
@@ -3727,7 +3730,7 @@ BEGIN {
                 # NoProfReq must be added to AUTO:WEAPONPROF if the race has
                 # at least one hand and if NoProfReq is not already there.
 
-                if (   LstTidy::Options::isConversionActive('RACE:NoProfReq')
+                if (   isConversionActive('RACE:NoProfReq')
                 && $filetype eq "RACE" )
                 {
                 my $needNoProfReq = 1;
@@ -3781,7 +3784,7 @@ BEGIN {
                 # but only if MONSTERCLASS is present and there is not already a
                 # MONCSKILL present.
 
-                if (   LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL')
+                if (   isConversionActive('RACE:CSKILL to MONCSKILL')
                 && $filetype eq "RACE"
                 && exists $line_ref->{'CSKILL'}
                 && exists $line_ref->{'MONSTERCLASS'}
@@ -3806,7 +3809,7 @@ BEGIN {
                 #   VISION:1,Darkvision (60')
                 #   VISION:.ADD,See Invisibility (120'),See Etheral (120'),Darkvision (120')
 
-                if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION')
+                if (   isConversionActive('ALL: , to | in VISION')
                 && exists $line_ref->{'VISION'}
                 && $line_ref->{'VISION'}[0] =~ /(\.ADD,|1,)(.*)/i )
                 {
@@ -3851,7 +3854,7 @@ BEGIN {
                 # For items with TYPE:Boot, Glove, Bracer, we must check for plural
                 # form and add a SLOTS:2 tag is the item is plural.
 
-                if (   LstTidy::Options::isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
+                if (   isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
                 && $filetype            eq 'EQUIPMENT'
                 && $line_info->[0] eq 'EQUIPMENT'
                 && !exists $line_ref->{'SLOTS'} )
@@ -3898,7 +3901,7 @@ BEGIN {
                 # The $spell_level will also be extracted from the CLASSES tag.
                 # The $caster_level will be $spell_level * 2 -1
 
-                if ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD') ) {
+                if ( isConversionActive('EQUIPMENT: generate EQMOD') ) {
                 if (   $filetype eq 'SPELL'
                         && $line_info->[0] eq 'SPELL'
                         && ( exists $line_ref->{'CLASSES'} ) )
@@ -3993,7 +3996,7 @@ BEGIN {
                 # we must call record_bioset_tags to record the AGE, HEIGHT and
                 # WEIGHT tags.
 
-                if (   LstTidy::Options::isConversionActive('BIOSET:generate the new files')
+                if (   isConversionActive('BIOSET:generate the new files')
                 && $filetype            eq 'RACE'
                 && $line_info->[0] eq 'RACE'
                 && (   exists $line_ref->{'AGE'}
@@ -4030,7 +4033,7 @@ BEGIN {
                 # [ 653596 ] Add a TYPE tag for all SPELLs
                 # .
 
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
+                if (   isConversionActive('SPELL:Add TYPE tags')
                 && exists $line_ref->{'SPELLTYPE'}
                 && $filetype            eq 'CLASS'
                 && $line_info->[0] eq 'CLASS'
@@ -4052,7 +4055,7 @@ BEGIN {
                 }
                 }
 
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
+                if (   isConversionActive('SPELL:Add TYPE tags')
                 && $filetype                    eq 'SPELL'
                 && $line_info->{Linetype} eq 'SPELL' )
                 {
@@ -4070,7 +4073,7 @@ BEGIN {
                 #
                 # Only the first SOURCE line found is replaced.
 
-                if (   LstTidy::Options::isConversionActive('SOURCE line replacement')
+                if (   isConversionActive('SOURCE line replacement')
                 && defined $line_info
                 && $line_info->[0] eq 'SOURCE'
                 && $source_curent_file ne $file_for_error )
@@ -4105,7 +4108,7 @@ BEGIN {
                 # Export each file name and log them with the filename and the
                 # line number
 
-                if ( LstTidy::Options::isConversionActive('Export lists') ) {
+                if ( isConversionActive('Export lists') ) {
                 my $filename = $file_for_error;
                 $filename =~ tr{/}{\\};
 
@@ -4215,7 +4218,7 @@ BEGIN {
                 ######################## Conversion ########################
                 # We manipulate the tags for the line here
 
-                if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
+                if ( isConversionActive('Generate BONUS and PRExxx report') ) {
                 for my $tag_type ( sort keys %$line_ref ) {
                         if ( $tag_type =~ /^BONUS|^!?PRE/ ) {
                                 $bonus_prexxx_tag_report{$filetype}{$_} = 1 for ( @{ $line_ref->{$tag_type} } );
@@ -4265,7 +4268,7 @@ BEGIN {
                 # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
                 #
 
-#  if(LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
+#  if(isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
 #  {
 #       if($filetype eq 'SPELL')
 #       {
@@ -4332,7 +4335,7 @@ BEGIN {
                 # with multiple lines (for clarity) and then want them formatted
                 # properly for submission.
 
-                if ( LstTidy::Options::isConversionActive('ALL:Multiple lines to one') ) {
+                if ( isConversionActive('ALL:Multiple lines to one') ) {
                 my %valid_line_type = (
                         'RACE'  => 1,
                         'TEMPLATE' => 1,
@@ -4458,7 +4461,7 @@ BEGIN {
                 #   '000ClassSpellLevel',
                 #   '001ClassSpells'
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+                if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
                 if ( $filetype eq 'CLASSSPELL' ) {
 
                         # Here we will put aside all the CLASSSPELL that
@@ -4687,7 +4690,7 @@ BEGIN {
                 #
                 # 2003.07.11: a fourth line was added for the SPELL related tags
 
-                if (   LstTidy::Options::isConversionActive('CLASS:Four lines')
+                if (   isConversionActive('CLASS:Four lines')
                 && $filetype eq 'CLASS' )
                 {
                 my $last_main_line = -1;
@@ -4860,7 +4863,7 @@ BEGIN {
                                 # that have a SPELLTYPE tag except if there is also an
                                 # ITEMCREATE tag present.
 
-                                if (   LstTidy::Options::isConversionActive('CLASS:CASTERLEVEL for all casters')
+                                if (   isConversionActive('CLASS:CASTERLEVEL for all casters')
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
@@ -4941,7 +4944,7 @@ BEGIN {
                 # directory, entries with class name.MOD must be generated
                 # at the end of the first CLASS file in the same directory.
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+                if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
                 if ( $filetype eq 'CLASSSKILL' ) {
 
                         # Here we will put aside all the CLASSSKILL that
@@ -5799,9 +5802,13 @@ Here are the list of the valid conversions so far:
 
 =over 16
 
+=item * [ 1973497 ] HASSPELLFORMULA is deprecated
+
 Use to change a number of conversions needed for stable 6.0
 
-=item * [ 1973497 ] HASSPELLFORMULA is deprecated
+=back
+
+=back
 
 =over 12
 
@@ -5809,11 +5816,11 @@ Use to change a number of conversions needed for stable 6.0
 
 =over 16
 
+=item * [ 1678570 ] Correct PRESPELLTYPE syntax
+
 Use to change a number of conversions for stable 5.12.0.
 
 B<This has a small issue:> if ADD:blah| syntax items that contain ( ) in the elements, it will attempt to convert again.  This has only caused a few problems in the srds, but it is something to be aware of on homebrews.
-
-=item * [ 1678570 ] Correct PRESPELLTYPE syntax
 
 - changes PRESPELLTYPE format from PRESPELLTYPE:<A>,<x>,<y> to standard PRExxx:<x>,<A>=<y>
 
@@ -6279,1052 +6286,3 @@ See L<http://www.perl.com/perl/misc/Artistic.html>.
 
 =back
 
-=head1 VERSION HISTORY
-
-=head2 v1.40 -- -- NOT YET RELEASED
-
-[ 1973497 ] HASSPELLFORMULA is deprecated
-
-[ 1778050 ] MOVECLONE now only has 3 args
-
-[ 1870825 ] EqMod CHOOSE Changes
-
-[ 2946558 ] TEMPLATE can be used in COMPANIONMOD lines
-
-[ 2596967 ] ABILITY not recognized for MASTERBONUSRACE
-
-[ 2946552 ] New SELECTION Kit Tag
-
-[ 2946555 ] BENEFIT can be used more than once per line
-
-[ 2946551 ] New LANGBONUS Kit tag
-
-[ 1864706 ] PROFICIENCY: requires a subtoken
-
-[ 2577370 ] New Token - ABILITYLIST
-
-[ 2387200 ] New Token - PREPROFWITHARMOR
-
-[ 2577310 ] New Token - PREPROFWITHSHIELD
-
-[ 2186450 ] New Ability/Feat Token - ASPECT
-
-[ 2544134 ] New Token - SPELLKNOWN
-
-=head2 v1.39 -- 2000.01.28
-
-[ 2022217 ] UMULT is valid in Abillities
-
-[ 2016715 ] ADD tags are not as globally applied as they should be
-
-[ 2016696 ] PRECAMPAIGN tag for .pcc and lst files
-
-[ 2012989 ] Kit TYPE tag
-
-Added an audible notification {beep} when processing completes
-
-[ 1941853 ] Allow , in Spell Knowledge feat
-
-[ 1998298 ] SPELLS TIMEUNIT checking bug
-
-[ 1997408 ] False positive: TIMEUNIT= parameter is missing
-
-[ 1958876 ] PL not dealing with JEP syntax correctly
-
-[ 1958872 ] trim PREXXX before checking SPELLLEVEL
-
-[ 1995252 ] Header for the Error Log
-
-[ 1994059 ] Convert EQMOD "BIND" to "BLIND"
-
-[ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
-
-[ 1905481 ] Deprecate CompanionMod SWITCHRACE
-
-[ 1888288 ] CHOOSE:COUNT= is deprecated
-
-[ 1870482 ] AUTO:SHIELDPROF changes
-
-[ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
-
-[ 1804786 ] Deprecate SA: replace with SAB:
-
-[ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
-
-[ 1992156 ] CHANGEPROF may be used more than once on a line
-
-[ 1991974 ] PL incorectly reports CLEARALL as CLEAR
-
-[ 1991300 ] Allow %LIST as a substitution value on BONUS:CHECKS
-
-[ 1973526 ] DOMAIN is supported on Class line
-
-[ 1973660 ] ADDDOMAINS is supported on Class lines
-
-[ 1956721 ] Add SERVESAS tag to Ability, Class, Feat, Race, Skill files
-
-[ 1956719 ] Add RESIZE tag to Equipment file
-
-[ 1956220 ] REPEATLEVEL not recognized as a ClassLevel line
-
-[ 1956204 ] Check for both TYPE:Container and CONTAINS in Equipment files
-
-[ 1777282 ] CONTAINS Unlimited Weight is UNLIM, not -1
-
-[ 1946006 ] Add BONUS:MISC to Spell
-
-[ 1943226 ] Add UDAM to EQUIPMENT tag list
-
-[ 1942824 ] LANGAUTO .CLEARALL and .CLEAR
-
-[ 1941843 ] Reduce Spellbook warning to info
-
-[ 1941836 ] NONE is valid for SPELLSTAT
-
-[ 1941831 ] PREMULT can be used multiple times
-
-[ 1941829 ] AUTO:FEAT can be used multiple times
-
-[ 1941208 ] Preliminary work toward supporting the processing of the AbilityCategory lst files.
-
-[ 1941207 ] Add the Global tag GENDER to the CLASS, RACE, and TEMPLATE tag lists
-
-[ 1757241 ] CAMPAIGN not a recognized *.pcc tag -- Could not duplicate this issue
-
-Added several new column headers
-
-[ 1937985 ] Add TIMEUNIT=<text> parameter to the SPELLS tag
-
-[ 1937852 ] Kit GENDER Support
-
-[ 1937680 ] KIT FUNDS lines in Kit file
-
-[ 1750238 ] ABILITY warnings
-
-[ 1912505 ] Stop Reporting missing TYPE and RACETYPE in racial .MOD
-
-[ 1729758 ][BUG]DOMAIN tags with PREALIGN cause false positive xcheck
-
-[ 1935376 ] New files: Armorprof and Shieldprof
-
-[ 1774985 ] Exchange cl() with classlevel()
-
-[ 1864711 ] Convert ADD:SA to ADD:SAB
-
-[ 1893278 ] UNENCUMBEREDMOVE is a global tag
-
-[ 1893279 ] HASSPELLFORMULA Class Line tag
-
-[ 1805245 ] NATURALATTACKS allowed more than once in RACE
-
-[ 1776500 ] PREDEITY needs updated
-
-[ 1814797 ] PPCOST needs to be added as valid tag in SPELLS
-
-[ 1786966 ] Global tags throwing false warnings
-
-[ 1784583 ] .MOD .FORGET .COPY race lines don't need RACETYPE or TYPE
-
-[ 1718370 ] SHOWINMENU tag missing for PCC files
-
-[ 1722300 ] ABILITY tag in different locations
-
-[ 1722847 ] AUTO:WEAPONPROF in equipment.lst
-
-=head2 v1.38 -- 2007.04.26
-
-=over 3
-
-=item Additional Conversions:
-
-[ 1678570 ] Correct PRESPELLTYPE syntax
-
-[ 1678577 ] ADD: syntax no longer uses parens
-
-[ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-- Use "Followeralign" as the option to convert to invoke this.
-
-[ 1514765 ] Conversion to remove old defaultmonster tags
-
-[ 1324519 ] ASCII characters
-
-=back
-
-=over 3
-
-=item Additional Warnings and notices:
-
-[ 1671407 ] xcheck PREABILITY tag
-
-[ 1683231 ] CHOOSE:SCHOOLS does not have arguments
-
-[ 1695877 ] KEY tag is global
-
-[ 1596310 ] xcheck: TYPE:Spellbook for equip w/ NUMPAGES and PAGEUSAGE
-
-[ 1368562 ] .FORGET / .MOD don\'t need KEY entries
-
-[ 1671410 ] xcheck CATEGORY:Feat in Feat object.
-
-[ 1690990 ] Add APPEARANCE to Deities LST
-
-[ 1223873 ] WEAPONAUTO is no longer valid
-
-[ 1678573 ] ADD: deprecation
-
-[ 1678576 ] ADD:FEAT supports ALL
-
-[ 1387361 ] No KIT STARTPACK entry for \"KIT:xxx\"
-
-Race entry references with % now produce _much_ fewer errors lines.
-
-=back
-
-=head2 v1.37 -- 2007.03.01
-
-[ 1353255 ] TYPE to RACETYPE conversion
-- Use convert 'racetype' to invoke this.
-
-[ 1672551 ] PCC tag COMPANIONLIST
-
-[ 1672547 ] Support for Substitution Classes
-
-[ 1683839 ] Sort KEY tags next to names
-
-=head2 v1.37 -- 2007.03.01
-
-[ 1623708 ] Invalid value "DEITY" for tag "PREALIGN" - should be allowed
-
-[ 1374892 ] DEITY tag
-
-Ability file now supported, including LEVELABLITY in Kits.  No real checking yet.
-
-[ 1671827 ] PRESRxx enhancement
-
-[ 1666665 ] Add support for ABILITY files
-
-[ 1658571 ] KIT in feats and prettylst
-
-[ 1671364 ] missing valid TEMPLATE tags
-
-[ 1671363 ] missing SPELL line tags
-
-[ 1671361 ] new PCC tag; ISMATURE:<YES/NO>
-
-[ 1671356 ] Missing valid tags for Companion support
-
-[ 1671353 ] add missing BONUS:SLOTS parameters
-
-[ 1326023 ] New tag: BONUS:MONSKILLPTS|LOCKNUMBER|x
-
-[ 1661050 ] New PREAGESET tag
-
-=head2 v1.36 -- 2007.01.26
-
-[ 1637309 ] REACH, FACE & LEGS are now Template tags
-
-[ 1630261 ] Change syntax for QUALIFY tag
-
-[ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT
-
-Add PREREACH tag
-
-[ 1625250 ] New tag REACHMULT:x
-
-=head2 v1.35
-
-[ 1593904 ] KIT lines can have any standard PRE tag
-
-[ 1596402 ] New Kit GEAR tag: LOOKUP
-
-[ 1596400 ] New Kit line_type: TABLE, with VALUES tag
-
-[ 1593894 ] New Kit tag: OPTION
-
-[ 1593885 ] New Kit line_type tag: SELECT
-
-[ 1593872 ] False warning: No SKILL entry for CSKILL:ALL
-
-[ 1594671 ] New tag: equipmod FORMATCAT
-
-[ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
-
-[ 1593868 ] New equipment tag "QUALITY"
-
-[ 1593879 ] New Kit tag: APPLY
-
-[ 1593907 ] False warning: Invalid value "CSHEET" for tag "VISIBLE"
-
-Moved SOURCExxx tag info into array - all lines use same tag order for SOURCE tags now.
-
-[ 1584007 ] New Tag: SOURCEDATE in PCC
-
-[ 1450980 ] New Spellbook tags
-
-[ 1335912 ] New tag: TEMPLATE:.CLEAR
-
-[ 1580059 ] SKILLLIST tag
-
-[ 1173567 ] Convert old style PREALIGN to new style
-
-[ 1105603 ] New VARs in gameMode files
-
-[ 1117152 ] VFEAT and TEMPLATE use
-
-[ 1119767 ] Invalid value "R" for tag "MODS"
-
-[ 1123650 ] HITDIE tag in class lines
-
-[ 1152687 ] SPELLLEVEL:CLASS in feats.lst
-
-[ 1153255 ] FUMBLERANGE new tag
-
-[ 1156423 ] BONUS:WIELDCATEGORY
-
-[ 1173534 ] .CLEAR syntax issue
-
-[ 1173794 ] BONUS:WEAPONPROF order in race file
-
-Eliminated a lot of false positive with references to SUBCLASS
-
-Psionic is now valid in ADD:SPELLCASTER
-
-Clean up the valid game modes
-
-[ 1326008 ] Add tag: HIDETYPE to the PCC tag list
-
-[ 1326016 ] New tag: PRERULE
-
-[ 1325996 ] Add tag: ADD:EQUIP(y,y)z
-
-[ 1325943 ] ADD:SKILL(Speak Language)1" found in FEAT
-
-[ 1238595 ] New tag: PRECSKILL
-
-[ 1326349 ] Missing TYPE:.CLEAR tag in FEAT
-
-[ 1223873 ] WEAPONAUTO is no longer valid
-
-[ 1326374 ] Add JEP operators
-
-[ 1224428 ] No RACE entry for "SWITCHRACE:xxx"
-
-[ 1282532 ] ClassDefense and Reputation
-
-[ 1292967 ] TITLE and WORSHIPPERS in deity.lst
-
-[ 1327238 ] Add CHANGEPROF to TEMPLATE tag list
-
-[ 1324532 ] Biosettings.lst
-
-[ 1309116 ] LANGAUTO missing in CLASS Level
-
-Removed all the sub prototypes [Perl Best Practices]
-
-mywarn has been completely replaced with ewarn
-
-[ 1324512 ] BONUSSPELLSTAT is not in the CLASS tag list
-
-[ 1355958 ] New tag: SCHOOL:.CLEAR
-
-[ 1353231 ] New tag: RACETYPE
-
-[ 1353233 ] New tag: RACESUBTYPE
-
-[ 1355994 ] KIT file refinements
-
-[ 1356139 ] UDAM missing in FEAT tag list
-
-[ 1356143 ] ADD:Language missing in TEMPLATE tag
-
-[ 1356158 ] SPELL is invalid as value for SPELLSTAT in CLASS
-
-[ 1356999 ] Use of uninitialized value in string eq
-
-[ 1359467 ] .COPY=<name> not used for validation
-
-[ 1361057 ] Missing variables for the Modern game mode
-
-[ 1361066 ] Do not x-check outside the -inputpath
-
-Added system files parsing to find the variables names, game moes, and
-abbreviations for stats and alignments
-
-[ 1362206 ] [CLASS Level]Missing TEMPDESC tag
-
-[ 1362222 ] [RACE]Missing KIT tag
-
-[ 1362223 ] [CLASS Level]Missing BONUS:SLOTS
-
-prettylst.pl no longer tolerate old style formula parser
-
-[ 1364343 ] Multiple PRESPELLCAST tags
-
-PRERACE:<number>,<list of races> is officialy the way to go
-
-PRERACE:<list of races> to PRERACE:1,<list of races> conversion
-
-[ 1367569 ] SYSTEM: Validate BONUS:CHECK with statsandchecks.lst values
-
-[ 1366753 ] [KIT] The tag FREE is missing in the KIT FEAT tag list
-
-[ 1398237 ] ALL: Convert Willpower to Will
-
-Filter out the Subversion system directories
-
-The SOURCExxx tags are now separated by tabs instead of |
-
-The -oldsourcetag option has been added to use | instead of tab in the SOURCExxx lines
-
-Implemented a "fix" for the /../ in directories
-
-[ 1440104 ] Ignore specific hidden files and directories
-
-[ 1444527 ] New SOURCE tag format
-
-[ 1483739 ] [CMP] SOURCEx changes for 5.10 compatibility
-
-[ 1418243 ] RANGE:.CLEAR is missing in SPELL tag list
-
-[ 1461407 ] ITEM: spell tag order
-
-=head2 v1.34 -- 2005.01.19
-
-[ 1028284 ] Verified if , are present in object names
-
-[ 1028919 ] Report with GAMEMODE
-
-[ 1028285 ] Convert old style PRExxx tags to new style
-
-[ 1039028 ] [PCC]New Xcrawl Game Mode
-
-[ 1070084 ] Convert SPELL to SPELLS
-
-[ 1037456 ] Move BONUS:DC on class line to the spellcasting portion
-
-[ 1027589 ] TEMPDESC (tag from 5.5.1) in skills.lst
-
-[ 1066352 ] BONUS:COMBAT|INITIATIVE on MASTERBONUSRACE line
-
-[ 1066355 ] BONUS tags in spells.lst
-
-[ 1066359 ] BONUS:UDAM in class.lst
-
-[ 1048297 ] New Tag: MONNONSKILLHD
-
-[ 1077285 ] ALTCRITRANGE tag
-
-[ 1079504 ] PREWIELD in eqmod file
-
-[ 1083339 ] RATEOFFIRE in equip.lst
-
-[ 1080142 ] natural attacks with TYPE:Natural
-
-[ 1093382 ] Warning for missing param. in SPELLS
-
-Added x-ref check for FOLLOWER and MASTERBONUSRACE in COMPANIONMODE file type
-
-Added x-ref check for RACE with the PRERACE and !PRERACE tags
-
-[ 1093134 ] BONUS:FEAT|POOL|x
-
-[ 1094126 ] Make -xcheck option on by default
-
-[ 1097487 ] MONSKILL in class.lst
-
-[ 1104117 ] BL is a valid variable, like CL
-
-[ 1104126 ] SPELLCASTER.Psionic is valid spellcasting class type
-
-General work on KIT support
-
-Three new file types added to exportlist: DEITY, KIT and TEMPLATE
-
-DEITY, STARTPACK KIT and TEMPLATE are now validated by the x-check code
-
-[ 1355926 ] DESC on equipment files
-
-=head2 v1.33 -- 2004.08.29
-
-[ 876536 ] All spell casting classes need CASTERLEVEL
-
-[ 1003585 ] PCC: The script should not remove INCLUDE and EXCLUDE
-
-The script can no longer read CLASSSPELL and CLASSSKILL files.
-
-The functions CLASS_parse, CLASSSPELL_parse and GENERIC_parse have been removed since
-they were no longer used.
-
-[ 1004050 ] Spycrat is a new valid GAMEMODE
-
-[ 971744 ] 5.7+ TEMPLATE in feats.lst
-
-[ 976475 ] Missing LANGBONUS tag in CLASS Level
-
-[ 1004081 ] Missing global BONUS:CASTERLEVEL
-
-Major code reengeering to allow a better PRExxx tag validation
-
-[ 1004893 ] ADD:SPELLCASTER is valid in RACE
-
-[ 1005363 ] Validate NATURALATTACKS tag
-
-[ 1005651 ] ADD:Language in a feat file
-
-[ 1005653 ] Multiple variable names in a BONUS:VAR tag
-
-[ 1005655 ] BONUS:SLOTS in race files
-
-[ 1005658 ] BONUS:MOVEMULT
-
-[ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
-
-[ 1005661 ] ADD:SPELLCASTER in feat .lst
-
-[ 1006985 ] Spycraft gameMode DEFINEd VARiables
-
-[ 1006371 ] SA tag in Skill .lst
-
-[ 976474 ] DEITY tag is missing from CLASS Level
-
-Added the -gamemode parameter
-
-=head2 v1.32 -- 2004.07.06
-
-[ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-
-[ 832171 ] AUTO:* needs to be separate tags
-
-Added the -c=skillbonusfix to add BONUS:SKILL|Climb|8|TYPE=Racial if it is not already
-present and the race has a MOVE:Climb entry. Same thing with Swim.
-
-[ 845853 ] SIZE is no longer valid in the weaponprof files
-
-[ 833509 ] All the PRExxx tags missing must be added
-
-[ 849366 ] VFEAT with inline PRExxx
-
-Added the ability to export the LANGUAGE entities when using the -exportlist option
-
-[ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-
-[ 865948 ] Properly check files with same name but different directory
-
-[ 849365 ] CLASSES:ALL
-
-[ 849369 ] SPELLCASTER.Arcane=1
-
-[ 879467 ] AUTO:EQUIP in equipment files
-
-[ 882797 ] SUBCLASS -- NAMEISPI: tag
-
-[ 882799 ] SUBCLASSLEVEL -- add SPELLLEVEL:CLASS tag
-
-[ 892746 ] KEYS entries were changed in the main files
-
-[ 892748 ] Track the EQMOD keys with -x flag
-
-Track the variable names with the -x flag (phase 1)
-
-Put BONUS:CASTERLEVEL on the spell CLASS line
-
-Removed a bunch of old conversion code that is no longer used
-
-[ 971746 ] "PREVARGTEQ" can be used more than once in feats.lst
-
-[ 971778 ] BONUS:UDAM| tag
-
-Implemetend a workaroud for a perl bug => [perl #30058] Perl 5.8.4 chokes on perl -e 'BEGIN { my %x=(); }'
-
-[ 902439 ] PREVISION not in FEAT tag list
-
-[ 975999 ] [tab][space][tab] breaks prettylst
-
-[ 974710 ] AUTO:WEAPONPROF usable multiple times
-
-[ 971782 ] FACE tag in races.lst
-
-Removed a warning message for CHOOSE:SPELLLEVEL
-
-Add the B<-nowarning> option to suppress the warning messages
-
-[ 974693 ] PROHIBITED class tag
-
-=head2 v1.31 -- 2003.10.29
-
-[ 823221 ] SPELL multiple time on equipment
-
-[ 823763 ] BONUS:DC in class level
-
-[ 823764 ] ADD:FEAT in domain list
-
-[ 824975 ] spells.lst - DESCISPI:[YES/NO]
-
-[ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
-
-[ 829329 ] Lines get deleted when the line type is not know
-
-[ 829335 ] New LANGAUTO line type for KIT files
-
-[ 829380 ] New Game Mode
-
-[ 831569 ] RACE:CSKILL to MONCSKILL
-
-[ 832139 ] CLASS Level: missing NATURALATTACKS
-
-=head2 v1.30 -- 2003.10.14
-
-[ 804091 ] ADD:FEAT warning
-
-[ 807329 ] PRESIZE warning (for template.lst)
-
-[ 813333 ] MONCSKILL and MONCCSKILL in race.lst
-
-[ 813334 ] PREMULT
-
-[ 813335 ] ACHECK:DOUBLE
-
-[ 813337 ] BONUS:DC
-
-[ 813504 ] SPELLLEVEL:DOMAIN in domains.lst
-
-[ 814200 ] PRESKILL in SPELL files
-
-[ 817399 ] Tags usable in SUBCLASS
-
-[ 823042 ] not finding files issue
-
-A new B<-baspath> option was added to specify the path that must replace the @ characters in
-the .PCC files when that path is different from B<-inputpath>.
-
-[ 823166 ] Missing PREVARNEQ tag
-
-[ 823194 ] PREBASESIZExxx tags
-
-=head2 v1.29 -- 2003.08.23
-
-New tags were added as a result of the big CMP push.
-
-The script now detect the tags that have no values (with the -x option).
-
-PRECLASS:Spellcaster, Spellcaster.Arcane and Spellcaster.Devine are now understood.
-
-Removed the 4.3.3 dir restructure conversion code.
-
-I've activated the KIT files reformating.
-
-The CLASS lines are now reformated in four lines. A new line with all the spell related
-tags follow the skill tags.
-
-[ 707325 ] PCC: GAME is now GAMEMODE L<https://sourceforge.net/tracker/?func=detail&atid=450221&aid=707325&group_id=36698>
-
-New set_ewarn_header function
-
-New function to take RACE and TEMPLATE that are on multiple lines and bring them back to one line
-
-[ 779821 ] Add quote removal L<https://sourceforge.net/tracker/?func=detail&atid=578825&aid=779821&group_id=36698>
-
-[ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB L<https://sourceforge.net/tracker/?func=detail&atid=450221&aid=784363&group_id=36698>
-
-=head2 v1.28 -- 2003.05.04
-
-New line type MASTERBONUSRACE
-
-New validation for the FEAT line type (CHOSE <=> MULT <=> STACK)
-
-[ 728038 ] BONUS:VISION must replace VISION:.ADD
-
-[ 711565 ] BONUS:MOVE replaced with BONUS:MOVEADD (Not definitive yet)
-
-New validation for PRECLASS (make sure the number is there and the class exists)
-
-[ 731973 ] ALL: new PRECLASS syntax
-
-=head2 v1.27 -- 2003.04.03
-
-The B<-inputpath> option is now mandatory
-
-[ 686169 ] remove ATTACKS: tag
-
-[ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
-
-[ 707325 ] PCC: GAME is now GAMEMODE
-
-[ 699834 ] Incorrect loading of multiple vision types
-
-PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
-
-=head2 v1.26 -- 2002.02.27
-
-[ 677962 ] The DMG wands have no charge
-
-Removed the invalid PREBAB tag
-
-Change the order for the FEAT line type
-
-Dir path conversion for the new SRD files
-
-Upgraded to ActivePerl 635
-
-New EQUIPMENT tag order
-
-Weapon name conversion for PCGEN 4.3.3 for SRD compliance
-
-New B<-convert> parameter
-
-=head2 v1.25 -- 2003.01.27
-
-[ 670554 ] SYNERGY to BONUS:SKILL format
-
-Fixed the CLASSSPELL conversion that was not working with the new parser
-
-Fixed a problem with the Export Lists function (for DOMAIN)
-
-Change the BIOSET conversion code so that the new bioset files are
-generated in the output directory
-
-New SKILL line tags order
-
-=head2 v1.24 -- 2003.01.14
-
-BIOSET generation from the AGE, HEIGHT and WEIGHT tags
-
-Added the BIOSET file definition for FILETYPE_parse
-
-New order for SPELL tags
-
-=head2 v1.23 -- 2003.01.06
-
-I'm removed the useles -debug option
-
-Add a bunch of new tags in the SUBCLASSLEVEL (everything in CLASS Level)
-
-I'm now running Perl Dev Kit 5
-
-=head2 v1.22 -- 2002.12.31
-
-The FEAT validation code now deal with |CHECKMULT properly
-
-The FEAT validation code now ignores , between () for ADD:FEAT and PREFEAT
-
-Fixed remaining tr!/!\\! so that they are used only on MSWin32 systems
-
-The new set_mywan_filename is called after each section header to empty the $previousfile
-variable within the mywarn closure
-
-=head2 v1.21 -- 2002.12.28
-
-FEAT validation added for the tags FEAT, MFEAT, VFEAT, PREFEAT and ADD:FEAT
-
-[ 657059 ] Verify pipe is the only delimiter:VISION
-
-The tr!/!\\! on the file names printed by mywarn is done only for MSWin32 OS
-
-=head2 v1.20 -- 2002.12.19
-
-[ 653596 ] Add a TYPE tag for all SPELLs (first part, change on hold)
-
-Added the -missingheader command line option to list all the header that do not
-have definitions in the %tagheader hash
-
-Only the first SOURCExxx line is replaced when the SOURCE line replacement option
-is active
-
-All the filetypes except CLASSSKILL and CLASSSPELL have been
-migrated to FILETYPE_parse (KIT is only validated for now)
-
-New .CLEAR code (TAG:.CLEAR are all different tags now)
-
-=head2 v1.19 -- 2002.12.12
-
-[ 602874 ] SAVES tag deprecated, replaced by 3 BONUS:CHECKS|BASE.savename|x|PREDEFAULTMONSTER:Y
-
-The CVS files beginning with .# are now ignored by prettylst
-
-Code to correct the BONUS:STAT|WIL typo (should be BONUS:STAT|WIS)
-
-New NAMEISPI tag in every files
-
-New getHeader function
-
-The BONUS:xxx are now considered differents tags (like the ADD:xxx)
-
-[ 609763 ] Convert the old PRECHECKxxx
-
-Added coded to check and standerdize tags with limited possible values
-
-SA:.CLEAR is now a sperate tag than SA: in order to facilitate the sorting
-
-Got rid of the old %validpcctag (replaced by the generic %valid_tags)
-
-[ 619312 ] RACENAME deprecated, convert to OUTPUTNAME
-
-[ 613604 ] CASTAS:name to SPELLLIST:x|name
-
-Added code to standardise the SOURCExxx line in the .lst files
-based of the SOURCExxx tags found in the same directory.
-
-Added code to convert the CLASSSKILL files into CLASS CSKILL
-
-[ 620419 ] Added code to flag and display the SA entries that include ','
-
-[ 624885 ] CLASS: remove AGESET tag
-
-[ 626133 ] Convert CLASS lines into 3 lines
-
-Changed the report sort order so that !PRExxx entries are now sorted
-right after the corresponding PRExxx.
-
-Added code for CSKILL, LANGAUTO and LANGBONUS tag validation
-
-[ 641912 ] Convert CLASSSPELL to SPELL
-
-New FILETYPE_parser
-
-Removed the now useless -taginfixed option.
-
-New ###Block pragma. It forces a new block for the entities that have
-block formatting (FILETYPE_parse only)
-
-Added the KIT filetype
-
-Conversion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
-
-=head2 v1.18 -- 2002.08.31
-
-Conversion of the stat tags in TEMPLATE (STR, DEX, etc.) by BONUS:STAT|...
-
-Removing TYPE=Ability from BONUS:STAT|xxx|y|TYPE=Ability in RACE
-
-Added the COPYRIGHT tags for the PCC files
-
-Conversion of nameCHECK to BONUS:CHECKS|BASE.name in CLASS
-
-Conversion of BAB to BONUS:COMBAT|BAB in CLASS
-
-Remove the GOLD tag from CLASS and TEMPLATE for OGL compliance
-
-New tag MODTOSKILLS
-
-Deprecated INTMODTOSKILLS
-
-Fixed a bug with #EXTRAFILE that was introduced in parseTag
-
-=head2 v1.17 -- 2002.08.17
-
-New file type COMPANIONMOD
-
-New tag INFOTEXT
-
-Added conversion code for the STATADJx tags
-
-Add a few of the missing GLOBAL tags
-
-Removed a few illigal BONUS type
-
-[ 571276 ] "PRESKILL:1,Knowledge %" replace by "PRESKILL:1,TYPE.Knowledge" in the CLASS lines
-
-[ xxx ] "SUBSA:blah" must become "SA:.CLEAR.blah". The new SA tags
-must be put before the existing SA tags.
-
-
-=head2 v1.16 -- 2002.06.28
-
-Add code to correct the conversion mistake and also corrected the conversion matrice
-for the new SKILL tags.
-
-First phase of cross-check validation.
-
-Corrected a bug with the line number.
-
-Add conversion for PRETYPE:Magic to PRETYPE:EQMODTYPE=MagicalEnhancement in the
-EQUIPMOD files.
-
-Add -x option to do x-check validation.
-
-Add validation for the .MOD entries.
-
-Add conversion for SR to SPELLRES in SPELL files.
-
-=head2 v1.15 -- 2002.06.20
-
-New option B<-outputerror> to redirect STDERR in a file
-
-Preserve the leading spaces on the first column when the pragma #prettylst:leadingspaces:ignore
-is used. The pragma #prettylst:leadingspaces:trim restore normal space triming.
-
-Replace the deprecated PREVAR for PREVARGT.
-
-Add new DOMAIN tags
-
-Add new DEITY tags
-
-Add new RACE tags
-
-PCGEN now check to see if existing comment line exists before adding a new one. Existing
-header lines are genereted to reflect the curent TAGs in used.
-
-Add new SKILL tags
-
-Add new SPELL tags
-
-Add new CLASS tags
-
-=head2 v1.14 -- 2002.06.08
-
-The files are now written if there is no other change then the CF corrections
-
-Add the internal WriteLog function
-
-Change the order for the RACE filetype as requested by Andrew McDougall (tir-gwaith)
-
-RACE filetype: convert INIT:xx to BONUS:COMBAT|Initiative|xx and deprecate INIT
-
-CLASS filetype: convert ADD:INIT|xx to BONUS:COMBAT|Initiative|xx and deprecate ADD:INIT
-
-RACE filetype: added code to remove AC and replace it by BONUS:COMBAT|AC|xx|TYPE=NaturalArmor
-when needed
-
-EQUIPMENT filetype: added code to replace all the Cost by COST
-
-Add code to deal with .MOD in all the files except CLASS and CLASSSPELL
-
-=head2 v1.13 -- 2002.05.11
-
-Now parse the BONUS tags.
-
-Change the sort of the CLASS Level lines. Multiple tags on the same type are no
-longer on the same column.
-
-Skip empty files.
-
-=head2 v1.12 -- 2002.03.23
-
-Add code to replace the BONUS:FEAT, BONUS:VFEAT and FEAT in the EQUIPMENT by
-VFEAT.
-
-Remove the empty columns for the CLASS lines.
-
-Added the parseTag function for all the tags.
-
-Deprecate the NATURALARMOR tag and added code to convert to
-BONUS:COMBAT|AC|x|Type=Natural
-
-=head2 v1.11 -- 2002.03.07
-
-Add code to deal with the CR-CR-LF stuff in the .lst files
-
-The comment generated by PCGEN now contains the CVS Revision and Author tags
-
-The CLASS level lines have a new sort order.
-
-Remove CCOST and RREPLACE from tags (these were typos)
-
-Change findfullpath for the new behavior of the @ character in file paths.
-
-Added code to check the GAME and TYPE tags in the .PCC files
-
-Added code to verify the existance of every file for each .PCC
-
-=head2 v1.10 -- 2002.02.27
-
-Bug fixes
-
-=head2 v1.09 -- 2002.02.20
-
-Add a optional check to see if a TAG has been put in a fixed column. If such ':' is
-found in one of the fixed column, a warning is printed.
-
-Check for all file extention to find the unlinked files that are not .lst
-
-Add support fot the E<quot>pragmaE<quot> tag #EXTRAFILE
-
-Add code to convert SKILL to BONUS:SKILL in RACE files
-
-The DEITY tag in the CLASS files was deprecated
-
-=head2 v1.08 -- 2002.02.17
-
-Only write the .pcc files that have an extra 0x0d character or white spaces at the
-end of the line.
-
-Add support for the new SOURCEPAGE, SOURCEWEB, SOURCELONG and SOURCESHORT tags.
-
-Add conversion code that replace the SOURCE:p. tags by SOURCEPAGE:p. tags.
-
-Add conversion code that remove the ROOT tags in the SKILL files and add the
-new format of the TYPE tag.
-
-Remove the ROOT tag from the SKILL filetype. This tag is now deprecate.
-
-Romove any quote found.
-
-=head2 v1.07 -- 2002.02.08
-
-Bug with the WEAPONBONUS tag being there twice for the RACE filetype
-
-Add code to detect if one of the tags is there more then once for
-a particular filetype
-
-The odd end of lines (CR-CR-LF) are striped when the files that get rewriten
-
-Produce a list of files not found in the .PCC files
-
-=head2 v1.06 -- 2002.02.07
-
-Add support for CLASSSPELL
-
-Add support for TEMPLATE
-
-Add support for WEAPONPROF
-
-The script now adds a dummy SOURCE:p. tag in some files when none are found.
-
-=head2 v1.05 -- 2002.02.06
-
-Add support for CLASSSKILL files (OK, this one was not very hard...)
-
-Add support for DIETY files
-
-Add support for DOMAIN files
-
-Add support for FEAT files
-
-Add support for LANGUAGE files
-
-Add support for SKILL files
-
-Add support for SPELL files
-
-Unknown tags are kept (including duplicates)
-
-=head2 v1.04 -- 2002.02.05
-
-Add support for RACE files
-
-Add support for EQUIMOD files
-
-Most files are now parse by a Generic parser
-
-Unknown tags are kept (including duplicates)
-
-=head2 v1.03 -- 2002.02.03
-
-Change the sort order for the additionnal lines
-
-=head2 v1.02 -- 2002.02.03
-
-No more empty white spaces between the columns in for the level advancement lines
-
-
-=head2 v1.01 -- 2002.02.02
-
-Add support for the CLASS files
-
-Check and remove extra space at the end of each tab separated TAG
-
-Add special case for the ADD:adlib tags
-
-=head2 v1.00 -- 2002.01.27
-
-First working version. Only the EQUIPMENT file are supported.

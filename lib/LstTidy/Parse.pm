@@ -4,6 +4,11 @@ use strict;
 use warnings;
 use English;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(getHeaderMissingOnLineType getMissingHeaderLineTypes );
+
 use Carp;
 
 
@@ -12,7 +17,8 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Convert;
+use LstTidy::Convert qw(doTagConversions);
+use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption);
 use LstTidy::Tag;
 
@@ -1750,6 +1756,29 @@ sub getHeader {
    $header;
 }
 
+
+=head2 getMissingHeaderLineTypes
+
+   Get a list of the line types with missing headers.
+
+=cut
+
+sub getMissingHeaderLineTypes {
+   return keys %missing_headers;
+}
+
+=head2 getHeaderMissingOnLineType
+
+   Get a list of the line types with missing headers.
+
+=cut
+
+sub  getHeaderMissingOnLineType {
+   my ($lineType) = @_;
+   return keys %{ $missing_headers{$lineType} };
+}
+
+
 =head2 getMissingHeaders
 
    Get the hash that stores the missing header information
@@ -2033,7 +2062,7 @@ sub parseAutoTag {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    my $foundAutoType;
 
@@ -2116,7 +2145,7 @@ sub parseSubTag {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # If this is s a subTag, the subTag is currently on the front of the value.
    my ($subTag) = ($tag->value =~ /^([^=:|]+)/ );
@@ -2374,7 +2403,7 @@ sub extractTag {
 
    # We remove the enclosing quotes if any
    if ($tagText =~ s/^"(.*)"$/$1/) {
-      LstTidy::LogFactory::getLogger->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
+      getLogger()->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
    }
 
    # Is this a pragma?
@@ -2408,7 +2437,7 @@ sub parseTag {
 
    # my ($tagText, $linetype, $file, $line) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
    # have two colons). Anything without a tag value is an anomaly. The only
@@ -2472,12 +2501,12 @@ sub parseTag {
    ############################################################
    ######################## Conversion ########################
    # We manipulate the tag here
-   LstTidy::Convert::doTagConversions($tag);
+   doTagConversions($tag);
 
    ############################################################
    # We call the validating function if needed
    if (getOption('xcheck')) {
-      LstTidy::Validate::validateTag($tag->realId, $tag->value, $tag->lineType, $tag->file, $tag->line)
+      LstTidy::Validate::validateTag($tag)
    };
 
    if ($tag->value eq q{}) {
@@ -2519,7 +2548,8 @@ sub process000 {
          LstTidy::Validate::setEntityValid($linetype, $new_name);
       }
 
-      last COLUMN;
+      # Exit the loop
+      return 1; #last COLUMN;
 
    } elsif ( getOption('xcheck') ) {
 
@@ -2547,7 +2577,7 @@ sub process000 {
 
          } else {
 
-            LstTidy::LogFactory::getLogger->warning(
+            getLogger()->warning(
                qq(Cannot find the $linetype name),
                $file,
                $line
@@ -2564,8 +2594,10 @@ sub process000 {
             LstTidy::Validate::setEntityValid($entry_type, $token);
          }
       }
-
    }
+
+   # don't exit the loop
+   return 0;
 }
 
 =head2 processAlign
@@ -2579,7 +2611,7 @@ sub processAlign {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
       
    # All the limited values are uppercase except the alignment value 'Deity'
    my $newvalue = uc($tag->value);
@@ -2617,10 +2649,10 @@ sub processAlign {
    # Was the tag changed ?
    if ( $is_valid && $tag->value ne $newvalue) {
 
-      $tag->value = $newvalue;
+      $tag->value($newvalue);
 
       $logger->warning(
-         qq{Replaced "} . $tag->origTag . q{" with "} . $tag->fullRealId . qq{"},
+         qq{Replaced "} . $tag->origTag . q{" with "} . $tag->fullRealTag . qq{"},
          $tag->file,
          $tag->line
       );
@@ -2652,7 +2684,7 @@ sub processInvalidNonComment {
 
    if ($invalidTag && !$tag->noMoreErrors) {
 
-      LstTidy::LogFactory::getLogger->notice(
+      getLogger()->notice(
          qq{The tag "} . $tag->id . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
          $tag->file,
          $tag->line
@@ -2675,7 +2707,7 @@ sub processNonAlign {
 
    my ($tag) = @_;
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # All the limited values are uppercase
    my $newvalue = uc($tag->value);
@@ -2699,7 +2731,7 @@ sub processNonAlign {
       $tag->value = $newvalue;
 
       $logger->warning(
-         qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealId . qq{"},
+         qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealTag . qq{"},
          $tag->file,
          $tag->line
       );
@@ -2786,7 +2818,7 @@ sub _oldExtractVariables {
    my @variable_names = ();
 
    # Get the logger singleton
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    # We remove the COUNT[xxx] from the formulas
    while ( $formula =~ s/(COUNT\[[^]]*\])//g ) {
@@ -2884,7 +2916,7 @@ sub _parseJepFormula {
    pos $formula = 0;
 
    # Get the logger singleton
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $logger = getLogger();
 
    while ( pos $formula < length $formula ) {
 

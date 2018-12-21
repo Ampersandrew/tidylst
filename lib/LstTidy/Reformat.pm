@@ -7,7 +7,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Options qw{getOption};
+use LstTidy::Options qw{getOption isConversionActive};
 
 # Global tags allowed in PCC files.
 our @doublePCCTags = (
@@ -2142,7 +2142,7 @@ sub isValidTag {
 
 sub addTagsForConversions {
 
-   if ( LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
+   if ( isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
       push @{ $masterOrder{'CLASS'} },          'ADD:SA';
       push @{ $masterOrder{'CLASS Level'} },    'ADD:SA';
       push @{ $masterOrder{'COMPANIONMOD'} },   'ADD:SA';
@@ -2157,23 +2157,23 @@ sub addTagsForConversions {
       push @{ $masterOrder{'TEMPLATE'} },       'ADD:SA';
       push @{ $masterOrder{'WEAPONPROF'} },     'ADD:SA';
    }
-   if ( LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
+   if ( isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') ) {
       push @{ $masterOrder{'EQUIPMENT'} },      'ALTCRITICAL';
    }
 
-   if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
+   if ( isConversionActive('BIOSET:generate the new files') ) {
       push @{ $masterOrder{'RACE'} },           'AGE', 'HEIGHT', 'WEIGHT';
    }
 
-   if ( LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS') ) {
+   if ( isConversionActive('EQUIPMENT: remove ATTACKS') ) {
       push @{ $masterOrder{'EQUIPMENT'} },      'ATTACKS';
    }
 
-   if ( LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
+   if ( isConversionActive('PCC:GAME to GAMEMODE') ) {
       push @{ $masterOrder{'PCC'} },            'GAME';
    }
 
-   if ( LstTidy::Options::isConversionActive('ALL:BONUS:MOVE conversion') ) {
+   if ( isConversionActive('ALL:BONUS:MOVE conversion') ) {
       push @{ $masterOrder{'CLASS'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'CLASS Level'} },    'BONUS:MOVE:*';
       push @{ $masterOrder{'COMPANIONMOD'} },   'BONUS:MOVE:*';
@@ -2189,16 +2189,16 @@ sub addTagsForConversions {
       push @{ $masterOrder{'WEAPONPROF'} },     'BONUS:MOVE:*';
    }
 
-   if ( LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE') ) {
+   if ( isConversionActive('WEAPONPROF:No more SIZE') ) {
       push @{ $masterOrder{'WEAPONPROF'} },     'SIZE';
    }
 
-   if ( LstTidy::Options::isConversionActive('EQUIP:no more MOVE') ) {
+   if ( isConversionActive('EQUIP:no more MOVE') ) {
       push @{ $masterOrder{'EQUIPMENT'} },      'MOVE';
    }
 
    # vvvvvv This one is disactivated
-   if ( 0 && LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS') ) {
+   if ( 0 && isConversionActive('ALL:Convert SPELL to SPELLS') ) {
       push @{ $masterOrder{'CLASS Level'} },    'SPELL:*';
       push @{ $masterOrder{'DOMAIN'} },         'SPELL:*';
       push @{ $masterOrder{'EQUIPMOD'} },       'SPELL:*';
@@ -2206,7 +2206,7 @@ sub addTagsForConversions {
    }
 
    # vvvvvv This one is disactivated
-   if ( 0 && LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
+   if ( 0 && isConversionActive('TEMPLATE:HITDICESIZE to HITDIE') ) {
       push @{ $masterOrder{'TEMPLATE'} },       'HITDICESIZE';
    }
 }
