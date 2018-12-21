@@ -1054,12 +1054,13 @@ if (getOption('inputpath')) {
 
                    my ( $tag, $value ) = LstTidy::Parse::extractTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
 
+
                    # if extractTag returns a defined value, no further
                    # processing is neeeded. If value is not defined then the
                    # tag that was returned should be  processed further. 
                    if (not defined $value) {
 
-                      my $tag =  LstTidy::Tag->new(
+                      my $pccTag =  LstTidy::Tag->new(
                          fullTag  => $tag,
                          lineType => 'PCC', 
                          file     => $pcc_file_name, 
@@ -1067,12 +1068,12 @@ if (getOption('inputpath')) {
                       );
 
                       # Potentally modify the tag
-                      LstTidy::Parse::parseTag( $tag );
-                      ($tag, $value) = ($tag->readId, $tag->value);
-                   }
+                      LstTidy::Parse::parseTag( $pccTag );
+                      ($tag, $value) = ($pccTag->realId, $pccTag->value);
 
-                      
-                      
+                   }
+                   getLogger()->debug($tag, $pcc_file_name, $INPUT_LINE_NUMBER );
+                   getLogger()->debug($value, $pcc_file_name, $INPUT_LINE_NUMBER );
 
                    if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
 
@@ -1773,7 +1774,7 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
+      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $file, $line );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1815,7 +1816,8 @@ sub FILETYPE_parse {
          LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            my $exit = LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            last COLUMN if $exit;
          }
       }
 
@@ -1839,7 +1841,7 @@ sub FILETYPE_parse {
             # Potentally modify the tag
             LstTidy::Parse::parseTag( $tag );
 
-            my $key = $tag->readId;
+            my $key = $tag->realId;
 
             if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
                $log->notice(

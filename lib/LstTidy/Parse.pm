@@ -2450,7 +2450,7 @@ sub parseTag {
    ############################################################
    # We call the validating function if needed
    if (getOption('xcheck')) {
-      LstTidy::Validate::validateTag($tag->realId, $tag->value, $tag->lineType, $tag->file, $tag->line)
+      LstTidy::Validate::validateTag($tag)
    };
 
    if ($tag->value eq q{}) {
@@ -2492,7 +2492,8 @@ sub process000 {
          LstTidy::Validate::setEntityValid($linetype, $new_name);
       }
 
-      last COLUMN;
+      # Exit the loop
+      return 1; #last COLUMN;
 
    } elsif ( getOption('xcheck') ) {
 
@@ -2537,8 +2538,10 @@ sub process000 {
             LstTidy::Validate::setEntityValid($entry_type, $token);
          }
       }
-
    }
+
+   # don't exit the loop
+   return 0;
 }
 
 =head2 processAlign
@@ -2590,10 +2593,10 @@ sub processAlign {
    # Was the tag changed ?
    if ( $is_valid && $tag->value ne $newvalue) {
 
-      $tag->value = $newvalue;
+      $tag->value($newvalue);
 
       $logger->warning(
-         qq{Replaced "} . $tag->origTag . q{" with "} . $tag->fullRealId . qq{"},
+         qq{Replaced "} . $tag->origTag . q{" with "} . $tag->fullRealTag . qq{"},
          $tag->file,
          $tag->line
       );
@@ -2672,7 +2675,7 @@ sub processNonAlign {
       $tag->value = $newvalue;
 
       $logger->warning(
-         qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealId . qq{"},
+         qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealTag . qq{"},
          $tag->file,
          $tag->line
       );
