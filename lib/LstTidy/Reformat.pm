@@ -108,7 +108,7 @@ my @INFO_Tags = (
 my @PRETags = (
    'PRE:.CLEAR',
    'PREABILITY:*',
-   '!PREABILITY',
+   '!PREABILITY:*',
    'PREAGESET',
    '!PREAGESET',
    'PREALIGN:*',
@@ -375,6 +375,7 @@ our %masterOrder = (
       'SORTKEY',
       'NAMEISPI',
       'OUTPUTNAME',
+      'FACT:AppliedName',
       'CATEGORY',
       'TYPE:.CLEAR',
       'TYPE:*',
@@ -382,7 +383,7 @@ our %masterOrder = (
       'INFO:Prerequisite',
       @PRETags,
       @QUALIFYTags,
-      'SERVESAS',
+      'SERVESAS:*',
       'SAB:.CLEAR',
       'SAB:*',
       'DEFINE:*',
@@ -423,13 +424,15 @@ our %masterOrder = (
       'ADDSPELLLEVEL',
       'REMOVE',
       @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:LANGUAGES:*',
       'FOLLOWERS',
       'CHANGEPROF',
       'COMPANIONLIST:*',
       'CSKILL:.CLEAR',
-      'CSKILL',
+      'CSKILL:*',
       'CCSKILL',
-      'VISION',
+      'VISION:.CLEAR',
+      'VISION:*',
       'SR',
       'DR',
       'REP',
@@ -449,6 +452,7 @@ our %masterOrder = (
       'SPELLLEVEL:DOMAIN:*',
       'UNENCUMBEREDMOVE',
       'TEMPBONUS:*',
+      'TEMPVALUE:*',
       'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'VFEAT:*',                       # Deprecated 6.05.01
       'ADD:FEAT:*',                    # Deprecated 6.05.01
@@ -522,6 +526,7 @@ our %masterOrder = (
       'FACT:SpellType:*',
       'SPELLTYPE',
       'TYPE',
+      'FACT:ClassType',
       'CLASSTYPE',
       'FACT:Abb:*',
       'ABB',
@@ -924,7 +929,9 @@ our %masterOrder = (
       'UMULT',
       'AUTO:EQUIP:*',
       'AUTO:WEAPONPROF:*',
+      'DESC:.CLEAR',
       'DESC:*',
+      'TEMPBONUS:*',
       'TEMPDESC',
       'UNENCUMBEREDMOVE',
       'ICON',
@@ -938,7 +945,6 @@ our %masterOrder = (
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'SA:.CLEAR',                     # Deprecated - replaced by SAB
       'SA:*',                          # Deprecated
-#     'ALTCRITICAL',                   # Removed [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT
    ],
 
    'EQUIPMOD' => [
@@ -1217,6 +1223,7 @@ our %masterOrder = (
       'APPLY',
       'EQUIPBUY',
       'EQUIPSELL',
+      'TOTALCOST',
       @PRETags,
       'SOURCEPAGE',
    ],
@@ -1369,6 +1376,7 @@ our %masterOrder = (
       'FACE',
       'REACH',
       'VISION',
+      'FACT:IsPC',
       @PRETags,
       @QUALIFYTags,
       'SERVESAS',
@@ -1378,6 +1386,7 @@ our %masterOrder = (
       'CHANGEPROF:*',
       'PROF',
       @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:LANGUAGES:*',
       'CSKILL:.CLEAR',
       'CSKILL',
       'CCSKILL',
@@ -1592,7 +1601,8 @@ our %masterOrder = (
       'DESC:.CLEAR',
       'DESC:*',
       'TEMPDESC',
-      'TEMPBONUS',
+      'TEMPBONUS:*',
+      'TEMPVALUE',
 #     'SPELLPOINTCOST:*',
    ],
 
@@ -1874,6 +1884,7 @@ our %masterOrder = (
       'KEY',                           # [ 1695877 ] KEY tag is global
       'NAMEISPI',
       'OUTPUTNAME',
+      'FACT:AppliedName',
       'HITDIE',
       'HITDICESIZE',
       'CR',
