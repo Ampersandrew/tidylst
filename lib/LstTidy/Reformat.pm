@@ -435,6 +435,7 @@ our %masterOrder = (
       'REP',
       'COST',
       'KIT',
+      'FACT:*',
       @SOURCETags,
       'NATURALATTACKS',
       'ASPECT:*',
