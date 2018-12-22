@@ -636,8 +636,8 @@ sub convertMove {
         
    Convert old style PREALIGN to new style
 
-   PREALIGN now accept text (two letters) instead of numbers to specify
-   alignments.  All the PREALIGN tags must be reformated to use textual form.
+   PREALIGN now accepts text (two letters) instead of numbers to specify
+   alignments. All the PREALIGN tags must be reformated to use textual form.
 
 =cut
 
