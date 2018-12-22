@@ -7,7 +7,7 @@ use English;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(getHeaderMissingOnLineType getMissingHeaderLineTypes );
+our @EXPORT_OK = qw(getHeaderMissingOnLineType getMissingHeaderLineTypes mungKey);
 
 use Carp;
 
@@ -1075,6 +1075,7 @@ my %validSubTags = (
       'BaseSize'              => 1,
       'ClassType'             => 1,
       'CompMaterial'          => 1,
+      'IsPC'                  => 1,
       'RateOfFire'            => 1,
       'SpellType'             => 1,
       'Symbol'                => 1,
@@ -2241,8 +2242,12 @@ sub parseSubTag {
 =cut
 
 sub parseSystemFiles {
-   my ($systemFilePath, $log) = @_;
+
+   my ($systemFilePath) = @_;
+
    my $originalSystemFilePath = $systemFilePath;
+   
+   my $logger = getLogger();
 
    my @verifiedAllowedModes = ();
    my @verifiedStats        = ();
@@ -2251,7 +2256,7 @@ sub parseSystemFiles {
    my @verifiedCheckNames   = ();
 
    # Set the header for the error messages
-   $log->header(LstTidy::LogHeader::get('System'));
+   $logger->header(LstTidy::LogHeader::get('System'));
 
    # Get the Unix direcroty separator even in a Windows environment
    $systemFilePath =~ tr{\\}{/};
@@ -2273,7 +2278,7 @@ sub parseSystemFiles {
 
    # Did we find anything (hopefuly yes)
    if ( scalar @systemFiles == 0 ) {
-      $log->error(
+      $logger->error(
          qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
          getOption('systempath')
       );
@@ -2289,7 +2294,7 @@ sub parseSystemFiles {
    # Anything left?
    if ( scalar @systemFiles == 0 ) {
       my $gamemode = getOption('gamemode') ;
-      $log->error(
+      $logger->error(
          qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/${gamemode}/ directory},
          getOption('systempath')
       );
@@ -2326,7 +2331,7 @@ sub parseSystemFiles {
                   if ( my ($varName) = ( $defineExpression =~ / \A ( [\t=|]* ) /xms ) ) {
                      push @verifiedVarNames, $varName;
                   } else {
-                     $log->error(
+                     $logger->error(
                         qq{Cannot find the variable name in "$defineExpression"},
                         $systemFile,
                         $INPUT_LINE_NUMBER
@@ -2370,21 +2375,21 @@ sub parseSystemFiles {
 
    # Now we bitch if we are not happy
    if ( scalar @verifiedStats == 0 ) {
-      $log->error(
+      $logger->error(
          q{Could not find any STATNAME: tag in the system files},
          $originalSystemFilePath
       );
    }
 
    if ( scalar @validSystemGameModes == 0 ) {
-      $log->error(
+      $logger->error(
          q{Could not find any ALLOWEDMODES: tag in the system files},
          $originalSystemFilePath
       );
    }
 
    if ( scalar @validSystemCheckNames == 0 ) {
-      $log->error(
+      $logger->error(
          q{Could not find any valid CHECKNAME: tag in the system files},
          $originalSystemFilePath
       );
@@ -2664,19 +2669,17 @@ sub processAlign {
 
    my $logger = getLogger();
       
-   # All the limited values are uppercase except the alignment value 'Deity'
-   my $newvalue = uc($tag->value);
+   # Most of the limited values are uppercase except TIMEUNITS and the alignment value 'Deity'
+   my $newvalue = $tag->value;
       
    my $is_valid = 1;
 
-   # ALIGN use | for separator, PREALIGN use ,
-   my $slip_patern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
+   # ALIGN uses | for separator, PREALIGN uses ,
+   my $splitPatern = $tag->id eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
 
-   for my $align (split $slip_patern, $newvalue) {
+   for my $value (split $splitPatern, $newvalue) {
 
-      if ( $align eq 'DEITY' ) {
-         $align = 'Deity';
-      }
+      my $align = mungKey($tag->id , $value);
 
       # Is it a number?
       my ($number) = $align =~ / \A (\d+) \z /xms;
@@ -2689,7 +2692,7 @@ sub processAlign {
       # Is it a valid alignment?
       if (!exists $tagFixValue{$tag->id}{$align}) {
          $logger->notice(
-            qq{Invalid value "$align" for tag "} . $tag->realId . q{"},
+            qq{Invalid alignment "$align" for tag "} . $tag->realId . q{"},
             $tag->file,
             $tag->line
          );
@@ -2746,6 +2749,36 @@ sub processInvalidNonComment {
    }
 }
 
+=head2 mungKey
+
+   Modify the key if possible, so that it is possible to use it to lookup one
+   of the values of tags that only take fixed values.
+
+=cut
+
+sub mungKey {
+
+   my ($tag, $key) = @_;
+
+   # Possibly change the key, need to Standerdize YES, NO, etc.
+   if ( exists $tagProperValue{$key} ) {
+      $key = $tagProperValue{$key};
+   } elsif ( exists $tagProperValue{uc $key} ) {
+      $key = $tagProperValue{uc $key};
+   }
+
+   # make it uppercase if necessary for the lookup
+   if (exists $tagFixValue{$tag}{uc $key}) {
+      $key = uc $key;
+
+   # make it titlecase if necessary for the lookup
+   } elsif (exists $tagFixValue{$tag}{ucfirst lc $key}) {
+      $key = ucfirst lc $key;
+   }
+
+   return $key
+}
+
 =head2 processNonAlign
 
    Any tag that has limited values but is not an ALIGN or PREALIGN can only
@@ -2760,16 +2793,11 @@ sub processNonAlign {
 
    my $logger = getLogger();
 
-   # All the limited values are uppercase
-   my $newvalue = uc($tag->value);
+   # Convert the key if possible to make the lookup work
+   my $value = mungKey($tag->id, $tag->value);
 
-   # Standerdize the YES NO and other such tags
-   if ( exists $tagProperValue{$newvalue} ) {
-      $newvalue = $tagProperValue{$newvalue};
-   }
-
-   # Is this a proper value for the tag?
-   if ( !exists $tagFixValue{$tag->id}{$newvalue} ) {
+   # Warn if it's not a proper value
+   if ( !exists $tagFixValue{$tag->id}{$value} ) {
 
       $logger->notice(
          qq{Invalid value "} . $tag->value . q{" for tag "} . $tag->realId . q{"},
@@ -2777,9 +2805,10 @@ sub processNonAlign {
          $tag->line
       );
 
-   } elsif ($tag->value ne $newvalue) {
+   # If we had to modify the lookup, change the data
+   } elsif ($tag->value ne $value) {
 
-      $tag->value = $newvalue;
+      $tag->value = $value;
 
       $logger->warning(
          qq{Replaced "} . $tag->origTag . q{" by "} . $tag->fullRealTag . qq{"},
