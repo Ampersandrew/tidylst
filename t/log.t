@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 40;
+use Test::More tests => 37;
 use Test::Warn;
 
 use_ok ('LstTidy::Log');
@@ -100,16 +100,6 @@ warnings_like {$log->notice('A notice', "my_bar.lst")} [qr"^   A\s+notice",], "T
 warnings_like {$log->warning('A warning', "my_bar.lst")} [qr"^\*=>A\s+warning",], "Test warning";
 
 warnings_like {$log->error('An error', "my_bar.lst")} [qr"^\*\*\*An\s+error",], "Test error";
-
-# ************************************************************ 
-#  Test isStartOfLog and header for second header
-
-is(LstTidy::Log::checkWarningLevel('info'), 'info', "Valid warning level is unchanged");
-
-my ($wl, $err) = LstTidy::Log::checkWarningLevel('Frobnitz');
-
-is($wl, 5, "Invalid warning level is changed");
-like($err, qr{Invalid warning level: Frobnitz}, "Error string is returned");
 
 # ************************************************************ 
 # Test alternative to warning

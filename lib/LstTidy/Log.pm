@@ -8,6 +8,9 @@ use constant {
    ERROR      => 3, # PCGEN will not work properly or the script is foobar
 };
 
+# have deleted informational (who's going to type that on the command line?)
+our $wlPattern = qr{^(?:d|debug|e|err|error|i|info|n|notice|w|warn|warning)}i;
+
 use Mouse;
 use Mouse::Util::TypeConstraints;
 use Scalar::Util;
@@ -364,40 +367,12 @@ sub report {
    $self->doOutput($message); 
 };
 
-=head2 checkWarningLevel
-
-   Check that warning level is valid, if it is not, then return a default
-
-   Returns a valid warning level, if the warning level passed was invalid, also
-   return an error string.
-
-=cut
-
-sub checkWarningLevel {
-
-   my ($wl) = @_;
-
-   if  (Scalar::Util::looks_like_number $wl) {
-
-      if ($wl < ERROR || $wl > DEBUG) {
-         # return a valid default and an error string for the user
-         return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
-      } 
-
-   } elsif ($wl !~ qr{^(?:d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning)}i) {
-      # return a valid default and an error string for the user
-      return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
-   };
-
-   return $wl;
-};
-
 # Private operation that coerces a valid string into a warning level. If passed an
 # invalid value, will default to notice.
 
 sub _coerceWarning {
 
-   if ($_ =~ qr{d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning}i) {
+   if ($_ =~ $wlPattern) {
 
       return { 
          d => DEBUG,

@@ -8,6 +8,13 @@ use Scalar::Util qw(reftype);
 use Getopt::Long;
 use Exporter qw(import);
 
+# expand library path so we can find LstTidy modules
+use File::Basename qw(dirname);
+use Cwd  qw(abs_path);
+use lib dirname(dirname abs_path $0);
+
+use LstTidy::Log;
+
 our (@ISA, @EXPORT_OK);
 
 @EXPORT_OK = qw(getOption setOption isConversionActive);
@@ -16,6 +23,7 @@ our (@ISA, @EXPORT_OK);
 my (%clOptions, %activate, %conversionEnabled);
 
 our $error;
+my $errorMessage;
 
 %activate = (
   'ADD:SAB'          => 'ALL:Convert ADD:SA to ADD:SAB',
@@ -143,7 +151,7 @@ sub parseOptions {
    my $warningLevel   = 'notice';  # Warning level for error output
    my $xCheck         = 1;       # Perform cross-check validation
 
-   my $errorMessage = "";
+   $errorMessage = "";
 
    if ( scalar @ARGV ) {
 
@@ -200,7 +208,7 @@ sub parseOptions {
 
       # Print message for unknown options
       if ( scalar @ARGV ) {
-         $errorMessage = "Unknown option:";
+         $errorMessage .= "Unknown option:";
 
          while (@ARGV) {
             $errorMessage .= q{ };
@@ -343,6 +351,74 @@ sub checkInputPath {
    return $return;
 }
 
+=head2 _checkWarningLevel
+
+   Check that warning level is valid, if it is not, then return a default
+
+   Returns a valid warning level, if the warning level passed was invalid, also
+   return an error string.
+
+=cut
+
+sub _checkWarningLevel {
+
+   my $wl = getOption('warninglevel'); 
+
+   my $message = "Invalid warning level: ${wl}\n" .
+   "Valid options are: error, warning, notice, info and debug\n";
+
+   if  (Scalar::Util::looks_like_number $wl) {
+
+      if ($wl < LstTidy::Log::ERROR || $wl > LstTidy::Log::DEBUG) {
+
+         setOption('warninglevel', LstTidy::Log::NOTICE);
+         $errorMessage = $message;
+         setOption('help', 1);
+      } 
+   } elsif ($wl !~ $LstTidy::Log::wlPattern) {
+
+      setOption('warninglevel', LstTidy::Log::NOTICE);
+      $errorMessage = $message;
+      setOption('help', 1);
+   };
+};
+
+=head2 _enableRequestedConversion
+
+   Turn on any conversions that have been requested via the convert command
+   line option.
+
+=cut
+
+sub _enableRequestedConversion {
+   my ($convert) = @_;
+
+   my $entry   = $activate{ $convert };
+   my $isArray = reftype $entry eq 'ARRAY';
+
+   # Convert whatever we got to an array
+   my @conv = $isArray ?  @$entry : ( $entry );
+
+   # Turn on each entry of the array
+   for my $conversion ( @conv ) {
+      enableConversion($conversion);
+   }
+}
+
+=head2 _fixPath 
+
+   Convert the windows style path separator \\ to the unix style / 
+
+=cut
+
+sub _fixPath {
+   my ($name) = @_;
+
+   if (defined $clOptions{$name} ) {
+      $clOptions{$name} =~ tr{\\}{/};
+   }
+}
+
 
 =head2 _processOptions 
 
@@ -351,13 +427,14 @@ sub checkInputPath {
 
 =cut
 
-
 sub _processOptions {
+
+   _checkWarningLevel();
 
    # No-warning option
    # level 6 is info, level 5 is notice
-   if ( getOption('nowarning') && getOption('warninglevel') >= 6 ) {
-      setOption('warninglevel', 5);
+   if (getOption('nowarning') && getOption('warninglevel') >= LstTidy::Log::INFO) {
+      setOption('warninglevel', LstTidy::Log::NOTICE);
    }
 
    # oldsourcetag option
@@ -389,45 +466,6 @@ sub _processOptions {
    _fixPath('inputpath');
    _fixPath('outputpath');
 };
-
-
-
-=head2 _enableRequestedConversion
-
-   Turn on any conversions that have been requested via the convert command
-   line option.
-
-=cut
-
-sub _enableRequestedConversion {
-   my ($convert) = @_;
-
-   my $entry   = $activate{ $convert };
-   my $isArray = reftype $entry eq 'ARRAY';
-
-   # Convert whatever we got to an array
-   my @conv = $isArray ?  @$entry : ( $entry );
-
-   # Turn on each entry of the array
-   for my $conversion ( @conv ) {
-      enableConversion($conversion);
-   }
-}
-
-
-=head2 _fixPath 
-
-   convert the windows style path separator \\ to the unix style / 
-
-=cut
-
-sub _fixPath {
-   my ($name) = @_;
-
-   if (defined $clOptions{$name} ) {
-      $clOptions{$name} =~ tr{\\}{/};
-   }
-}
 
 
 1;
