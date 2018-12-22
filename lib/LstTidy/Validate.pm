@@ -14,7 +14,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Parse;
+use LstTidy::Parse qw(mungKey);
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
 
@@ -2231,7 +2231,6 @@ sub validateTag {
                         for my $param (@list_of_param) {
                                 if ( $param =~ /^(TIMES)=(.*)/ || $param =~ /^(TIMEUNIT)=(.*)/ || $param =~ /^(CASTERLEVEL)=(.*)/ ) {
                                         if ( $1 eq 'TIMES' ) {
-#                                               $param =~ s/TIMES=-1/TIMES=ATWILL/g;   # SPELLS:xxx|TIMES=-1 to SPELLS:xxx|TIMES=ATWILL conversion
                                                 $AtWill_Flag = $param =~ /TIMES=ATWILL/;
                                                 $nb_times++;
                                                 push @LstTidy::Report::xcheck_to_process,
@@ -2244,15 +2243,19 @@ sub validateTag {
                                                 ];
 
                                         } elsif ( $1 eq 'TIMEUNIT' ) {
+
+                                                my $key = mungKey($1, $2);
+
+                                                # print STDERR qq{one: "$1", two: "$2", kwy: "$key"\n};
+
                                                 $nb_timeunit++;
                                                 # Is it a valid alignment?
-                                                if (! LstTidy::Parse::isValidFixedValue($1, $2)) {
+                                                if (! LstTidy::Parse::isValidFixedValue($1, $key)) {
                                                    $logger->notice(
-                                                      qq{Invalid value "$2" for tag "$1"},
+                                                      qq{Invalid value "$key" for tag "$1"},
                                                       $tag->file,
                                                       $tag->line
                                                    );
-#                                                       $is_valid = 0;
                                                 }
 
                                         } else {
