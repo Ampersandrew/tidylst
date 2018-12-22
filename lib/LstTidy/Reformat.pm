@@ -388,6 +388,7 @@ our %masterOrder = (
       'SAB:*',
       'DEFINE:*',
       'DEFINESTAT:*',
+      'MODIFY:*',
       'SPELL:*',
       'SPELLS:*',
       'DESCISPI',
@@ -425,6 +426,7 @@ our %masterOrder = (
       'REMOVE',
       @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
       'BONUS:LANGUAGES:*',
+      'BONUS:WEAPON:*',
       'FOLLOWERS',
       'CHANGEPROF',
       'COMPANIONLIST:*',
@@ -440,11 +442,11 @@ our %masterOrder = (
       'KIT',
       'FACT:*',
       @SOURCETags,
-      'NATURALATTACKS',
+      'NATURALATTACKS:*',
       'ASPECT:*',
+      'BENEFIT:.CLEAR',
       'BENEFIT:*',
-      'INFO:Normal',
-      'INFO:Special',
+      'INFO:*',
       'TEMPDESC',
       'SPELLKNOWN:CLASS:*',
       'SPELLKNOWN:DOMAIN:*',
@@ -772,6 +774,7 @@ our %masterOrder = (
       'SAB:*',
       'ABILITY:*',
       'UNENCUMBEREDMOVE',
+      'GROUP',
       'FACT:Article',
       'FACT:Symbol',
       'FACTSET:Pantheon',
@@ -779,6 +782,7 @@ our %masterOrder = (
       'FACT:Worshippers',
       'FACT:Appearance',
       'FACTSET:Race',
+      'FACTSET:*',
       'SYMBOL',                        # Deprecated 6.05.01
       'PANTHEON',                      # Deprecated 6.05.01
       'TITLE',                         # Deprecated 6.05.01
@@ -798,6 +802,7 @@ our %masterOrder = (
       'OUTPUTNAME',
       @PRETags,
       @QUALIFYTags,
+      'FACT:*',
       'CSKILL:.CLEAR',
       'CSKILL',
       'CCSKILL',
@@ -931,6 +936,8 @@ our %masterOrder = (
       'AUTO:WEAPONPROF:*',
       'DESC:.CLEAR',
       'DESC:*',
+      'DESCISPI',
+      'INFO:*',
       'TEMPBONUS:*',
       'TEMPDESC',
       'UNENCUMBEREDMOVE',
@@ -1377,6 +1384,7 @@ our %masterOrder = (
       'REACH',
       'VISION',
       'FACT:IsPC',
+      'FACT:*',
       @PRETags,
       @QUALIFYTags,
       'SERVESAS',
@@ -1797,6 +1805,7 @@ our %masterOrder = (
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
+      'PREVAREQ:*',
       'SPECIALS',                      # Deprecated
       'SPELL',                         # Deprecated
    ],
@@ -2039,9 +2048,12 @@ our %masterOrder = (
       'KEY',
       'STATMOD',
       'DEFINE:MAXLEVELSTAT',
-      'DEFINE',
+      'DEFINE:*',
+      'MODIFY:*',
       @globalBONUSTags,
       'ABILITY',
+      'BONUS:LANG:*',
+      'BONUS:MODSKILLPOINTS:*',
    ],
 
    'SAVE' => [
@@ -2093,8 +2105,8 @@ sub constructValidTags {
    #################################################
    # We populate %validTags for all file types.
 
-   for my $line_type ( LstTidy::Reformat::getValidLineTypes() ) {
-      for my $tag ( @{ LstTidy::Reformat::getLineTypeOrder($line_type) } ) {
+   for my $line_type ( getValidLineTypes() ) {
+      for my $tag ( @{ getLineTypeOrder($line_type) } ) {
          if ( $tag =~ / ( .* ) [:][*] \z /xms ) {
 
             # Tag that end by :* are allowed
