@@ -416,6 +416,10 @@ sub _fixPath {
 
    if (defined $clOptions{$name} ) {
       $clOptions{$name} =~ tr{\\}{/};
+
+      if ($clOptions{$name} !~ qr{/$}) {
+         $clOptions{$name} .= '/';
+      }
    }
 }
 
