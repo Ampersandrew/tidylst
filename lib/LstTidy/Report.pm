@@ -31,6 +31,9 @@ use LstTidy::Validate qw(isValidCategory isValidEntity isValidType);
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
 
+# populated in additional line processing used for a report
+my %bonusAndPreTagReport = ();
+
 # Will hold the number of each tag found (by linetype)
 my %count_tags;
 
@@ -87,6 +90,22 @@ my %Hardcoded_Variables = map { $_ => 1 } (
    'mastervar',
    'APPLIEDAS',
 );
+
+
+=head2 addToBonusAndPreReport
+
+=cut
+
+sub addToBonusAndPreReport {
+
+   my ($lineRef, $fileType, $tagType) = @_;
+
+   for my $tag ( @{ $lineRef->{$tagType} } ) {
+      $bonusAndPreTagReport{$fileType}{$tag} = 1;
+   };
+}
+                                
+
 
 =head2 closeExportListFileHandles
 
@@ -261,47 +280,89 @@ sub registerXCheck {
    push @xcheck_to_process, [ $entityType, $tag, $file, $line, @values ];
 }
 
-=head2 reportInvalid
+=head2 report
 
    Print a report for the number of invalid tags found.
 
 =cut
 
-sub reportInvalid {
+sub report {
 
-   print STDERR "\n================================================================\n";
-   print STDERR "Invalid tags found\n";
-   print STDERR "----------------------------------------------------------------\n";
+   my ($reportType) = @_;
+
+   my $maxNumLength = 0;
+   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
+      if (length($count_tags{$reportType}{"Total"}{$tag}) >= $maxNumLength) {
+         $maxNumLength = length($count_tags{$reportType}{"Total"}{$tag});
+      }
+   }
+   $maxNumLength++;
+   my $format = "% ${maxNumLength}d";
+
+   my $logger = getLogger();
+
+   my $header = $reportType . ' Tags';
+
+   $logger->header(LstTidy::LogHeader::get($header));
 
    my $first = 1;
-   INVALID_LINE_TYPE:
-   for my $linetype ( sort keys %{ $count_tags{"Invalid"} } ) {
+   LINE_TYPE:
+   for my $lineType ( sort grep {$_ ne 'Total'} keys %{ $count_tags{$reportType} } ) {
 
-      next INVALID_LINE_TYPE if $linetype eq "Total";
+      my $lineHead = $first ? "Line Type: $lineType\n" : "\nLine Type: $lineType\n";
+      $logger->report($lineHead);
 
-      print STDERR "\n" unless $first;
-      print STDERR "Line Type: $linetype\n";
-
-      for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{$linetype} } ) {
+      for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{$lineType} } ) {
 
          my $line = "    $tag";
-         $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{$linetype}{$tag};
-         print STDERR "$line\n";
+         $line .= ( " " x ( 26 - length($tag) ) );
+         $line .= sprintf $format, $count_tags{$reportType}{$lineType}{$tag};
+         $logger->report($line);
       }
 
       $first = 0;
    }
 
-   print STDERR "\nTotal:\n";
+   $logger->report("\nTotal:\n");
 
-   for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{"Total"} } ) {
+   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
 
       my $line = "    $tag";
-      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{"Total"}{$tag};
-      print STDERR "$line\n";
+      $line .= ( " " x ( 26 - length($tag) ) );
+      $line .= sprintf $format, $count_tags{$reportType}{"Total"}{$tag};
+      $logger->report($line);
 
    }
 }
+
+
+=head2 reportBonus
+
+=cut
+
+sub reportBonus {
+
+   my $logger = getLogger();
+
+   $logger->header(LstTidy::LogHeader::get('Bonus and PRE'));
+
+   my $first = 1;
+   LINE_TYPE:
+   for my $lineType (sort keys %bonusAndPreTagReport) {
+
+      my $lineHead = $first ? "Line Type: $lineType" : "\nLine Type: $lineType";
+      $logger->report($lineHead);
+
+      for my $tag (sort keys %{$bonusAndPreTagReport{$lineType}}) {
+         $logger->report("  $tag");
+      }
+      $first = 0;
+   }
+
+   $logger->report("================================================================");
+}
+
+
 
 =head2 reportTagSort
 
@@ -322,50 +383,6 @@ sub reportTagSort {
    my $not_right = $right =~ s{^!}{}xms;
 
    $left cmp $right || $not_left <=> $not_right;
-}
-
-=head2 reportValid
-   
-   Print a report for the number of valid tags found.
-   
-=cut
-
-sub reportValid {
-
-   print STDERR "\n================================================================\n";
-   print STDERR "Valid tags found\n";
-   print STDERR "----------------------------------------------------------------\n";
-
-   my $first = 1;
-   REPORT_LINE_TYPE:
-   for my $line_type ( sort keys %{ $count_tags{"Valid"} } ) {
-      next REPORT_LINE_TYPE if $line_type eq "Total";
-
-      print STDERR "\n" unless $first;
-      print STDERR "Line Type: $line_type\n";
-
-      for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{$line_type} } ) {
-
-         my $tagdisplay = $tag;
-         $tagdisplay .= "*" if LstTidy::Reformat::isValidMultiTag($line_type, $tag);
-         my $line = "    $tagdisplay";
-         $line .= ( " " x ( 26 - length($tagdisplay) ) ) . $count_tags{"Valid"}{$line_type}{$tag};
-
-         print STDERR "$line\n";
-      }
-
-      $first = 0;
-   }
-
-   print STDERR "\nTotal:\n";
-
-   for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{"Total"} } ) {
-
-      my $line = "    $tag";
-      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Valid"}{"Total"}{$tag};
-
-      print STDERR "$line\n";
-   }
 }
 
 
