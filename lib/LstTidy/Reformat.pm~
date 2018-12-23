@@ -63,7 +63,7 @@ my @globalBONUSTags = (
    'BONUS:DOMAIN:*',
    'BONUS:DR:*',
    'BONUS:FEAT:*',
-   'BONUS:FOLLOWERS:*',
+   'BONUS:FOLLOWERS',
    'BONUS:HP:*',
    'BONUS:MISC:*',
    'BONUS:MOVEADD:*',
