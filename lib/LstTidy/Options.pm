@@ -61,58 +61,58 @@ my $errorMessage;
 %conversionEnabled =
 (
    'Generate BONUS and PRExxx report'   => 0,
-                                                 # After PCGEN 2.7.3
-   'ALL: 4.3.3 Weapon name change'      => 0,    # Bunch of name changed for SRD compliance
-   'EQUIPMENT: remove ATTACKS'          => 0,    # [ 686169 ] remove ATTACKS: tag
-   'EQUIPMENT: SLOTS:2 for plurals'     => 0,    # [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
-   'PCC:GAME to GAMEMODE'               => 0,    # [ 707325 ] PCC: GAME is now GAMEMODE
-   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types
-                                                 # [ 728038 ] BONUS:VISION must replace VISION:
-   'ALL:PRESTAT needs a ,'              => 0,    # PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
-   'ALL:BONUS:MOVE conversion'          => 0,    # [ 711565 ] BONUS:MOVE replaced with BONUS:MOVEADD
-   'ALL:PRECLASS needs a ,'             => 0,    # [ 731973 ] ALL: new PRECLASS syntax
-   'ALL:COUNT[FEATTYPE=...'             => 0,    # [ 737718 ] COUNT[FEATTYPE] data change
-   'ALL:Add TYPE=Base.REPLACE'          => 0,    # [ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
-   'PCC:GAMEMODE DnD to 3e'             => 0,    # [ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
-   'RACE:CSKILL to MONCSKILL'           => 0,    # [ 831569 ] RACE:CSKILL to MONCSKILL
-   'RACE:NoProfReq'                     => 0,    # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-   'RACE:BONUS SKILL Climb and Swim'    => 0,    # Fix for Barak files
-   'WEAPONPROF:No more SIZE'            => 0,    # [ 845853 ] SIZE is no longer valid in the weaponprof files
-   'EQUIP:no more MOVE'                 => 0,    # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-   'ALL:EQMOD has new keys'             => 0,    # [ 892746 ] KEYS entries were changed in the main files
-   'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
-   'ALL:MOVE:nn to MOVE:Walk,nn'        => 0,    # [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
-   'ALL:Convert SPELL to SPELLS'        => 0,    # [ 1070084 ] Convert SPELL to SPELLS
-   'TEMPLATE:HITDICESIZE to HITDIE'     => 0,    # [ 1070344 ] HITDICESIZE to HITDIE in templates.lst
-   'ALL:PREALIGN conversion'            => 0,    # [ 1173567 ] Convert old style PREALIGN to new style
-   'ALL:PRERACE needs a ,'              => 0,
-   'ALL:Willpower to Will'              => 0,    # [ 1398237 ] ALL: Convert Willpower to Will
-   'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
-   'RACE:Remove MFEAT and HITDICE'      => 0,    # [ 1514765 ] Conversion to remove old defaultmonster tags
-   'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
-   'Export lists'                       => 0,    # Export various lists of entities
-   'SOURCE line replacement'            => 1,
-   'CLASSSKILL conversion to CLASS'     => 0,
-   'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
-   'ALL:Multiple lines to one'          => 0,    # Reformat multiple lines to one line for RACE and TEMPLATE
-   'CLASSSPELL conversion to SPELL'     => 0,    # [ 641912 ] Convert CLASSSPELL to SPELL
-   'SPELL:Add TYPE tags'                => 0,    # [ 653596 ] Add a TYPE tag for all SPELLs
-   'BIOSET:generate the new files'      => 0,    # [ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
-   'EQUIPMENT: generate EQMOD'          => 0,    # [ 677962 ] The DMG wands have no charge.
-   'CLASS: SPELLLIST from Spell.MOD'    => 0,    # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-   'PCC:GAMEMODE Add to the CMP DnD_'   => 0,    # In order for the CMP files to work with the  normal PCGEN files
+
    'ALL:Find Willpower'                 => 1,    # `Find the tags that use Willpower so that we can plan the conversion to Will
-   'RACE:TYPE to RACETYPE'              => 0,    # [ 1353255 ] TYPE to RACETYPE conversion
+   'ALL:Fix Common Extended ASCII'      => 1,    # [ 1324519 ] ASCII characters
+   'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
+   'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
+   'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
+   'SOURCE line replacement'            => 1,
+                                                 # After PCGEN 2.7.3
+   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types # [ 728038 ] BONUS:VISION must replace VISION:
+   'ALL: 4.3.3 Weapon name change'      => 0,    # Bunch of name changed for SRD compliance
+   'ALL:ADD Syntax Fix'                 => 0,    # [ 1678577 ] ADD: syntax no longer uses parens
+   'ALL:Add TYPE=Base.REPLACE'          => 0,    # [ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
+   'ALL:BONUS:MOVE conversion'          => 0,    # [ 711565 ] BONUS:MOVE replaced with BONUS:MOVEADD
    'ALL:CMP NatAttack fix'              => 0,    # Fix STR bonus for Natural Attacks in CMP files
    'ALL:CMP remove PREALIGN'            => 0,    # Remove the PREALIGN tag everywhere (to help my CMP friends)
-   'RACE:Fix PREDEFAULTMONSTER bonuses' => 0,    # [ 1514765] Conversion to remove old defaultmonster tags
-   'ALL:Fix Common Extended ASCII'      => 0,    # [ 1324519 ] ASCII characters
-   'ALL:Weaponauto simple conversion'   => 0,    # [ 1223873 ] WEAPONAUTO is no longer valid
-   'DEITY:Followeralign conversion'     => 0,    # [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-   'ALL:ADD Syntax Fix'                 => 0,    # [ 1678577 ] ADD: syntax no longer uses parens
-   'ALL:PRESPELLTYPE Syntax'            => 0,    # [ 1678570 ] Correct PRESPELLTYPE syntax
+   'ALL:COUNT[FEATTYPE=...'             => 0,    # [ 737718 ] COUNT[FEATTYPE] data change
    'ALL:Convert ADD:SA to ADD:SAB'      => 0,    # [ 1864711 ] Convert ADD:SA to ADD:SAB
+   'ALL:Convert SPELL to SPELLS'        => 0,    # [ 1070084 ] Convert SPELL to SPELLS
+   'ALL:EQMOD has new keys'             => 0,    # [ 892746 ] KEYS entries were changed in the main files
+   'ALL:MOVE:nn to MOVE:Walk,nn'        => 0,    # [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
+   'ALL:Multiple lines to one'          => 0,    # Reformat multiple lines to one line for RACE and TEMPLATE
+   'ALL:PREALIGN conversion'            => 0,    # [ 1173567 ] Convert old style PREALIGN to new style
+   'ALL:PRECLASS needs a ,'             => 0,    # [ 731973 ] ALL: new PRECLASS syntax
+   'ALL:PRERACE needs a ,'              => 0,
+   'ALL:PRESPELLTYPE Syntax'            => 0,    # [ 1678570 ] Correct PRESPELLTYPE syntax
+   'ALL:PRESTAT needs a ,'              => 0,    # PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
+   'ALL:Weaponauto simple conversion'   => 0,    # [ 1223873 ] WEAPONAUTO is no longer valid
+   'ALL:Willpower to Will'              => 0,    # [ 1398237 ] ALL: Convert Willpower to Will
+   'BIOSET:generate the new files'      => 0,    # [ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
+   'CLASS: SPELLLIST from Spell.MOD'    => 0,    # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
+   'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
    'CLASS:no more HASSPELLFORMULA'      => 0,    # [ 1973497 ] HASSPELLFORMULA is deprecated
+   'CLASSSKILL conversion to CLASS'     => 0,
+   'CLASSSPELL conversion to SPELL'     => 0,    # [ 641912 ] Convert CLASSSPELL to SPELL
+   'DEITY:Followeralign conversion'     => 0,    # [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
+   'EQUIP:no more MOVE'                 => 0,    # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
+   'EQUIPMENT: SLOTS:2 for plurals'     => 0,    # [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
+   'EQUIPMENT: generate EQMOD'          => 0,    # [ 677962 ] The DMG wands have no charge.
+   'EQUIPMENT: remove ATTACKS'          => 0,    # [ 686169 ] remove ATTACKS: tag
+   'Export lists'                       => 0,    # Export various lists of entities
+   'PCC:GAME to GAMEMODE'               => 0,    # [ 707325 ] PCC: GAME is now GAMEMODE
+   'PCC:GAMEMODE Add to the CMP DnD_'   => 0,    # In order for the CMP files to work with the  normal PCGEN files
+   'PCC:GAMEMODE DnD to 3e'             => 0,    # [ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
+   'RACE:BONUS SKILL Climb and Swim'    => 0,    # Fix for Barak files
+   'RACE:CSKILL to MONCSKILL'           => 0,    # [ 831569 ] RACE:CSKILL to MONCSKILL
+   'RACE:Fix PREDEFAULTMONSTER bonuses' => 0,    # [ 1514765] Conversion to remove old defaultmonster tags
+   'RACE:NoProfReq'                     => 0,    # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
+   'RACE:Remove MFEAT and HITDICE'      => 0,    # [ 1514765 ] Conversion to remove old defaultmonster tags
+   'RACE:TYPE to RACETYPE'              => 0,    # [ 1353255 ] TYPE to RACETYPE conversion
+   'SPELL:Add TYPE tags'                => 0,    # [ 653596 ] Add a TYPE tag for all SPELLs
+   'TEMPLATE:HITDICESIZE to HITDIE'     => 0,    # [ 1070344 ] HITDICESIZE to HITDIE in templates.lst
+   'WEAPONPROF:No more SIZE'            => 0,    # [ 845853 ] SIZE is no longer valid in the weaponprof files
 );
 
 =head2 parseOptions

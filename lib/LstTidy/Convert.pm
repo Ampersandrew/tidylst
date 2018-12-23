@@ -538,8 +538,8 @@ sub convertEntities {
    $line =~ s/\x95/*/g;
    $line =~ s/\x96/-/g;
    $line =~ s/\x97/-/g;
-   $line =~ s-\x98-<sup>~</sup>-g;
-   $line =~ s-\x99-<sup>TM</sup>-g;
+   # $line =~ s-\x98-<sup>~</sup>-g;
+   # $line =~ s-\x99-<sup>TM</sup>-g;
    $line =~ s/\x9B/>/g;
    $line =~ s/\x9C/oe/g;
 
