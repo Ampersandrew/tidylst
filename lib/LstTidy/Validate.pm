@@ -1136,6 +1136,126 @@ sub processPREVAR {
 
 
 
+=head2 validateAddDomains
+
+   Queue up Domain tags for cross checking
+
+=cut
+
+sub validateAddDomains {
+
+   my ($tag) = @_;
+
+   # ADDDOMAINS:<domain1>.<domain2>.<domain3>. etc.
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'DOMAIN',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      split '\.', $tag->value
+   ];
+}
+
+=head2 validateAddEquip
+
+   Queue up the EQUIPMENT and Variables from the ADD:EQUIP for cross checking.
+
+=cut
+
+sub validateAddEquip {
+
+   my ($tag) = @_;
+
+
+   # ADD:EQUIP(<list of equipment>)<formula>
+   if ( $tag->value =~ 
+      m{ [(]   # Opening brace
+         (.*)  # Everything between braces include other braces
+         [)]   # Closing braces
+         (.*)  # The rest
+      }xms ) {
+
+      my ( $list, $formula ) = ( $1, $2 );
+
+      # First the list of equipements
+      # ANY is a spcial hardcoded cases for ADD:EQUIP
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'EQUIPMENT',
+         qq{@@" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         grep { uc($_) ne 'ANY' } split ',', $list
+      ];
+
+      # Second, we deal with the formula
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'DEFINE Variable',
+         qq{@@" from "$formula" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         LstTidy::Parse::extractVariables($formula, $tag)
+      ];
+
+   } else {
+      $logger->notice(
+         qq{Invalid syntax: "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
+
+
+=head2 validateAddSpellcaster
+
+   Queue up the Classes and variables from the Add:SPELLCASTER tag for cross
+   checking.
+
+=cut
+
+sub validateAddSpellcaster {
+
+   my ($tag) = @_;
+
+   # ADD:SPELLCASTER(<list of classes>)<formula>
+   if ( $tag->value =~ /\((.*)\)(.*)/ ) {
+      my ( $list, $formula ) = ( $1, $2 );
+
+      # First the list of classes
+      # ANY, ARCANA, DIVINE and PSIONIC are spcial hardcoded cases for
+      # the ADD:SPELLCASTER tag.
+      push @LstTidy::Report::xcheck_to_process, [
+         'CLASS',
+         qq{@@" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         grep { uc($_) !~ qr{^(?:ANY|ARCANE|DIVINE|PSIONIC)$}  } split ',', $list
+      ];
+
+      # Second, we deal with the formula
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'DEFINE Variable',
+         qq{@@" from "$formula" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         LstTidy::Parse::extractVariables($formula, $tag)
+      ];
+
+   } else {
+
+      $logger->notice(
+         qq{Invalid syntax: "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
 
 =head2 validateBonusChecks
 
@@ -1521,6 +1641,40 @@ sub validateBonusWeildCategory {
 }
 
 
+=head2 validateClass
+
+   Queue up the CLASS tag for cross checking
+
+   Note: The CLASS linetype doesn't have any CLASS tag, it's called
+         000ClassName internaly. CLASS is a tag used in other line 
+         types like KIT CLASS.
+
+   CLASS:<class name>,<class name>,...[BASEAGEADD:<dice expression>]
+
+=cut
+
+sub validateClass  {
+
+   my ($tag) = @_;
+
+
+   # We remove and ignore [BASEAGEADD:xxx] if present
+
+   my $list_of_class = $tag->value;
+
+   $list_of_class =~ s{ \[ BASEAGEADD: [^]]* \] }{}xmsg;
+
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'CLASS',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      (split /[|,]/, $list_of_class),
+   ];
+}
+
+
 =head2 validateClasses
 
    Validate the CLASSES tag, it can appear on SKILL lines and SPELL lines
@@ -1627,6 +1781,96 @@ sub validateClassesOnSpell {
          }
       }
    }
+}
+
+
+
+=head2 validateClearTag
+
+   Validate the Clear tag.
+
+   IF necessary, move the CLEAR from the value to the id.
+
+=cut
+
+sub validateClearTag {
+
+   my ($tag) = @_;;
+
+   # All the .CLEAR must be separated tags to help with the tag ordering. That
+   # is, we need to make sure the .CLEAR is ordered before the normal tag.  If
+   # the .CLEAR version of the tag doesn't exist, we do not change the tag
+   # name but we give a warning.
+
+   my $clearTag    = $tag->id . ':.CLEAR';
+   my $clearAllTag = $tag->id . ':.CLEARALL';
+
+   if ( LstTidy::Reformat::isValidTag($tag->lineType, $clearAllTag)) {
+
+      # Don't do the else clause at the bottom
+
+   } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
+
+      getLogger()->notice(
+         q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
+         $tag->file,
+         $tag->line
+      );
+
+      LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag);
+      $tag->noMoreErrors(1);
+
+   } else {
+
+      # Its a valid CLEAR tag, move the subTag to id
+      $tag->id($clearTag);
+      $tag->value($tag->value =~ s/^.CLEAR//ir);
+
+   }
+}
+
+
+
+=head2 validateDeity
+
+   Queue up Deity tags for cross checking
+
+=cut
+
+sub validateDeity {
+
+   my ($tag) = @_;
+
+   # DEITY:<deity name>|<deity name>|etc.
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'DEITY',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      (split /[|]/, $tag->value),
+   ];
+}
+
+=head2 validateDomain
+   
+   Queue up Domain tags for cross checking
+
+=cut
+
+sub validateDomain {
+
+   my ($tag) = @_;
+
+   # DOMAIN:<domain name>|<domain name>|etc.
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'DOMAIN',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      (split /[|]/, $tag->value),
+   ];
 }
 
 
@@ -1743,48 +1987,69 @@ sub validateDomainsOnSpell {
 
 
 
-=head2 validateClearTag
+=head2 validateEqmod
 
-   Validate the Clear tag.
-
-   IF necessary, move the CLEAR from the value to the id.
+   Queue up EQUIPMOD key for cross checking
 
 =cut
 
-sub validateClearTag {
+sub validateEqmod {
 
-   my ($tag) = @_;;
+   my ($tag) = @_;
 
-   # All the .CLEAR must be separated tags to help with the tag ordering. That
-   # is, we need to make sure the .CLEAR is ordered before the normal tag.  If
-   # the .CLEAR version of the tag doesn't exist, we do not change the tag
-   # name but we give a warning.
+   # The higher level for the EQMOD is the . (who's the genius who
+   # dreamed that up...
+   my @key_list = split '\.', $tag->value;
 
-   my $clearTag    = $tag->id . ':.CLEAR';
-   my $clearAllTag = $tag->id . ':.CLEARALL';
+   # The key name is everything found before the first |
+   for $_ (@key_list) {
+      my ($key) = (/^([^|]*)/);
 
-   if ( LstTidy::Reformat::isValidTag($tag->lineType, $clearAllTag)) {
+      if ($key) {
 
-      # Don't do the else clause at the bottom
+         # To be processed later
+         push @LstTidy::Report::xcheck_to_process,
+         [
+            'EQUIPMOD Key',
+            qq{@@" in "} . $tag->fullTag,
+            $tag->file,
+            $tag->line,
+            $key
+         ];
 
-   } elsif ( ! LstTidy::Reformat::isValidTag($tag->lineType, $clearTag )) {
+      } else {
 
-      getLogger()->notice(
-         q{The tag "} . $clearTag . q{" from "} . $tag->origTag . q{" is not in the } . $tag->lineType . q{ tag list\n},
-         $tag->file,
-         $tag->line
-      );
-
-      LstTidy::Report::incCountInvalidTags($tag->lineType, $clearTag);
-      $tag->noMoreErrors(1);
-
-   } else {
-
-      # Its a valid CLEAR tag, move the subTag to id
-      $tag->id($clearTag);
-      $tag->value($tag->value =~ s/^.CLEAR//ir);
-
+         $logger->warning(
+            qq{Cannot find the key for "$_" in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+      }
    }
+}
+
+
+=head2 validateIgnores
+
+   This is part of EQUIPMED processing, queue up for cross checking
+
+=cut
+
+sub validateIgnores {
+
+   my ($tag) = @_;
+
+
+   # Comma separated list of KEYs
+   # To be processed later
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'EQUIPMOD Key',
+      qq{@@" in "} . $tag->fullTag,
+      $tag->file,
+      $tag->line,
+      split ',', $tag->value
+   ];
 }
 
 
@@ -1947,194 +2212,47 @@ sub validateTag {
 
    } elsif ( $tag->id eq 'CLASS' && $tag->lineType ne 'PCC') {
 
-      # Note: The CLASS linetype doesn't have any CLASS tag, it's
-      #               called 000ClassName internaly. CLASS is a tag used
-      #               in other line types like KIT CLASS.
-      # CLASS:<class name>,<class name>,...[BASEAGEADD:<dice expression>]
-
-      # We remove and ignore [BASEAGEADD:xxx] if present
-
-      my $list_of_class = $tag->value;
-
-      $list_of_class =~ s{ \[ BASEAGEADD: [^]]* \] }{}xmsg;
-
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'CLASS',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         (split /[|,]/, $list_of_class),
-      ];
+      validateClass($tag);
 
    } elsif ( $tag->id eq 'DEITY' && $tag->lineType ne 'PCC') {
 
-      # DEITY:<deity name>|<deity name>|etc.
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'DEITY',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         (split /[|]/, $tag->value),
-      ];
+      validateDeity($tag);
 
    } elsif ( $tag->id eq 'DOMAIN' && $tag->lineType ne 'PCC') {
 
-      # DOMAIN:<domain name>|<domain name>|etc.
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'DOMAIN',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         (split /[|]/, $tag->value),
-      ];
+      validateDomain($tag);
 
    } elsif ( $tag->id eq 'ADDDOMAINS' ) {
 
-      # ADDDOMAINS:<domain1>.<domain2>.<domain3>. etc.
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'DOMAIN',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         split '\.', $tag->value
-      ];
+      validateAddDomains($tag);
 
    } elsif ( $tag->id eq 'ADD:SPELLCASTER' ) {
 
-      # ADD:SPELLCASTER(<list of classes>)<formula>
-      if ( $tag->value =~ /\((.*)\)(.*)/ ) {
-         my ( $list, $formula ) = ( $1, $2 );
-
-         # First the list of classes
-         # ANY, ARCANA, DIVINE and PSIONIC are spcial hardcoded cases for
-         # the ADD:SPELLCASTER tag.
-         push @LstTidy::Report::xcheck_to_process, [
-            'CLASS',
-            qq{@@" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            grep { uc($_) !~ qr{^(?:ANY|ARCANE|DIVINE|PSIONIC)$}  } split ',', $list
-         ];
-
-         # Second, we deal with the formula
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'DEFINE Variable',
-            qq{@@" from "$formula" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            LstTidy::Parse::extractVariables($formula, $tag)
-         ];
-
-      } else {
-
-         $logger->notice(
-            qq{Invalid syntax: "} . $tag->fullTag . q{"},
-            $tag->file,
-            $tag->line
-         );
-      }
+      validateAddSpellcaster($tag);
 
    } elsif ( $tag->id eq 'ADD:EQUIP' ) {
 
-      # ADD:EQUIP(<list of equipment>)<formula>
-      if ( $tag->value =~ 
-         m{ [(]   # Opening brace
-            (.*)  # Everything between braces include other braces
-            [)]   # Closing braces
-            (.*)  # The rest
-         }xms ) {
+      validateAddEquip($tag);
 
-         my ( $list, $formula ) = ( $1, $2 );
+   } elsif  ( $tag->id =~ /!?PRETYPE/ && $tag->value =~ /(\d+,)?EQMOD=/ )) {
 
-         # First the list of equipements
-         # ANY is a spcial hardcoded cases for ADD:EQUIP
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'EQUIPMENT',
-            qq{@@" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            grep { uc($_) ne 'ANY' } split ',', $list
-         ];
+      # nothing to check here
 
-         # Second, we deal with the formula
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'DEFINE Variable',
-            qq{@@" from "$formula" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            LstTidy::Parse::extractVariables($formula, $tag)
-         ];
+   } elsif ($tag->id eq 'EQMOD' ) {
+     
+         validateEqmod($tag);
 
-      } else {
-         $logger->notice(
-            qq{Invalid syntax: "} . $tag->fullTag . q{"},
-            $tag->file,
-            $tag->line
-         );
-      }
+   } elsif ( $tag->id eq "IGNORES" || $tag->id eq "REPLACES" ) {
 
-   } elsif ($tag->id eq 'EQMOD' || $tag->id eq 'IGNORES' || $tag->id eq 'REPLACES' || ( $tag->id =~ /!?PRETYPE/ && $tag->value =~ /(\d+,)?EQMOD=/ )) {
+         validateIgnores($tag);
 
-                # This section checks for any reference to an EQUIPMOD key
-                if ( $tag->id eq 'EQMOD' ) {
-
-                        # The higher level for the EQMOD is the . (who's the genius who
-                        # dreamed that up...
-                        my @key_list = split '\.', $tag->value;
-
-                        # The key name is everything found before the first |
-                        for $_ (@key_list) {
-                                my ($key) = (/^([^|]*)/);
-                                if ($key) {
-
-                                # To be processed later
-                                push @LstTidy::Report::xcheck_to_process,
-                                        [
-                                        'EQUIPMOD Key',
-                                        qq{@@" in "} . $tag->fullTag,
-                                        $tag->file,
-                                        $tag->line,
-                                        $key
-                                        ];
-                                }
-                                else {
-                                $logger->warning(
-                                        qq{Cannot find the key for "$_" in "} . $tag->fullTag . q{"},
-                                        $tag->file,
-                                        $tag->line
-                                );
-                                }
-                        }
-                }
-                elsif ( $tag->id eq "IGNORES" || $tag->id eq "REPLACES" ) {
-
-                        # Comma separated list of KEYs
-                        # To be processed later
-                        push @LstTidy::Report::xcheck_to_process,
-                                [
-                                'EQUIPMOD Key',
-                                qq{@@" in "} . $tag->fullTag,
-                                $tag->file,
-                                $tag->line,
-                                split ',', $tag->value
-                                ];
-                }
-                }
-                elsif (
-                $tag->lineType ne 'PCC'
+   } elsif ( $tag->lineType ne 'PCC'
                 && (   $tag->id eq 'ADD:FEAT'
-                        || $tag->id eq 'AUTO:FEAT'
-                        || $tag->id eq 'FEAT'
-                        || $tag->id eq 'FEATAUTO'
-                        || $tag->id eq 'VFEAT'
-                        || $tag->id eq 'MFEAT' )
+                    || $tag->id eq 'AUTO:FEAT'
+                    || $tag->id eq 'FEAT'
+                    || $tag->id eq 'FEATAUTO'
+                    || $tag->id eq 'VFEAT'
+                    || $tag->id eq 'MFEAT' )
                 )
                 {
                 my @feats;
