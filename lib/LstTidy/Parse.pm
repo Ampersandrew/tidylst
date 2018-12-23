@@ -905,23 +905,23 @@ my %tagheader = (
 );
 
 my %tokenAddTag = (
-   'ADD:.CLEAR'               => 1,
-   'ADD:CLASSSKILLS'          => 1,
-   'ADD:DOMAIN'               => 1,
-   'ADD:EQUIP'                => 1,
-   'ADD:FAVOREDCLASS'         => 1,
-   'ADD:LANGUAGE'             => 1,
-   'ADD:SAB'                  => 1,
-   'ADD:SPELLCASTER'          => 1,
-   'ADD:SKILL'                => 1,
-   'ADD:TEMPLATE'             => 1,
-   'ADD:WEAPONPROFS'          => 1,
+   'ADD:.CLEAR'            => 1,
+   'ADD:CLASSSKILLS'       => 1,
+   'ADD:DOMAIN'            => 1,
+   'ADD:EQUIP'             => 1,
+   'ADD:FAVOREDCLASS'      => 1,
+   'ADD:LANGUAGE'          => 1,
+   'ADD:SAB'               => 1,
+   'ADD:SPELLCASTER'       => 1,
+   'ADD:SKILL'             => 1,
+   'ADD:TEMPLATE'          => 1,
+   'ADD:WEAPONPROFS'       => 1,
 
-   'ADD:FEAT'                 => 1,    # Deprecated
-   'ADD:FORCEPOINT'           => 1,    # Deprecated - never heard of this!
-   'ADD:INIT'                 => 1,    # Deprecated
-   'ADD:SPECIAL'              => 1,    # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
-   'ADD:VFEAT'                => 1,    # Deprecated
+   'ADD:FEAT'              => 1,    # Deprecated
+   'ADD:FORCEPOINT'        => 1,    # Deprecated - never heard of this!
+   'ADD:INIT'              => 1,    # Deprecated
+   'ADD:SPECIAL'           => 1,    # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
+   'ADD:VFEAT'             => 1,    # Deprecated
 );
 
 my %tokenBonusTag = (
@@ -1169,38 +1169,39 @@ sub setParseRoutine {
 
 # The file type that will be rewritten.
 my %writefiletype = (
-   'ABILITY'         => 1,
-   'ABILITYCATEGORY' => 1, # Not sure how we want to do this, so leaving off the list for now. - Tir Gwaith
-   'BIOSET'          => 1,
-   'CLASS'           => 1,
-   'CLASS Level'     => 1,
-   'COMPANIONMOD'    => 1,
+   '#EXTRAFILE'      => 0,
    'COPYRIGHT'       => 0,
    'COVER'           => 0,
+   'INFOTEXT'        => 0,
+   'LSTEXCLUDE'      => 0,
+
+   'ABILITY'         => 1,
+   'ABILITYCATEGORY' => 1,
+   'ALIGNMENT'       => 1,
+   'ARMORPROF'       => 1,
+   'BIOSET'          => 1,
+   'CLASS Level'     => 1,
+   'CLASS'           => 1,
+   'COMPANIONMOD'    => 1,
+   'DATACONTROL'     => 1,
    'DEITY'           => 1,
    'DOMAIN'          => 1,
    'EQUIPMENT'       => 1,
    'EQUIPMOD'        => 1,
    'FEAT'            => 1,
+   'GLOBALMOD'       => 1,
    'KIT'             => 1,
    'LANGUAGE'        => 1,
-   'LSTEXCLUDE'      => 0,
-   'INFOTEXT'        => 0,
    'PCC'             => 1,
    'RACE'            => 1,
+   'SAVE'            => 1,
+   'SHIELDPROF'      => 1,
    'SKILL'           => 1,
    'SPELL'           => 1,
-   'TEMPLATE'        => 1,
-   'WEAPONPROF'      => 1,
-   'ARMORPROF'       => 1,
-   'SHIELDPROF'      => 1,
-   '#EXTRAFILE'      => 0,
-   'VARIABLE'        => 1,
-   'DATACONTROL'     => 1,
-   'GLOBALMOD'       => 1,
-   'SAVE'            => 1,
    'STAT'            => 1,
-   'ALIGNMENT'       => 1,
+   'TEMPLATE'        => 1,
+   'VARIABLE'        => 1,
+   'WEAPONPROF'      => 1,
 );
 
 # The SOURCE line is use in nearly all file types
@@ -2569,11 +2570,6 @@ sub parseTag {
       $logger->debug(qq{parseTag: } . $tag->fullTag, $tag->file, $tag->line)
    };
 }
-
-
-
-
-
 
 =head2 process000
 
