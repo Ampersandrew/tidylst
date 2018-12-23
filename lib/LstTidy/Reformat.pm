@@ -49,8 +49,7 @@ our @doublePCCTags = (
    'BONUS:WIELDCATEGORY:*',
 );
 
-# [ 1956340 ] Centralize global BONUS tags
-# The global BONUS:xxx tags. They are used in many of the line types.  They are
+# The global BONUS:xxx tags are used in many of the line types.  They are
 # defined in one place, and every line type will get the same sort order.
 # BONUSes only valid for specific line types are listed on those line types
 
@@ -330,6 +329,7 @@ my @PRETags = (
    '!PREWIELD',
 );
 
+# Ensure consistent ordering in the masterOrder structure
 our @QUALIFYTags = (
    'QUALIFY:ABILITY',
    'QUALIFY:CLASS',
@@ -345,6 +345,7 @@ our @QUALIFYTags = (
    'QUALIFY:WEAPONPROF',
 );
 
+# Ensure consistent ordering in the masterOrder structure
 my @QUALITY_Tags = (
    'QUALITY:Capacity:*',
    'QUALITY:Usage:*',
@@ -357,6 +358,7 @@ my @QUALITY_Tags = (
    'QUALITY:*',
 );
 
+# Ensure consistent ordering in the masterOrder structure
 our @SOURCETags = (
    'SOURCELONG',
    'SOURCESHORT',
@@ -368,6 +370,9 @@ our @SOURCETags = (
 );
 
 # Order for the tags for each line type.
+# 
+# Note: This is also the validity info. If a tag doesn't appear here it gets
+# reported as invalid for the linetype.
 our %masterOrder = (
    'ABILITY' => [
       '000AbilityName',
