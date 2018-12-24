@@ -366,9 +366,66 @@ my %validBonusSlots = map { $_ => 1 } (
    'LIST',
 );
 
+my %nonPCCOperations = (
+   'ADD:FEAT'  => \&validateFeats,
+   'AUTO:FEAT' => \&validateFeats,
+   'CLASS'     => \&validateClass,
+   'DEITY'     => \&validateDeity,
+   'DOMAIN'    => \&validateDomain,
+   'FEAT'      => \&validateFeats,
+   'FEATAUTO'  => \&validateFeats,
+   'KIT'       => \&processKit,
+   'MFEAT'     => \&validateFeats,
+   'RACE'      => \&validateRace,
+   'SKILL'     => \&validateSkill,
+   'TEMPLATE'  => \&validateTemplate,
+   'VFEAT'     => \&validateFeats,
+);
 
+my %spellOperations = (
+   'DESC'         => \&processEmbededCasterLevel,
+   'DURATION'     => \&processEmbededCasterLevel,
+   'TARGETAREA'   => \&processEmbededCasterLevel,
+);
 
-
+my %standardOperations = (
+   'ADD:EQUIP'          => \&validateAddEquip,
+   'ADD:LANGUAGE'       => \&processAddLanguage,
+   'ADD:SKILL'          => \&validateAddSkill,
+   'ADD:SPELLCASTER'    => \&validateAddSpellcaster,
+   'ADDDOMAINS'         => \&validateAddDomains,
+   'CATEGORY'           => \&processCategories,
+   'CCSKILL'            => \&validateSkill,
+   'CHANGEPROF'         => \&validateChengeProf,
+   'CLASSES'            => \&validateClasses,
+   'CSKILL'             => \&validateSkill,
+   'DEFINE'             => \&validateDefine,
+   'DOMAINS'            => \&validateDomains,
+   'EQMOD'              => \&validateEqmod,
+   'IGNORES'            => \&validateIgnores,
+   'LANGAUTOxxx'        => \&processLanguage,
+   'LANGBONUS'          => \&processLanguage,
+   'MONCCSKILL'         => \&validateSkill,
+   'MONCSKILL'          => \&validateSkill,
+   'MOVE'               => \&validateMove,
+   'MOVECLONE'          => \&validateMoveClone,
+   'NATURALATTACKS'     => \&validateNaturalAttacks,
+   'RACESUBTYPE'        => \&validateRaceSubType,
+   'RACETYPE'           => \&validateRaceType,
+   'REPLACES'           => \&validateIgnores,
+   'SA'                 => \&validateSa,
+   'SPELLKNOWN:CLASS'   => \&validateSpellLevelClass,
+   'SPELLKNOWN:DOMAIN'  => \&validateSpellLevelDomain,
+   'SPELLLEVEL:CLASS'   => \&validateSpellLevelClass,
+   'SPELLLEVEL:DOMAIN'  => \&validateSpellLevelDomain,
+   'SPELLS'             => \&validateSpells,
+   'SR'                 => \&validateNumericTags,
+   'STARTPACK'          => \&processStartPack,
+   'STARTSKILLPTS'      => \&validateNumericTags,
+   'STAT'               => \&validateStat,
+   'SWITCHRACE'         => \&validateSwitchRace,
+   'TYPE'               => \&processTypes,
+);
 
 
 =head2 checkFirstValue
@@ -3577,78 +3634,24 @@ sub validateTag {
 
    my ($tag) = @_;
 
+   my $validate;
+
    if ($tag->id =~ qr/^\!?PRE/) {
 
       validatePreTag( $tag, "");
 
-   } elsif ($tag->id =~ qr/^BONUS/) {
+   } elsif ($tag->id =~ qr/^BONUS/) {     $validate = \&processBonusTag;
 
-      processBonusTag($tag);
+   } elsif ($tag->lineType ne 'PCC') {    $validate = $nonPCCOperations{$tag->id};
 
-   } elsif ($tag->lineType ne 'PCC') {
+   } elsif ($tag->lineType eq 'SPELL') {  $validate = $spellOperations{$tag->id};
 
-           if ($tag->id eq 'ADD:FEAT') {     validateFeats($tag)
-      } elsif ($tag->id eq 'AUTO:FEAT') {    validateFeats($tag)
-      } elsif ($tag->id eq 'CLASS') {        validateClass($tag)
-      } elsif ($tag->id eq 'DEITY') {        validateDeity($tag)
-      } elsif ($tag->id eq 'DOMAIN') {       validateDomain($tag)
-      } elsif ($tag->id eq 'FEAT') {         validateFeats($tag)
-      } elsif ($tag->id eq 'FEATAUTO') {     validateFeats($tag)
-      } elsif ($tag->id eq 'KIT') {          processKit($tag)
-      } elsif ($tag->id eq 'MFEAT') {        validateFeats($tag)
-      } elsif ($tag->id eq 'RACE') {         validateRace($tag)
-      } elsif ($tag->id eq 'SKILL') {        validateSkill($tag)
-      } elsif ($tag->id eq 'TEMPLATE') {     validateTemplate($tag)
-      } elsif ($tag->id eq 'VFEAT') {        validateFeats($tag)
-      }
+   } else {                               $validate = $standardOperations{$tag->id};
 
-   } elsif ($tag->lineType eq 'SPELL') {
+   }
 
-           if ($tag->id eq 'DESC') {         processEmbededCasterLevel($tag);
-      } elsif ($tag->id eq 'DURATION') {     processEmbededCasterLevel($tag);
-      } elsif ($tag->id eq 'TARGETAREA') {   processEmbededCasterLevel($tag);
-      }
-
-   } else {
-
-           if ($tag->id eq 'ADD:EQUIP') {          validateAddEquip($tag);
-      } elsif ($tag->id eq 'ADD:LANGUAGE') {       processAddLanguage($tag);
-      } elsif ($tag->id eq 'ADD:SKILL') {          validateAddSkill($tag);
-      } elsif ($tag->id eq 'ADD:SPELLCASTER') {    validateAddSpellcaster($tag);
-      } elsif ($tag->id eq 'ADDDOMAINS') {         validateAddDomains($tag);
-      } elsif ($tag->id eq 'CATEGORY') {           processCategories($tag);
-      } elsif ($tag->id eq 'CCSKILL') {            validateSkill($tag);
-      } elsif ($tag->id eq 'CHANGEPROF') {         validateChengeProf($tag);
-      } elsif ($tag->id eq 'CLASSES') {            validateClasses($tag);
-      } elsif ($tag->id eq 'CSKILL') {             validateSkill($tag);
-      } elsif ($tag->id eq 'DEFINE') {             validateDefine($tag);
-      } elsif ($tag->id eq 'DOMAINS') {            validateDomains($tag);
-      } elsif ($tag->id eq 'EQMOD') {              validateEqmod($tag);
-      } elsif ($tag->id eq 'IGNORES') {            validateIgnores($tag);
-      } elsif ($tag->id eq 'LANGAUTOxxx') {        processLanguage($tag);
-      } elsif ($tag->id eq 'LANGBONUS') {          processLanguage($tag);
-      } elsif ($tag->id eq 'MONCCSKILL') {         validateSkill($tag);
-      } elsif ($tag->id eq 'MONCSKILL') {          validateSkill($tag);
-      } elsif ($tag->id eq 'MOVE') {               validateMove($tag);
-      } elsif ($tag->id eq 'MOVECLONE') {          validateMoveClone($tag);
-      } elsif ($tag->id eq 'NATURALATTACKS') {     validateNaturalAttacks($tag);
-      } elsif ($tag->id eq 'RACESUBTYPE') {        validateRaceSubType($tag);
-      } elsif ($tag->id eq 'RACETYPE') {           validateRaceType($tag);
-      } elsif ($tag->id eq 'REPLACES') {           validateIgnores($tag);
-      } elsif ($tag->id eq 'SA') {                 validateSa($tag);
-      } elsif ($tag->id eq 'SPELLKNOWN:CLASS') {   validateSpellLevelClass($tag);
-      } elsif ($tag->id eq 'SPELLKNOWN:DOMAIN') {  validateSpellLevelDomain($tag);
-      } elsif ($tag->id eq 'SPELLLEVEL:CLASS') {   validateSpellLevelClass($tag);
-      } elsif ($tag->id eq 'SPELLLEVEL:DOMAIN') {  validateSpellLevelDomain($tag);
-      } elsif ($tag->id eq 'SPELLS') {             validateSpells($tag);
-      } elsif ($tag->id eq 'SR') {                 validateNumericTags($tag);
-      } elsif ($tag->id eq 'STARTPACK') {          processStartPack($tag);
-      } elsif ($tag->id eq 'STARTSKILLPTS') {      validateNumericTags($tag);
-      } elsif ($tag->id eq 'STAT') {               validateStat($tag);
-      } elsif ($tag->id eq 'SWITCHRACE') {         validateSwitchRace($tag);
-      } elsif ($tag->id eq 'TYPE') {               processTypes($tag);
-      }
-
+   if (defined $validate) {
+      $validate->($tag);
    }
 }
 
