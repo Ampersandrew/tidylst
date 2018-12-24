@@ -878,6 +878,71 @@ sub processAddLanguage {
 }
 
 
+
+=head2 processCategories
+
+   Add the categories to Valid Categories.
+
+=cut
+
+sub processCategories {
+
+   my ($tag) = @_;
+
+
+   # The categories go into validCategories
+   for my $category ( split '\.', $tag->value ) {
+      $validCategories{$tag->lineType}{$category}++ 
+   }
+}
+
+
+
+=head2 processEmbededCasterLevel
+
+   Find CASTERLEVEL where it appears embeded between () on SPELL linesi,
+   extract any variables used for cross checking.
+
+=cut
+
+sub processEmbededCasterLevel {
+
+   my ($tag) = @_;
+
+   # Inline f*#king tags.
+   # We need to find CASTERLEVEL between ()
+   my $value = $tag->value;
+   pos $value = 0;
+
+   FIND_BRACKETS:
+   while ( pos $value < length $value ) {
+
+      my $result;
+
+      # Find the first set of ()
+      if ( (($result) = Text::Balanced::extract_bracketed( $value, '()' )) && $result) {
+
+         # Is there a CASTERLEVEL inside?
+         if ( $result =~ / CASTERLEVEL /xmsi ) {
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'DEFINE Variable',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               LstTidy::Parse::extractVariables($result, $tag)
+            ];
+         }
+
+      } else {
+
+         last FIND_BRACKETS;
+      }
+   }
+}
+
+
+
 =head2 processEmbededPreInFeat
 
    Extract any PREXXXs statements in the feat tags and vlaidate them.
@@ -1323,6 +1388,23 @@ sub processPREVAR {
    }
 }
 
+
+=head2 processTypes
+
+   Add the types to Valid Types.
+
+=cut
+
+sub processTypes {
+
+   my ($tag) = @_;
+
+
+   # The types go into validTypes
+   for my $type ( split '\.', $tag->value ) {
+      $validTypes{$tag->lineType}{$type}++ 
+   }
+}
 
 
 =head2 validateAddDomains
@@ -1775,6 +1857,53 @@ sub processBonusTag {
 
 
 
+=head2 processClassesOnSkill
+
+   Split the value and queue it up for cross checking.
+
+=cut
+
+sub processClassesOnSkill {
+
+   my ($tag) = @_;
+
+
+   # Only CLASSES in SKILL
+   CLASS_FOR_SKILL:
+   for my $class ( split '\|', $tag->value ) {
+
+      # ALL is valid here
+      next CLASS_FOR_SKILL if $class eq 'ALL';
+
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'CLASS',
+         $tag->id,
+         $tag->file,
+         $tag->line,
+         $class
+      ];
+   }
+}
+
+
+
+=head2 processStartPack
+
+   Add KIT data to the validity data.
+
+=cut
+
+sub processStartPack {
+
+   my ($tag) = @_;
+
+   setEntityValid('KIT STARTPACK', "KIT:" . $tag->value);
+   setEntityValid('KIT', "KIT:" . $tag->value);
+}
+
+
+
 =head2 validateBonusVar
 
    Extract the list of variables being bonused and the list of variables being
@@ -1875,6 +2004,50 @@ sub validateBonusWeildCategory {
 }
 
 
+
+=head2 validateChengeProf
+
+   Extract the equipemnet (weapons) and weapon profs and queue them up for
+   cross checking.
+
+=cut
+
+sub validateChengeProf {
+
+   my ($tag) = @_;
+
+   # "CHANGEPROF:" <list of weapons> "=" <new prof> { "|"  <list of weapons> "=" <new prof> }*
+   # <list of weapons> := ( <weapon> | "TYPE=" <weapon type> ) { "," ( <weapon> | "TYPE=" <weapon type> ) }*
+
+   for my $entry ( split '\|', $tag->value ) {
+      if ( $entry =~ /^([^=]+)=([^=]+)$/ ) {
+         my ( $list_of_weapons, $new_prof ) = ( $1, $2 );
+
+         # First, the weapons (equipment)
+         push @LstTidy::Report::xcheck_to_process,
+         [
+            'EQUIPMENT', 
+            $tag->id, 
+            $tag->file, 
+            $tag->line,
+            split ',', $list_of_weapons
+         ];
+
+         # Second, the weapon prof.
+         push @LstTidy::Report::xcheck_to_process,
+         [
+            'WEAPONPROF', 
+            $tag->id, 
+            $tag->file, 
+            $tag->line,
+            $new_prof
+         ];
+      }
+   }
+}
+
+
+
 =head2 validateClass
 
    Queue up the CLASS tag for cross checking
@@ -1930,35 +2103,6 @@ sub validateClasses {
 }
 
 
-
-=head2 processClassesOnSkill
-
-   Split the value and queue it up for cross checking.
-
-=cut
-
-sub processClassesOnSkill {
-
-   my ($tag) = @_;
-
-
-   # Only CLASSES in SKILL
-   CLASS_FOR_SKILL:
-   for my $class ( split '\|', $tag->value ) {
-
-      # ALL is valid here
-      next CLASS_FOR_SKILL if $class eq 'ALL';
-
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'CLASS',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         $class
-      ];
-   }
-}
 
 
 =head2 validateClassesOnSpell
@@ -2062,6 +2206,65 @@ sub validateClearTag {
       $tag->value($tag->value =~ s/^.CLEAR//ir);
 
    }
+}
+
+
+
+=head2 validateDefine
+
+   Extract the defined name and any variables used to defineit, queue them up for cross checking.
+
+=cut
+
+sub validateDefine {
+
+   my ($tag) = @_;
+   my $logger = getLogger();
+
+   my ( $var_name, @formulas ) = split '\|', $tag->value;
+
+   # First we store the DEFINE variable name
+   if ($var_name) {
+      if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
+         LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
+
+         #####################################################
+         # Export a list of variable names if requested
+         if ( isConversionActive('Export lists') ) {
+            my $file = $tag->file;
+            $file =~ tr{/}{\\};
+            LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$tag->line","$file"\n});
+         }
+
+         # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
+      } elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
+         $logger->notice(
+            qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+      }
+
+   } else {
+      $logger->notice(
+         qq{I was not able to find a proper variable name in "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+
+   # Second we deal with the formula
+   for my $formula (@formulas) {
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'DEFINE Variable',
+         qq{@@" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         LstTidy::Parse::extractVariables($formula, $tag)
+      ];
+   }
+
 }
 
 
@@ -2488,149 +2691,79 @@ sub validateMoveClone {
 }
 
 
-=head2 validatePreTag
 
-   Validate the PRExxx tags. This function is reentrant and can be called
-   recursivly.
+=head2 validateNaturalAttacks
 
-   $tag,             # Name of the tag (before the :)
-   $tagValue,        # Value of the tag (after the :)
-   $enclosingTag,    # When the PRExxx tag is used in another tag
-   $lineType,        # Type for the current file
-   $file,            # Name of the current file
-   $line             # Number of the current line
-
-   preforms checks that pre tags are valid.
+   Extract the data from Natural Attacks tags, validate it and queue the
+   equipement types for cross checking.
 
 =cut
 
-sub validatePreTag {
-   my ($tag, $enclosingTag) = @_;
-
-   if ( !length($tag->value) && $tag->id ne "PRE:.CLEAR" ) {
-      missingValue();
-      return;
-   }
-
-   getLogger()->debug(
-      q{validatePreTag: } . $tag->id . q{; } . $tag->value . q{; } . $enclosingTag .q{; } . $tag->lineType .q{;},
-      $tag->file,
-      $tag->line
-   );
-
-   if ( $tag->id eq 'PRECLASS' || $tag->id eq 'PRECLASSLEVELMAX' ) {
-
-      processGenericPRE('CLASS', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PRECHECK' || $tag->id eq 'PRECHECKBASE') {
-
-      processPRECHECK ($tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PRECSKILL' ) {
-
-      processGenericPRE('SKILL', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREDEITY' ) {
-
-      processPREDIETY($tag);
-
-   } elsif ( $tag->id eq 'PREDEITYDOMAIN' || $tag->id eq 'PREDOMAIN' ) {
-
-      processGenericPRE('DOMAIN', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREFEAT' ) {
-
-      processGenericPRE('FEAT', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREABILITY' ) {
-
-      processGenericPRE('ABILITY', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREITEM' ) {
-
-      processGenericPRE('EQUIPMENT', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PRELANG' ) {
-
-      processPRELANG($tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREMOVE' ) {
-
-      processPREMOVE($tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREMULT' ) {
-
-      # This tag is the reason why validatePreTag exists
-      # PREMULT:x,[PRExxx 1],[PRExxx 2]
-      # We need for find all the [] and call validatePreTag with the content
-
-      processPREMULT($tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PRERACE' ) {
-
-      processPRERACE($tag, $enclosingTag);
-
-   }
-   elsif ( $tag->id eq 'PRESKILL' ) {
-
-      processGenericPRE('SKILL', $tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PRESPELL' ) {
-
-      processPRESPELL($tag, $enclosingTag);
-
-   } elsif ( $tag->id eq 'PREVAR' ) {
-
-      processPREVAR($tag, $enclosingTag);
-
-   }
-
-   # No Check for Variable File #
-
-   # Check for PRExxx that do not exist. We only check the
-   # tags that are embeded since parse_tag already took care
-   # of the PRExxx tags on the entry lines.
-   elsif ( $enclosingTag && !exists $PreTags{$tag->id} ) {
-
-      getLogger()->notice(
-         qq{Unknown PRExxx tag "} . $tag->id . q{" found in "$enclosingTag"},
-         $tag->file,
-         $tag->line
-      );
-   }
-}
-
-
-=head2 validateRace
-
-   Queue up the Race for cross checking
-
-=cut
-
-sub validateRace {
+sub validateNaturalAttacks {
 
    my ($tag) = @_;
 
+   my $logger = getLogger();
 
-   # There is only one race per RACE tag
-   push @LstTidy::Report::xcheck_to_process,
-   [  
-      'RACE',
-      $tag->id,
-      $tag->file,
-      $tag->line,
-      $tag->value,
-   ];
+   # NATURALATTACKS:<Natural weapon name>,<List of type>,<attacks>,<damage>|...
+   #
+   # We must make sure that there are always either four or five , separated
+   # parameters between the |.
+
+   for my $entry ( split '\|', $tag->value ) {
+      my @parameters = split ',', $entry;
+
+      my $NumberOfParams = scalar @parameters;
+
+      # must have 4 or 5 parameters
+      if ($NumberOfParams == 5 or $NumberOfParams == 4) {
+
+         # If Parameter 5 exists, it must be an SPROP
+         if (defined $parameters[4]) {
+            $logger->notice(
+               qq{5th parameter should be an SPROP in "NATURALATTACKS:$entry"},
+               $tag->file,
+               $tag->line
+            ) unless $parameters[4] =~ /^SPROP=/;
+         }
+
+         # Parameter 3 is a number
+         $logger->notice(
+            qq{3rd parameter should be a number in "NATURALATTACKS:$entry"},
+            $tag->file,
+            $tag->line
+         ) unless $parameters[2] =~ /^\*?\d+$/;
+
+         # Are the types valid EQUIPMENT types?
+         push @LstTidy::Report::xcheck_to_process,
+         [
+            'EQUIPMENT TYPE', 
+            qq{@@" in "} . $tag->id . q{:$entry},
+            $tag->file,  
+            $tag->line,
+            grep { !$validNaturalAttacksType{$_} } split '\.', $parameters[1]
+         ];
+
+      } else {
+
+         $logger->notice(
+            qq{Wrong number of parameter for "NATURALATTACKS:$entry"},
+            $tag->file,
+            $tag->line
+         );
+      }
+   }
 }
 
 
-=head2 validateSpells
+
+=head2 validateNonKitSpells
 
    Extract and check the values in SPELLS tags, queue up for cross checking.
 
 =cut
 
-sub validateSpells {
+sub validateNonKitSpells {
 
    my ($tag) = @_;
    my $logger = getLogger();
@@ -2802,6 +2935,291 @@ sub validateSpells {
 }
 
 
+=head2 validateNumericTags
+
+   Certain tags only have numeric values, extract any variables and queue for cross checking.
+
+=cut
+
+sub validateNumericTags {
+
+   my ($tag) = @_;
+
+
+   # These tags should only have a numeribal value
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'DEFINE Variable',
+      qq{@@" in "} . $tag->fullTag,
+      $tag->file,
+      $tag->line,
+      LstTidy::Parse::extractVariables($tag->value, $tag)
+   ];
+}
+
+=head2 validatePreTag
+
+   Validate the PRExxx tags. This function is reentrant and can be called
+   recursivly.
+
+   $tag,             # Name of the tag (before the :)
+   $tagValue,        # Value of the tag (after the :)
+   $enclosingTag,    # When the PRExxx tag is used in another tag
+   $lineType,        # Type for the current file
+   $file,            # Name of the current file
+   $line             # Number of the current line
+
+   preforms checks that pre tags are valid.
+
+=cut
+
+sub validatePreTag {
+   my ($tag, $enclosingTag) = @_;
+
+   if ( !length($tag->value) && $tag->id ne "PRE:.CLEAR" ) {
+      missingValue();
+      return;
+   }
+
+   getLogger()->debug(
+      q{validatePreTag: } . $tag->id . q{; } . $tag->value . q{; } . $enclosingTag .q{; } . $tag->lineType .q{;},
+      $tag->file,
+      $tag->line
+   );
+
+   if ( $tag->id eq 'PRECLASS' || $tag->id eq 'PRECLASSLEVELMAX' ) {
+
+      processGenericPRE('CLASS', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PRECHECK' || $tag->id eq 'PRECHECKBASE') {
+
+      processPRECHECK ($tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PRECSKILL' ) {
+
+      processGenericPRE('SKILL', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREDEITY' ) {
+
+      processPREDIETY($tag);
+
+   } elsif ( $tag->id eq 'PREDEITYDOMAIN' || $tag->id eq 'PREDOMAIN' ) {
+
+      processGenericPRE('DOMAIN', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREFEAT' ) {
+
+      processGenericPRE('FEAT', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREABILITY' ) {
+
+      processGenericPRE('ABILITY', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREITEM' ) {
+
+      processGenericPRE('EQUIPMENT', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PRELANG' ) {
+
+      processPRELANG($tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREMOVE' ) {
+
+      processPREMOVE($tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREMULT' ) {
+
+      # This tag is the reason why validatePreTag exists
+      # PREMULT:x,[PRExxx 1],[PRExxx 2]
+      # We need for find all the [] and call validatePreTag with the content
+
+      processPREMULT($tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PRERACE' ) {
+
+      processPRERACE($tag, $enclosingTag);
+
+   }
+   elsif ( $tag->id eq 'PRESKILL' ) {
+
+      processGenericPRE('SKILL', $tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PRESPELL' ) {
+
+      processPRESPELL($tag, $enclosingTag);
+
+   } elsif ( $tag->id eq 'PREVAR' ) {
+
+      processPREVAR($tag, $enclosingTag);
+
+   }
+
+   # No Check for Variable File #
+
+   # Check for PRExxx that do not exist. We only check the
+   # tags that are embeded since parse_tag already took care
+   # of the PRExxx tags on the entry lines.
+   elsif ( $enclosingTag && !exists $PreTags{$tag->id} ) {
+
+      getLogger()->notice(
+         qq{Unknown PRExxx tag "} . $tag->id . q{" found in "$enclosingTag"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
+
+=head2 validateRace
+
+   Queue up the Race for cross checking
+
+=cut
+
+sub validateRace {
+
+   my ($tag) = @_;
+
+
+   # There is only one race per RACE tag
+   push @LstTidy::Report::xcheck_to_process,
+   [  
+      'RACE',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      $tag->value,
+   ];
+}
+
+
+=head2 validateRaceSubType
+
+   Extract the Race sub-types and queue them up for cross checking.
+
+=cut
+
+sub validateRaceSubType {
+
+   my ($tag) = @_;
+
+   for my $race_subtype (split /[|]/, $tag->value) {
+
+      my $new_race_subtype = $race_subtype;
+
+      if ( $tag->lineType eq 'RACE' ) {
+
+         # The RACE sub-types are created in the RACE file
+         if ( $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi ) {
+
+            # The presence of a remove means that we are trying
+            # to modify existing data, not create new sub-types
+            
+            push @LstTidy::Report::xcheck_to_process,
+            [  
+               'RACESUBTYPE',
+               $tag->id,
+               $tag->file,
+               $tag->line,
+               $race_subtype,
+            ];
+
+         } else {
+
+            LstTidy::Validate::setEntityValid('RACESUBTYPE', $race_subtype);
+         }
+
+      } else {
+
+         # The RACE type found here are not creates, we only
+         # get rid of the .REMOVE. part
+
+         $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi;
+
+         push @LstTidy::Report::xcheck_to_process,
+         [  
+            'RACESUBTYPE',
+            $tag->id,
+            $tag->file,
+            $tag->line,
+            $race_subtype,
+         ];
+      }
+   }
+}
+
+
+
+=head2 validateRaceType
+
+   Extract the Race Types and queue them up for cross checking.
+
+=cut
+
+sub validateRaceType {
+
+   my ($tag) = @_;
+
+   for my $race_type (split /[|]/, $tag->value) {
+
+      if ( $tag->lineType eq 'RACE' ) {
+
+         # The RACE type are created in the RACE file
+         if ( $race_type =~ m{ \A [.] REMOVE [.] }xmsi ) {
+
+            # The presence of a remove means that we are trying
+            # to modify existing data and not create new one
+            push @LstTidy::Report::xcheck_to_process,
+            [  'RACETYPE',
+               $tag->id,
+               $tag->file,
+               $tag->line,
+               $race_type,
+            ];
+
+         } else {
+            LstTidy::Validate::setEntityValid('RACETYPE', $race_type);
+         }
+
+      } else {
+
+         # The RACE type found here are not create, we only
+         # get rid of the .REMOVE. part
+         $race_type =~ m{ \A [.] REMOVE [.] }xmsi;
+
+         push @LstTidy::Report::xcheck_to_process,
+         [  'RACETYPE',
+            $tag->id,
+            $tag->file,
+            $tag->line,
+            $race_type,
+         ];
+      }
+   }
+
+}
+
+
+
+=head2 validateSpells
+
+   the way Spells are validated depends on the linetype
+
+=cut
+
+sub validateSpells {
+
+   my ($tag) = @_;
+
+
+   if ($tag->lineType eq 'KIT SPELLS') { 
+      validateKitSpells($tag);
+   } else {
+      validateNonKitSpells($tag);
+   }
+}
+
+
 
 =head2 validateSwitchRace
 
@@ -2832,7 +3250,7 @@ sub validateSwitchRace {
    This function stores data for later validation. It also checks
    the syntax of certain tags and detects common errors and
    deprecations.
-   
+
    The %referrer hash must be populated following this format
    $referrer{$lintype}{$name} = [ $err_desc, $file, $line ]
 
@@ -2842,487 +3260,109 @@ sub validateTag {
 
    my ($tag) = @_;
 
-   my $logger = getLogger();
+   if ($tag->id =~ qr/^\!?PRE/) {
 
-   if ($tag->id eq 'STARTPACK')
-   {
-      LstTidy::Validate::setEntityValid('KIT STARTPACK', "KIT:" . $tag->value);
-      LstTidy::Validate::setEntityValid('KIT', "KIT:" . $tag->value);
+      validatePreTag( $tag, "");
 
-   } elsif ( $tag->id =~ /^\!?PRE/ ) {
-
-      # It's a PRExxx tag, we delegate
-      return LstTidy::Validate::validatePreTag( $tag, "");
-
-   } elsif (index( $tag->id, 'PROFICIENCY' ) == 0 ) {
-
-      # There was nothing here in prettylst
-
-   } elsif ( index( $tag->id, 'BONUS' ) == 0 ) {
+   } elsif ($tag->id =~ qr/^BONUS/) {
 
       processBonusTag($tag);
 
-   } elsif ($tag->id eq 'CLASSES') {
+   } elsif ($tag->lineType ne 'PCC') {
 
-      validateClasses($tag);
-
-   } elsif ($tag->id eq 'DOMAINS') {
-
-      validateDomains($tag);
-
-   } elsif ( $tag->id eq 'CLASS' && $tag->lineType ne 'PCC') {
-
-      validateClass($tag);
-
-   } elsif ( $tag->id eq 'DEITY' && $tag->lineType ne 'PCC') {
-
-      validateDeity($tag);
-
-   } elsif ( $tag->id eq 'DOMAIN' && $tag->lineType ne 'PCC') {
-
-      validateDomain($tag);
-
-   } elsif ( $tag->id eq 'ADDDOMAINS' ) {
-
-      validateAddDomains($tag);
-
-   } elsif ( $tag->id eq 'ADD:SPELLCASTER' ) {
-
-      validateAddSpellcaster($tag);
-
-   } elsif ( $tag->id eq 'ADD:EQUIP' ) {
-
-      validateAddEquip($tag);
-
-   } elsif  ( $tag->id =~ /!?PRETYPE/ && $tag->value =~ /(\d+,)?EQMOD=/ ) {
-
-      # nothing to check here
-
-   } elsif ($tag->id eq 'EQMOD' ) {
-
-      validateEqmod($tag);
-
-   } elsif ( $tag->id eq "IGNORES" || $tag->id eq "REPLACES" ) {
-
-      validateIgnores($tag);
-
-   } elsif ($tag->id =~ qr{(?:ADD:|AUTO:|V|M)?FEAT|FEATAUTO} && $tag->lineType ne 'PCC') {
-
-      validateFeats($tag);
-
-   } elsif ( $tag->id eq 'KIT' && $tag->lineType ne 'PCC' ) {
-
-      processKit($tag);
-
-   } elsif ( $tag->id eq 'LANGAUTOxxx' || $tag->id eq 'LANGBONUS' ) {
-
-      processLanguage($tag);
-
-   } elsif ( $tag->id eq 'ADD:LANGUAGE' ) {
-
-      processAddLanguage($tag);
-                
-   } elsif ( $tag->id eq 'MOVE' ) {
-
-      validateMove($tag);
-
-   } elsif ( $tag->id eq 'MOVECLONE' ) {
-
-      validateMoveClone($tag);
-
-   } elsif ( $tag->id eq 'RACE' && $tag->lineType ne 'PCC' ) {
-
-      validateRace($tag);
-
-   } elsif ( $tag->id eq 'SWITCHRACE' ) {
-
-      validateSwitchRace($tag);
-
-   } elsif ( $tag->id eq 'CSKILL'
-      || $tag->id eq 'CCSKILL'
-      || $tag->id eq 'MONCSKILL'
-      || $tag->id eq 'MONCCSKILL'
-      || ($tag->id eq 'SKILL' && $tag->lineType ne 'PCC')
-   ) {
-
-      validateSkill($tag);
-
-   } elsif ( $tag->id eq 'ADD:SKILL' ) {
-      
-      validateAddSkill($tag);
-
-   } elsif ( $tag->id eq 'SPELLS' ) {
-
-      if ( $tag->lineType ne 'KIT SPELLS' ) {
-
-         validateSpells($tag);
-
-      } else {
-
-         validateKitSpells($tag);
-      }
-   
-      ###################################################################################
-
-   } elsif ( index( $tag->id, 'SPELLLEVEL:' ) == 0 || index( $tag->id, 'SPELLKNOWN:' ) == 0) {
-
-      # [ 813504 ] SPELLLEVEL:DOMAIN in domains.lst
-      # [ 2544134 ] New Token - SPELLKNOWN
-      # -------------------------------------------
-      # There are two different SPELLLEVEL tags that must
-      # be x-check. SPELLLEVEL:CLASS and SPELLLEVEL:DOMAIN.
-      #
-      # The CLASS type have CLASSes and SPELLs to check and
-      # the DOMAIN type have DOMAINs and SPELLs to check.
-      #
-      # SPELLKNOWN has exact same syntax as SPELLLEVEL, so doing both checks at once.
-
-      if ( $tag->id eq "SPELLLEVEL:CLASS" || $tag->id eq "SPELLKNOWN:CLASS") {
-
-         # The syntax for SPELLLEVEL:CLASS is
-         # SPELLLEVEL:CLASS|<class-list of spells>
-         # <class-list of spells> := <class> | <list of spells> [ | <class-list of spells> ]
-         # <class>                       := <class name> = <level>
-         # <list of spells>              := <spell name> [, <list of spells>]
-         # <class name>          := ASCII WORDS that must be validated
-         # <level>                       := INTEGER
-         # <spell name>          := ASCII WORDS that must be validated
-         #
-         # ex. SPELLLEVEL:CLASS|Wizard=0|Detect Magic,Read Magic|Wizard=1|Burning Hands
-
-         # [ 1958872 ] trim PRExxx before checking SPELLLEVEL
-         # Work with a copy because we do not want to change the original
-         my $tag_line = $tag->value;
-         study $tag_line;
-         # Remove the PRExxx tags at the end of the line.
-         $tag_line =~ s/\|PRE\w+\:.+$//;
-
-         # We extract the classes and the spell names
-         if ( my $working_value = $tag_line ) {
-            while ($working_value) {
-               if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-                  my $class  = $1;
-                  my $spells = $2;
-
-                  # The CLASS
-                  if ( $class =~ /([^=]+)\=(\d+)/ ) {
-
-                     # [ 849369 ] SPELLCASTER.Arcane=1
-                     # SPELLCASTER.Arcane and SPELLCASTER.Divine are specials
-                     # CLASS names that should not be cross-referenced.
-                     # To be processed later
-                     push @LstTidy::Report::xcheck_to_process,
-                     [
-                        'CLASS',
-                        qq{@@" in "} . $tag->fullTag,
-                        $tag->file,
-                        $tag->line,
-                        $1
-                     ];
-                  }
-                  else {
-                     $logger->notice(
-                        qq{Invalid syntax for "$class" in "} . $tag->fullTag . q{"},
-                        $tag->file,
-                        $tag->line
-                     );
-                  }
-
-                  # The SPELL names
-                  # To be processed later
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'SPELL',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     split ',', $spells
-                  ];
-               }
-               else {
-                  $logger->notice(
-                     qq{Invalid class/spell list paring in "} . $tag->fullTag . q{"},
-                     $tag->file,
-                     $tag->line
-                  );
-                  $working_value = "";
-               }
-            }
-         }
-         else {
-            $logger->notice(
-               qq{No value found for "} . $tag->id . q{"},
-               $tag->file,
-               $tag->line
-            );
-         }
+           if ($tag->id eq 'ADD:FEAT') {     validateFeats($tag)
+      } elsif ($tag->id eq 'AUTO:FEAT') {    validateFeats($tag)
+      } elsif ($tag->id eq 'CLASS') {        validateClass($tag)
+      } elsif ($tag->id eq 'DEITY') {        validateDeity($tag)
+      } elsif ($tag->id eq 'DOMAIN') {       validateDomain($tag)
+      } elsif ($tag->id eq 'FEAT') {         validateFeats($tag)
+      } elsif ($tag->id eq 'FEATAUTO') {     validateFeats($tag)
+      } elsif ($tag->id eq 'KIT') {          processKit($tag)
+      } elsif ($tag->id eq 'MFEAT') {        validateFeats($tag)
+      } elsif ($tag->id eq 'RACE') {         validateRace($tag)
+      } elsif ($tag->id eq 'SKILL') {        validateSkill($tag)
+      } elsif ($tag->id eq 'TEMPLATE') {     validateTemplate($tag)
+      } elsif ($tag->id eq 'VFEAT') {        validateFeats($tag)
       }
 
-      if ( $tag->id eq "SPELLLEVEL:DOMAIN" || $tag->id eq "SPELLKNOWN:DOMAIN") {
+   } elsif ($tag->lineType eq 'SPELL') {
 
-         # The syntax for SPELLLEVEL:DOMAIN is
-         # SPELLLEVEL:CLASS|<domain-list of spells>
-         # <domain-list of spells> := <domain> | <list of spells> [ | <domain-list of spells> ]
-         # <domain>                      := <domain name> = <level>
-         # <list of spells>              := <spell name> [, <list of spells>]
-         # <domain name>         := ASCII WORDS that must be validated
-         # <level>                       := INTEGER
-         # <spell name>          := ASCII WORDS that must be validated
-         #
-         # ex. SPELLLEVEL:DOMAIN|Air=1|Obscuring Mist|Animal=4|Repel Vermin
-
-         # We extract the classes and the spell names
-         if ( my $working_value = $tag->value ) {
-            while ($working_value) {
-               if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-                  my $domain = $1;
-                  my $spells = $2;
-
-                  # The DOMAIN
-                  if ( $domain =~ /([^=]+)\=(\d+)/ ) {
-                     push @LstTidy::Report::xcheck_to_process,
-                     [
-                        'DOMAIN',
-                        qq{@@" in "} . $tag->fullTag,
-                        $tag->file,
-                        $tag->line,
-                        $1
-                     ];
-
-                  } else {
-
-                     $logger->notice(
-                        qq{Invalid syntax for "$domain" in "} . $tag->fullTag . q{"},
-                        $tag->file,
-                        $tag->line
-                     );
-                  }
-
-                  # The SPELL names
-                  # To be processed later
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'SPELL',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     split ',', $spells
-                  ];
-
-               } else {
-                  $logger->notice(
-                     qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"},
-                     $tag->file,
-                     $tag->line
-                  );
-                  $working_value = "";
-               }
-            }
-
-         } else {
-            $logger->notice(
-               qq{No value found for "} . $tag->id . q{"},
-               $tag->file,
-               $tag->line
-            );
-         }
-      }
-   } elsif ( $tag->id eq 'STAT' ) {
-
-      if ( $tag->lineType eq 'KIT STAT' ) {
-         # STAT:STR=17|DEX=10|CON=14|INT=8|WIS=12|CHA=14
-         my %stat_count_for = map { $_ => 0 } LstTidy::Parse::getValidSystemArr('stats');
-
-         STAT:
-         for my $stat_expression (split /[|]/, $tag->value) {
-
-            my ($stat) = ( $stat_expression =~ / \A ([A-Z]{3}) [=] (\d+|roll\(\"\w+\"\)((\+|\-)var\(\"STAT.*\"\))*) \z /xms );
-
-            if ( !defined $stat ) {
-               # Syntax error
-               $logger->notice(
-                  qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-
-               next STAT;
-            }
-
-            if ( !exists $stat_count_for{$stat} ) {
-               # The stat is not part of the official list
-               $logger->notice(
-                  qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            } else {
-               $stat_count_for{$stat}++;
-            }
-         }
-
-         # We check to see if some stat are repeated
-         for my $stat ( LstTidy::Parse::getValidSystemArr('stats')) {
-            if ( $stat_count_for{$stat} > 1 ) {
-               $logger->notice(
-                  qq{Found $stat more then once in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-         }
+           if ($tag->id eq 'DESC') {         processEmbededCasterLevel($tag);
+      } elsif ($tag->id eq 'DURATION') {     processEmbededCasterLevel($tag);
+      } elsif ($tag->id eq 'TARGETAREA') {   processEmbededCasterLevel($tag);
       }
 
-   } elsif ( $tag->id eq 'TEMPLATE' && $tag->lineType ne 'PCC' ) {
+   } else {
 
-      # TEMPLATE:<template name>|<template name>|etc.
-      push @LstTidy::Report::xcheck_to_process,
-      [  'TEMPLATE',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         (split /[|]/, $tag->value),
-      ];
-
-
-   ######################################################################
-   # Here we capture data for later validation
-   } elsif ( $tag->id eq 'RACESUBTYPE' ) {
-
-      for my $race_subtype (split /[|]/, $tag->value) {
-         my $new_race_subtype = $race_subtype;
-         if ( $tag->lineType eq 'RACE' ) {
-            # The RACE sub-type are created in the RACE file
-            if ( $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi ) {
-               # The presence of a remove means that we are trying
-               # to modify existing data and not create new one
-               push @LstTidy::Report::xcheck_to_process,
-               [  'RACESUBTYPE',
-                  $tag->id,
-                  $tag->file,
-                  $tag->line,
-                  $race_subtype,
-               ];
-
-            } else {
-               LstTidy::Validate::setEntityValid('RACESUBTYPE', $race_subtype);
-            }
-
-         } else {
-
-            # The RACE type found here are not create, we only
-            # get rid of the .REMOVE. part
-            $race_subtype =~ m{ \A [.] REMOVE [.] }xmsi;
-
-            push @LstTidy::Report::xcheck_to_process,
-            [  'RACESUBTYPE',
-               $tag->id,
-               $tag->file,
-               $tag->line,
-               $race_subtype,
-            ];
-         }
+           if ($tag->id eq 'ADD:EQUIP') {          validateAddEquip($tag);
+      } elsif ($tag->id eq 'ADD:LANGUAGE') {       processAddLanguage($tag);
+      } elsif ($tag->id eq 'ADD:SKILL') {          validateAddSkill($tag);
+      } elsif ($tag->id eq 'ADD:SPELLCASTER') {    validateAddSpellcaster($tag);
+      } elsif ($tag->id eq 'ADDDOMAINS') {         validateAddDomains($tag);
+      } elsif ($tag->id eq 'CATEGORY') {           processCategories($tag);
+      } elsif ($tag->id eq 'CCSKILL') {            validateSkill($tag);
+      } elsif ($tag->id eq 'CHANGEPROF') {         validateChengeProf($tag);
+      } elsif ($tag->id eq 'CLASSES') {            validateClasses($tag);
+      } elsif ($tag->id eq 'CSKILL') {             validateSkill($tag);
+      } elsif ($tag->id eq 'DEFINE') {             validateDefine($tag);
+      } elsif ($tag->id eq 'DOMAINS') {            validateDomains($tag);
+      } elsif ($tag->id eq 'EQMOD') {              validateEqmod($tag);
+      } elsif ($tag->id eq 'IGNORES') {            validateIgnores($tag);
+      } elsif ($tag->id eq 'LANGAUTOxxx') {        processLanguage($tag);
+      } elsif ($tag->id eq 'LANGBONUS') {          processLanguage($tag);
+      } elsif ($tag->id eq 'MONCCSKILL') {         validateSkill($tag);
+      } elsif ($tag->id eq 'MONCSKILL') {          validateSkill($tag);
+      } elsif ($tag->id eq 'MOVE') {               validateMove($tag);
+      } elsif ($tag->id eq 'MOVECLONE') {          validateMoveClone($tag);
+      } elsif ($tag->id eq 'NATURALATTACKS') {     validateNaturalAttacks($tag);
+      } elsif ($tag->id eq 'RACESUBTYPE') {        validateRaceSubType($tag);
+      } elsif ($tag->id eq 'RACETYPE') {           validateRaceType($tag);
+      } elsif ($tag->id eq 'REPLACES') {           validateIgnores($tag);
+      } elsif ($tag->id eq 'SA') {                 validateSa($tag);
+      } elsif ($tag->id eq 'SPELLKNOWN:CLASS') {   validateSpellLevelClass($tag);
+      } elsif ($tag->id eq 'SPELLKNOWN:DOMAIN') {  validateSpellLevelDomain($tag);
+      } elsif ($tag->id eq 'SPELLLEVEL:CLASS') {   validateSpellLevelClass($tag);
+      } elsif ($tag->id eq 'SPELLLEVEL:DOMAIN') {  validateSpellLevelDomain($tag);
+      } elsif ($tag->id eq 'SPELLS') {             validateSpells($tag);
+      } elsif ($tag->id eq 'SR') {                 validateNumericTags($tag);
+      } elsif ($tag->id eq 'STARTPACK') {          processStartPack($tag);
+      } elsif ($tag->id eq 'STARTSKILLPTS') {      validateNumericTags($tag);
+      } elsif ($tag->id eq 'STAT') {               validateStat($tag);
+      } elsif ($tag->id eq 'SWITCHRACE') {         validateSwitchRace($tag);
+      } elsif ($tag->id eq 'TYPE') {               processTypes($tag);
       }
 
-   } elsif ( $tag->id eq 'RACETYPE' ) {
+   }
+}
 
-      for my $race_type (split /[|]/, $tag->value) {
 
-         if ( $tag->lineType eq 'RACE' ) {
-            
-            # The RACE type are created in the RACE file
-            if ( $race_type =~ m{ \A [.] REMOVE [.] }xmsi ) {
-            
-               # The presence of a remove means that we are trying
-               # to modify existing data and not create new one
-               push @LstTidy::Report::xcheck_to_process,
-               [  'RACETYPE',
-                  $tag->id,
-                  $tag->file,
-                  $tag->line,
-                  $race_type,
-               ];
 
-            } else {
-               LstTidy::Validate::setEntityValid('RACETYPE', $race_type);
-            }
+=head2 validateSa
 
-         } else {
+   Extract and validate any embeded PREs, then extract any variables for cross
+   checking.
 
-            # The RACE type found here are not create, we only
-            # get rid of the .REMOVE. part
-            $race_type =~ m{ \A [.] REMOVE [.] }xmsi;
+=cut
 
-            push @LstTidy::Report::xcheck_to_process,
-            [  'RACETYPE',
-               $tag->id,
-               $tag->file,
-               $tag->line,
-               $race_type,
-            ];
-         }
-      }
+sub validateSa {
 
-   } elsif ( $tag->id eq 'TYPE' ) {
+   my ($tag) = @_;
 
-      # The types go into validTypes
-      $validTypes{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
 
-   } elsif ( $tag->id eq 'CATEGORY' ) {
+   my ($var_string) = ( $tag->value =~ /[^|]\|(.*)/ );
+   if ($var_string) {
+      FORMULA:
+      for my $formula ( split '\|', $var_string ) {
 
-      # The categories go into validCategories
-      $validCategories{$tag->lineType}{$_}++ for ( split '\.', $tag->value );
+         # Are there any PRE tags in the SA tag.
+         if ( $formula =~ /(^!?PRE[A-Z]*):(.*)/ ) {
 
-   ######################################################################
-   # Tag with numerical values
-   } elsif ( $tag->id eq 'STARTSKILLPTS' || $tag->id eq 'SR') {
+            my $preTag = $tag->clone(id => $1, value => $2);
+            validatePreTag($preTag, $tag->fullRealTag);
 
-      # These tags should only have a numeribal value
-      push @LstTidy::Report::xcheck_to_process,
-      [
-         'DEFINE Variable',
-         qq{@@" in "} . $tag->fullTag,
-         $tag->file,
-         $tag->line,
-         LstTidy::Parse::extractVariables($tag->value, $tag)
-      ];
-
-   } elsif ( $tag->id eq 'DEFINE' ) {
-
-      my ( $var_name, @formulas ) = split '\|', $tag->value;
-
-      # First we store the DEFINE variable name
-      if ($var_name) {
-         if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
-            LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
-
-            #####################################################
-            # Export a list of variable names if requested
-            if ( isConversionActive('Export lists') ) {
-               my $file = $tag->file;
-               $file =~ tr{/}{\\};
-               LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$tag->line","$file"\n});
-            }
-
-         # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
-         } elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
-            $logger->notice(
-               qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
-            );
+            next FORMULA;
          }
 
-      } else {
-         $logger->notice(
-            qq{I was not able to find a proper variable name in "} . $tag->fullTag . q{"},
-            $tag->file,
-            $tag->line
-         );
-      }
-
-      # Second we deal with the formula
-      for my $formula (@formulas) {
          push @LstTidy::Report::xcheck_to_process,
          [
             'DEFINE Variable',
@@ -3332,151 +3372,12 @@ sub validateTag {
             LstTidy::Parse::extractVariables($formula, $tag)
          ];
       }
-
-   } elsif ( $tag->id eq 'SA' ) {
-
-      my ($var_string) = ( $tag->value =~ /[^|]\|(.*)/ );
-      if ($var_string) {
-         FORMULA:
-         for my $formula ( split '\|', $var_string ) {
-
-            # Are there any PRE tags in the SA tag.
-            if ( $formula =~ /(^!?PRE[A-Z]*):(.*)/ ) {
-
-               my $preTag = $tag->clone(id => $1, value => $2);
-               validatePreTag($preTag, $tag->fullRealTag);
-
-               next FORMULA;
-            }
-
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'DEFINE Variable',
-               qq{@@" in "} . $tag->fullTag,
-               $tag->file,
-               $tag->line,
-               LstTidy::Parse::extractVariables($formula, $tag)
-            ];
-         }
-      }
-
-   } elsif ( $tag->lineType eq 'SPELL' && ( $tag->id eq 'TARGETAREA' || $tag->id eq 'DURATION' || $tag->id eq 'DESC' ) ) {
-
-      # Inline f*#king tags.
-      # We need to find CASTERLEVEL between ()
-      my $value = $tag->value;
-      pos $value = 0;
-
-      FIND_BRACKETS:
-      while ( pos $value < length $value ) {
-
-         my $result;
-
-         # Find the first set of ()
-         if ( (($result) = Text::Balanced::extract_bracketed( $value, '()' )) && $result) {
-
-            # Is there a CASTERLEVEL inside?
-            if ( $result =~ / CASTERLEVEL /xmsi ) {
-               push @LstTidy::Report::xcheck_to_process,
-               [
-                  'DEFINE Variable',
-                  qq{@@" in "} . $tag->fullTag,
-                  $tag->file,
-                  $tag->line,
-                  LstTidy::Parse::extractVariables($result, $tag)
-               ];
-            }
-
-         } else {
-
-            last FIND_BRACKETS;
-         }
-      }
-
-   } elsif ( $tag->id eq 'NATURALATTACKS' ) {
-
-      # NATURALATTACKS:<Natural weapon name>,<List of type>,<attacks>,<damage>|...
-      #
-      # We must make sure that there are always four , separated parameters
-      # between the |.
-
-      for my $entry ( split '\|', $tag->value ) {
-         my @parameters = split ',', $entry;
-
-         my $NumberOfParams = scalar @parameters;
-
-         # must have 4 or 5 parameters
-         if ($NumberOfParams == 5 or $NumberOfParams == 4) {
-
-            # If Parameter 5 exists, it must be an SPROP
-            if (defined $parameters[4]) {
-               $logger->notice(
-                  qq{5th parameter should be an SPROP in "NATURALATTACKS:$entry"},
-                  $tag->file,
-                  $tag->line
-               ) unless $parameters[4] =~ /^SPROP=/;
-            }
-
-            # Parameter 3 is a number
-            $logger->notice(
-               qq{3rd parameter should be a number in "NATURALATTACKS:$entry"},
-               $tag->file,
-               $tag->line
-            ) unless $parameters[2] =~ /^\*?\d+$/;
-
-            # Are the types valid EQUIPMENT types?
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'EQUIPMENT TYPE', 
-               qq{@@" in "} . $tag->id . q{:$entry},
-               $tag->file,  
-               $tag->line,
-               grep { !$validNaturalAttacksType{$_} } split '\.', $parameters[1]
-            ];
-
-         } else {
-
-            $logger->notice(
-               qq{Wrong number of parameter for "NATURALATTACKS:$entry"},
-               $tag->file,
-               $tag->line
-            );
-         }
-      }
-
-   } elsif ( $tag->id eq 'CHANGEPROF' ) {
-
-      # "CHANGEPROF:" <list of weapons> "=" <new prof> { "|"  <list of weapons> "=" <new prof> }*
-      # <list of weapons> := ( <weapon> | "TYPE=" <weapon type> ) { "," ( <weapon> | "TYPE=" <weapon type> ) }*
-
-      for my $entry ( split '\|', $tag->value ) {
-         if ( $entry =~ /^([^=]+)=([^=]+)$/ ) {
-            my ( $list_of_weapons, $new_prof ) = ( $1, $2 );
-
-            # First, the weapons (equipment)
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'EQUIPMENT', 
-               $tag->id, 
-               $tag->file, 
-               $tag->line,
-               split ',', $list_of_weapons
-            ];
-
-            # Second, the weapon prof.
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'WEAPONPROF', 
-               $tag->id, 
-               $tag->file, 
-               $tag->line,
-               $new_prof
-            ];
-         }
-      }
-
    }
 }
+
+
+
+
 
 =head2 validateSkill
 
@@ -3505,6 +3406,255 @@ sub validateSkill {
       $tag->file,
       $tag->line,
       @skills,
+   ];
+}
+
+=head2 validateSpellLevelClass
+      
+   Extract the CLASSes and SPELLs and queue them up for cross checking
+
+=cut
+
+sub validateSpellLevelClass {
+
+   my ($tag) = @_;
+   my $logger = getLogger();
+
+   # The syntax for SPELLLEVEL:CLASS is
+   # SPELLLEVEL:CLASS|<class-list of spells>
+   # <class-list of spells> := <class> | <list of spells> [ | <class-list of spells> ]
+   # <class>                       := <class name> = <level>
+   # <list of spells>              := <spell name> [, <list of spells>]
+   # <class name>          := ASCII WORDS that must be validated
+   # <level>                       := INTEGER
+   # <spell name>          := ASCII WORDS that must be validated
+   #
+   # ex. SPELLLEVEL:CLASS|Wizard=0|Detect Magic,Read Magic|Wizard=1|Burning Hands
+
+   # [ 1958872 ] trim PRExxx before checking SPELLLEVEL
+   # Work with a copy because we do not want to change the original
+   my $tag_line = $tag->value;
+   study $tag_line;
+   # Remove the PRExxx tags at the end of the line.
+   $tag_line =~ s/\|PRE\w+\:.+$//;
+
+   # We extract the classes and the spell names
+   if ( my $working_value = $tag_line ) {
+      while ($working_value) {
+         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
+            my $class  = $1;
+            my $spells = $2;
+
+            # The CLASS
+            if ( $class =~ /([^=]+)\=(\d+)/ ) {
+
+               # [ 849369 ] SPELLCASTER.Arcane=1
+               # SPELLCASTER.Arcane and SPELLCASTER.Divine are specials
+               # CLASS names that should not be cross-referenced.
+               # To be processed later
+               push @LstTidy::Report::xcheck_to_process,
+               [
+                  'CLASS',
+                  qq{@@" in "} . $tag->fullTag,
+                  $tag->file,
+                  $tag->line,
+                  $1
+               ];
+
+            } else {
+
+               $logger->notice(
+                  qq{Invalid syntax for "$class" in "} . $tag->fullTag . q{"},
+                  $tag->file,
+                  $tag->line
+               );
+            }
+
+            # The SPELL names
+            # To be processed later
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'SPELL',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               split ',', $spells
+            ];
+
+         } else {
+
+            $logger->notice(
+               qq{Invalid class/spell list paring in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+            $working_value = "";
+         }
+      }
+
+   } else {
+      $logger->notice(
+         qq{No value found for "} . $tag->id . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
+=head2 validateSpellLevelDomain
+
+      Extract the DOMAINs and SPELLs and queue them up for cross checking.
+=cut
+
+sub validateSpellLevelDomain {
+
+   my ($tag) = @_;
+   my $logger = getLogger();
+
+   # The syntax for SPELLLEVEL:DOMAIN is
+   # SPELLLEVEL:CLASS|<domain-list of spells>
+   # <domain-list of spells> := <domain> | <list of spells> [ | <domain-list of spells> ]
+   # <domain>                      := <domain name> = <level>
+   # <list of spells>              := <spell name> [, <list of spells>]
+   # <domain name>         := ASCII WORDS that must be validated
+   # <level>                       := INTEGER
+   # <spell name>          := ASCII WORDS that must be validated
+   #
+   # ex. SPELLLEVEL:DOMAIN|Air=1|Obscuring Mist|Animal=4|Repel Vermin
+
+   # We extract the classes and the spell names
+   if ( my $working_value = $tag->value ) {
+      while ($working_value) {
+         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
+            my $domain = $1;
+            my $spells = $2;
+
+            # The DOMAIN
+            if ( $domain =~ /([^=]+)\=(\d+)/ ) {
+               push @LstTidy::Report::xcheck_to_process,
+               [
+                  'DOMAIN',
+                  qq{@@" in "} . $tag->fullTag,
+                  $tag->file,
+                  $tag->line,
+                  $1
+               ];
+
+            } else {
+
+               $logger->notice(
+                  qq{Invalid syntax for "$domain" in "} . $tag->fullTag . q{"},
+                  $tag->file,
+                  $tag->line
+               );
+            }
+
+            # The SPELL names
+            # To be processed later
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'SPELL',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               split ',', $spells
+            ];
+
+         } else {
+            $logger->notice(
+               qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+            $working_value = "";
+         }
+      }
+
+   } else {
+      $logger->notice(
+         qq{No value found for "} . $tag->id . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
+
+=head2 validateStat
+
+   Extract the Stats from KIT STAT lines and validate them against the valid
+   system stats.
+
+=cut
+
+sub validateStat {
+
+   my ($tag) = @_;
+   my $logger = getLogger();
+
+   if ( $tag->lineType eq 'KIT STAT' ) {
+
+      # STAT:STR=17|DEX=10|CON=14|INT=8|WIS=12|CHA=14
+      my %stat_count_for = map { $_ => 0 } LstTidy::Parse::getValidSystemArr('stats');
+
+      STAT:
+      for my $stat_expression (split /[|]/, $tag->value) {
+
+         my ($stat) = ( $stat_expression =~ / \A ([A-Z]{3}) [=] (\d+|roll\(\"\w+\"\)((\+|\-)var\(\"STAT.*\"\))*) \z /xms );
+
+         if ( !defined $stat ) {
+            # Syntax error
+            $logger->notice(
+               qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+
+            next STAT;
+         }
+
+         if ( !exists $stat_count_for{$stat} ) {
+            # The stat is not part of the official list
+            $logger->notice(
+               qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+         } else {
+            $stat_count_for{$stat}++;
+         }
+      }
+
+      # We check to see if some stat are repeated
+      for my $stat ( LstTidy::Parse::getValidSystemArr('stats')) {
+         if ( $stat_count_for{$stat} > 1 ) {
+            $logger->notice(
+               qq{Found $stat more then once in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+         }
+      }
+   }
+}
+
+=head2 validateTemplate
+
+   Extract the Template data and queue it for cross checking.
+
+=cut
+
+sub validateTemplate {
+
+   my ($tag) = @_;
+
+   # TEMPLATE:<template name>|<template name>|etc.
+   push @LstTidy::Report::xcheck_to_process,
+   [  'TEMPLATE',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      (split /[|]/, $tag->value),
    ];
 }
 
