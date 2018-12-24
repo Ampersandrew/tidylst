@@ -1398,6 +1398,50 @@ sub validateAddEquip {
 }
 
 
+=head2 validateAddSkill
+
+   Queue up the Skills and variables for cross checking
+
+=cut
+
+sub validateAddSkill {
+
+   my ($tag) = @_;
+
+   # ADD:SKILL(<list of skills>)<formula>
+   if ( $tag->value =~ /\((.*)\)(.*)/ ) {
+      my ( $list, $formula ) = ( $1, $2 );
+
+      # First the list of skills
+      # ANY is a spcial hardcoded cases for ADD:EQUIP
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'SKILL',
+         qq{@@" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         grep { uc($_) ne 'ANY' } split ',', $list
+      ];
+
+      # Second, we deal with the formula
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'DEFINE Variable',
+         qq{@@" from "$formula" in "} . $tag->fullTag,
+         $tag->file,
+         $tag->line,
+         LstTidy::Parse::extractVariables($formula, $tag)
+      ];
+
+   } else {
+      getLogger()->notice(
+         qq{Invalid syntax: "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
 
 =head2 validateAddSpellcaster
 
@@ -2278,6 +2322,172 @@ sub validateIgnores {
 }
 
 
+
+=head2 validateKitSpells
+
+   Validate the Kit:Spells lines. check the systax is as expected and queue up
+   the data for cross checking.
+
+=cut
+
+sub validateKitSpells {
+
+   my ($tag) = @_;
+
+   # KIT SPELLS line type
+   # SPELLS:<parameter list>|<spell list>
+   # <parameter list> = <param id> = <param value { | <parameter list> }
+   # <spell list> := <spell name> { = <number> } { | <spell list> }
+   my @spells = ();
+
+   for my $spell_or_param (split q{\|}, $tag->value) {
+      # Is it a parameter?
+      if ( $spell_or_param =~ / \A ([^=]*) = (.*) \z/xms ) {
+         my ($param_id,$param_value) = ($1,$2);
+
+         if ( $param_id eq 'CLASS' ) {
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'CLASS',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               $param_value,
+            ];
+
+         } elsif ( $param_id eq 'SPELLBOOK') {
+
+            # Nothing to do
+            #
+         } elsif ( $param_value =~ / \A \d+ \z/mxs ) {
+
+            # It's a spell after all...
+            push @spells, $param_id;
+
+         } else {
+            getLogger()->notice(
+               qq{Invalide SPELLS parameter: "$spell_or_param" found in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+         }
+
+      } else {
+         # It's a spell
+         push @spells, $spell_or_param;
+      }
+   }
+
+   if ( scalar @spells ) {
+      push @LstTidy::Report::xcheck_to_process,
+      [
+         'SPELL',
+         $tag->id,
+         $tag->file,
+         $tag->line,
+         @spells,
+      ];
+   }
+}
+
+
+
+=head2 validateMove
+
+   Check that the value is alternating movetype value
+
+=cut
+
+sub validateMove {
+
+   my ($tag) = @_;
+
+   my $logger = getLogger();
+
+   # MOVE:<move type>,<value>
+   # ex. MOVE:Walk,30,Fly,20,Climb,10,Swim,10
+
+   my @list = split ',', $tag->value;
+
+   MOVE_PAIR:
+   while (@list) {
+      my ( $type, $value ) = ( splice @list, 0, 2 );
+      $value = "" if !defined $value;
+
+      # $type should be a word and $value should be a number
+      if ( $type =~ /^\d+$/ ) {
+         $logger->notice(
+            qq{I was expecting a move type where I found "$type" in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+         last;
+      }
+      else {
+
+         # We keep the move type for future validation
+         LstTidy::Validate::setEntityValid('MOVE Type', $type);
+      }
+
+      unless ( $value =~ /^\d+$/ ) {
+         $logger->notice(
+            qq{I was expecting a number after "$type" and found "$value" in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+         last MOVE_PAIR;
+      }
+   }
+}
+
+
+
+=head2 validateMoveClone
+
+   Validate that the first two parameters of MOVECLONE are valid move types.
+
+=cut
+
+sub validateMoveClone {
+
+   my ($tag) = @_;
+
+   # MOVECLONE:A,B,formula  A and B must be valid move types.
+   if ( $tag->value =~ /^(.*),(.*),(.*)/ ) {
+      # Error if more parameters (Which will show in the first group)
+      if ( $1 =~ /,/ ) {
+         getLogger()->warning(
+            qq{Found too many parameters in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+
+      } else {
+
+         # Cross check for used MOVE Types.
+         push @LstTidy::Report::xcheck_to_process,
+         [
+            'MOVE Type',
+            $tag->id,
+            $tag->file,
+            $tag->line,
+            $1,
+            $2
+         ];
+      }
+
+   } else {
+      # Report missing requisite parameters.
+      #
+      getLogger()->warning(
+         qq{Missing a parameter in in "} . $tag->fullTag . q{"},
+         $tag->file,
+         $tag->line
+      );
+   }
+}
+
+
 =head2 validatePreTag
 
    Validate the PRExxx tags. This function is reentrant and can be called
@@ -2391,6 +2601,231 @@ sub validatePreTag {
 }
 
 
+=head2 validateRace
+
+   Queue up the Race for cross checking
+
+=cut
+
+sub validateRace {
+
+   my ($tag) = @_;
+
+
+   # There is only one race per RACE tag
+   push @LstTidy::Report::xcheck_to_process,
+   [  
+      'RACE',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      $tag->value,
+   ];
+}
+
+
+=head2 validateSpells
+
+   Extract and check the values in SPELLS tags, queue up for cross checking.
+
+=cut
+
+sub validateSpells {
+
+   my ($tag) = @_;
+   my $logger = getLogger();
+
+   # Syntax: SPELLS:<spellbook>|[TIMES=<times per day>|][TIMEUNIT=<unit of time>|][CASTERLEVEL=<CL>|]<Spell list>[|<prexxx tags>]
+   # <Spell list> = <Spell name>,<DC> [|<Spell list>]
+   my @list_of_param = split '\|', $tag->value;
+   my @spells;
+
+   # We drop the Spell book name
+   shift @list_of_param;
+
+   my $nb_times            = 0;
+   my $nb_timeunit         = 0;
+   my $nb_casterlevel      = 0;
+   my $AtWill_Flag         = 0;
+
+   for my $param (@list_of_param) {
+
+      if ( $param =~ /^(TIMES)=(.*)/ || $param =~ /^(TIMEUNIT)=(.*)/ || $param =~ /^(CASTERLEVEL)=(.*)/ ) {
+
+         if ( $1 eq 'TIMES' ) {
+
+            $AtWill_Flag = $param =~ /TIMES=ATWILL/;
+            $nb_times++;
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'DEFINE Variable',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               LstTidy::Parse::extractVariables($2, $tag)
+            ];
+
+         } elsif ( $1 eq 'TIMEUNIT' ) {
+
+            my $key = mungKey($1, $2);
+
+            $nb_timeunit++;
+            # Is it a valid alignment?
+            if (! LstTidy::Parse::isValidFixedValue($1, $key)) {
+               $logger->notice(
+                  qq{Invalid value "$key" for tag "$1"},
+                  $tag->file,
+                  $tag->line
+               );
+            }
+
+         } else {
+
+            $nb_casterlevel++;
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'DEFINE Variable',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               LstTidy::Parse::extractVariables($2, $tag)
+            ];
+         }
+
+         # Embeded PRExxx tags
+      } elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
+
+         my $preTag = $tag->clone(id => $1, value => $2);
+         validatePreTag($preTag, $tag->fullRealTag);
+
+      } else {
+
+         my ( $spellname, $dc ) = ( $param =~ /([^,]+),(.*)/ );
+
+         if ($dc) {
+
+            # Spell name must be validated with the list of spells and DC is a formula
+            push @spells, $spellname;
+
+            push @LstTidy::Report::xcheck_to_process,
+            [
+               'DEFINE Variable',
+               qq{@@" in "} . $tag->fullTag,
+               $tag->file,
+               $tag->line,
+               LstTidy::Parse::extractVariables($dc, $tag)
+            ];
+
+         } else {
+
+            # No DC present, the whole param is the spell name
+            push @spells, $param;
+
+            $logger->info(
+               qq{the DC value is missing for "$param" in "} . $tag->fullTag . q{"},
+               $tag->file,
+               $tag->line
+            );
+         }
+      }
+   }
+
+   push @LstTidy::Report::xcheck_to_process,
+   [
+      'SPELL',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      @spells
+   ];
+
+   # Validate the number of TIMES, TIMEUNIT, and CASTERLEVEL parameters
+   if ( $nb_times != 1 ) {
+      if ($nb_times) {
+         $logger->notice(
+            qq{TIMES= should not be used more then once in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+
+      } else {
+
+         $logger->info(
+            qq{the TIMES= parameter is missing in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+      }
+   }
+
+   if ( $nb_timeunit != 1 ) {
+      if ($nb_timeunit) {
+         $logger->notice(
+            qq{TIMEUNIT= should not be used more then once in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+
+      } else {
+
+         if ( $AtWill_Flag ) {
+            # Do not need a TIMEUNIT tag if the TIMES tag equals AtWill
+            # Nothing to see here. Move along.
+         } else {
+            # [ 1997408 ] False positive: TIMEUNIT= parameter is missing
+            # $logger->info(
+            #       qq{the TIMEUNIT= parameter is missing in "} . $tag->fullTag . q{"},
+            #       $tag->file,
+            #       $tag->line
+            # );
+         }
+      }
+   }
+
+   if ( $nb_casterlevel != 1 ) {
+      if ($nb_casterlevel) {
+         $logger->notice(
+            qq{CASTERLEVEL= should not be used more then once in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+
+      } else {
+
+         $logger->info(
+            qq{the CASTERLEVEL= parameter is missing in "} . $tag->fullTag . q{"},
+            $tag->file,
+            $tag->line
+         );
+      }
+   }
+}
+
+
+
+=head2 validateSwitchRace
+
+   Queue up the RaceType for cross checking.
+
+=cut
+
+sub validateSwitchRace {
+
+   my ($tag) = @_;
+
+
+   # To be processed later
+   # Note: SWITCHRACE actually switch the race TYPE
+   push @LstTidy::Report::xcheck_to_process,
+   [   
+      'RACE TYPE',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      (split '\|',  $tag->value),
+   ];
+}
+
 
 =head2 validateTag
 
@@ -2489,100 +2924,19 @@ sub validateTag {
                 
    } elsif ( $tag->id eq 'MOVE' ) {
 
-
-      ###################################################################################
-
-      # MOVE:<move type>,<value>
-      # ex. MOVE:Walk,30,Fly,20,Climb,10,Swim,10
-
-      my @list = split ',', $tag->value;
-
-      MOVE_PAIR:
-      while (@list) {
-         my ( $type, $value ) = ( splice @list, 0, 2 );
-         $value = "" if !defined $value;
-
-         # $type should be a word and $value should be a number
-         if ( $type =~ /^\d+$/ ) {
-            $logger->notice(
-               qq{I was expecting a move type where I found "$type" in "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
-            );
-            last;
-         }
-         else {
-
-            # We keep the move type for future validation
-            LstTidy::Validate::setEntityValid('MOVE Type', $type);
-         }
-
-         unless ( $value =~ /^\d+$/ ) {
-            $logger->notice(
-               qq{I was expecting a number after "$type" and found "$value" in "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
-            );
-            last MOVE_PAIR;
-         }
-      }
+      validateMove($tag);
 
    } elsif ( $tag->id eq 'MOVECLONE' ) {
-      # MOVECLONE:A,B,formula  A and B must be valid move types.
-      if ( $tag->value =~ /^(.*),(.*),(.*)/ ) {
-         # Error if more parameters (Which will show in the first group)
-         if ( $1 =~ /,/ ) {
-            $logger->warning(
-               qq{Found too many parameters in "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
-            );
-         }
-         else {
-            # Cross check for used MOVE Types.
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'MOVE Type',
-               $tag->id,
-               $tag->file,
-               $tag->line,
-               $1,
-               $2
-            ];
-         }
-      }
-      else {
-         # Report missing requisite parameters.
-         $logger->warning(
-            qq{Missing a parameter in in "} . $tag->fullTag . q{"},
-            $tag->file,
-            $tag->line
-         );
-      }
 
+      validateMoveClone($tag);
 
    } elsif ( $tag->id eq 'RACE' && $tag->lineType ne 'PCC' ) {
 
-      # There is only one race per RACE tag
-      push @LstTidy::Report::xcheck_to_process,
-      [  'RACE',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         $tag->value,
-      ];
+      validateRace($tag);
 
    } elsif ( $tag->id eq 'SWITCHRACE' ) {
 
-      # To be processed later
-      # Note: SWITCHRACE actually switch the race TYPE
-      push @LstTidy::Report::xcheck_to_process,
-      [   'RACE TYPE',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         (split '\|',  $tag->value),
-      ];
+      validateSwitchRace($tag);
 
    } elsif ( $tag->id eq 'CSKILL'
       || $tag->id eq 'CCSKILL'
@@ -2590,278 +2944,25 @@ sub validateTag {
       || $tag->id eq 'MONCCSKILL'
       || ($tag->id eq 'SKILL' && $tag->lineType ne 'PCC')
    ) {
-      my @skills = split /[|]/, $tag->value;
 
-      # ALL is a valid use in BONUS:SKILL, xCSKILL  - [ 1593872 ] False warning: No SKILL entry for CSKILL:ALL
-      @skills = grep { $_ ne 'ALL' } @skills;
-
-      # We need to filter out %CHOICE for the SKILL tag
-      if ( $tag->id eq 'SKILL' ) {
-         @skills = grep { $_ ne '%CHOICE' } @skills;
-      }
-
-      # To be processed later
-      push @LstTidy::Report::xcheck_to_process,
-      [   'SKILL',
-         $tag->id,
-         $tag->file,
-         $tag->line,
-         @skills,
-      ];
+      validateSkill($tag);
 
    } elsif ( $tag->id eq 'ADD:SKILL' ) {
-
-      # ADD:SKILL(<list of skills>)<formula>
-      if ( $tag->value =~ /\((.*)\)(.*)/ ) {
-         my ( $list, $formula ) = ( $1, $2 );
-
-         # First the list of skills
-         # ANY is a spcial hardcoded cases for ADD:EQUIP
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'SKILL',
-            qq{@@" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            grep { uc($_) ne 'ANY' } split ',', $list
-         ];
-
-         # Second, we deal with the formula
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'DEFINE Variable',
-            qq{@@" from "$formula" in "} . $tag->fullTag,
-            $tag->file,
-            $tag->line,
-            LstTidy::Parse::extractVariables($formula, $tag)
-         ];
-
-      } else {
-         $logger->notice(
-            qq{Invalid syntax: "} . $tag->fullTag . q{"},
-            $tag->file,
-            $tag->line
-         );
-      }
+      
+      validateAddSkill($tag);
 
    } elsif ( $tag->id eq 'SPELLS' ) {
 
       if ( $tag->lineType ne 'KIT SPELLS' ) {
-         # Syntax: SPELLS:<spellbook>|[TIMES=<times per day>|][TIMEUNIT=<unit of time>|][CASTERLEVEL=<CL>|]<Spell list>[|<prexxx tags>]
-         # <Spell list> = <Spell name>,<DC> [|<Spell list>]
-         my @list_of_param = split '\|', $tag->value;
-         my @spells;
 
-         # We drop the Spell book name
-         shift @list_of_param;
+         validateSpells($tag);
 
-         my $nb_times            = 0;
-         my $nb_timeunit         = 0;
-         my $nb_casterlevel      = 0;
-         my $AtWill_Flag         = 0;
-         for my $param (@list_of_param) {
-            if ( $param =~ /^(TIMES)=(.*)/ || $param =~ /^(TIMEUNIT)=(.*)/ || $param =~ /^(CASTERLEVEL)=(.*)/ ) {
-               if ( $1 eq 'TIMES' ) {
-                  $AtWill_Flag = $param =~ /TIMES=ATWILL/;
-                  $nb_times++;
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'DEFINE Variable',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     LstTidy::Parse::extractVariables($2, $tag)
-                  ];
+      } else {
 
-               } elsif ( $1 eq 'TIMEUNIT' ) {
-
-                  my $key = mungKey($1, $2);
-
-                  # print STDERR qq{one: "$1", two: "$2", kwy: "$key"\n};
-
-                  $nb_timeunit++;
-                  # Is it a valid alignment?
-                  if (! LstTidy::Parse::isValidFixedValue($1, $key)) {
-                     $logger->notice(
-                        qq{Invalid value "$key" for tag "$1"},
-                        $tag->file,
-                        $tag->line
-                     );
-                  }
-
-               } else {
-                  $nb_casterlevel++;
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'DEFINE Variable',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     LstTidy::Parse::extractVariables($2, $tag)
-                  ];
-               }
-
-               # Embeded PRExxx tags
-            } elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
-
-               my $preTag = $tag->clone(id => $1, value => $2);
-               validatePreTag($preTag, $tag->fullRealTag);
-
-            } else {
-
-               my ( $spellname, $dc ) = ( $param =~ /([^,]+),(.*)/ );
-
-               if ($dc) {
-
-                  # Spell name must be validated with the list of spells and DC is a formula
-                  push @spells, $spellname;
-
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'DEFINE Variable',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     LstTidy::Parse::extractVariables($dc, $tag)
-                  ];
-               }
-               else {
-
-                  # No DC present, the whole param is the spell name
-                  push @spells, $param;
-
-                  $logger->info(
-                     qq{the DC value is missing for "$param" in "} . $tag->fullTag . q{"},
-                     $tag->file,
-                     $tag->line
-                  );
-               }
-            }
-         }
-
-         push @LstTidy::Report::xcheck_to_process,
-         [
-            'SPELL',
-            $tag->id,
-            $tag->file,
-            $tag->line,
-            @spells
-         ];
-
-         # Validate the number of TIMES, TIMEUNIT, and CASTERLEVEL parameters
-         if ( $nb_times != 1 ) {
-            if ($nb_times) {
-               $logger->notice(
-                  qq{TIMES= should not be used more then once in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-            else {
-               $logger->info(
-                  qq{the TIMES= parameter is missing in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-         }
-
-         if ( $nb_timeunit != 1 ) {
-            if ($nb_timeunit) {
-               $logger->notice(
-                  qq{TIMEUNIT= should not be used more then once in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-            else {
-               if ( $AtWill_Flag ) {
-                  # Do not need a TIMEUNIT tag if the TIMES tag equals AtWill
-                  # Nothing to see here. Move along.
-               }
-               else {
-                  # [ 1997408 ] False positive: TIMEUNIT= parameter is missing
-                  # $logger->info(
-                  #       qq{the TIMEUNIT= parameter is missing in "} . $tag->fullTag . q{"},
-                  #       $tag->file,
-                  #       $tag->line
-                  # );
-               }
-            }
-         }
-
-         if ( $nb_casterlevel != 1 ) {
-            if ($nb_casterlevel) {
-               $logger->notice(
-                  qq{CASTERLEVEL= should not be used more then once in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-            else {
-               $logger->info(
-                  qq{the CASTERLEVEL= parameter is missing in "} . $tag->fullTag . q{"},
-                  $tag->file,
-                  $tag->line
-               );
-            }
-         }
+         validateKitSpells($tag);
       }
-      else {
-         # KIT SPELLS line type
-         # SPELLS:<parameter list>|<spell list>
-         # <parameter list> = <param id> = <param value { | <parameter list> }
-         # <spell list> := <spell name> { = <number> } { | <spell list> }
-         my @spells = ();
-
-         for my $spell_or_param (split q{\|}, $tag->value) {
-            # Is it a parameter?
-            if ( $spell_or_param =~ / \A ([^=]*) = (.*) \z/xms ) {
-               my ($param_id,$param_value) = ($1,$2);
-
-               if ( $param_id eq 'CLASS' ) {
-                  push @LstTidy::Report::xcheck_to_process,
-                  [
-                     'CLASS',
-                     qq{@@" in "} . $tag->fullTag,
-                     $tag->file,
-                     $tag->line,
-                     $param_value,
-                  ];
-
-               }
-               elsif ( $param_id eq 'SPELLBOOK') {
-                  # Nothing to do
-               }
-               elsif ( $param_value =~ / \A \d+ \z/mxs ) {
-                  # It's a spell after all...
-                  push @spells, $param_id;
-               }
-               else {
-                  $logger->notice(
-                     qq{Invalide SPELLS parameter: "$spell_or_param" found in "} . $tag->fullTag . q{"},
-                     $tag->file,
-                     $tag->line
-                  );
-               }
-            }
-            else {
-               # It's a spell
-               push @spells, $spell_or_param;
-            }
-         }
-
-         if ( scalar @spells ) {
-            push @LstTidy::Report::xcheck_to_process,
-            [
-               'SPELL',
-               $tag->id,
-               $tag->file,
-               $tag->line,
-               @spells,
-            ];
-         }
-      }
+   
+      ###################################################################################
 
    } elsif ( index( $tag->id, 'SPELLLEVEL:' ) == 0 || index( $tag->id, 'SPELLKNOWN:' ) == 0) {
 
@@ -3375,6 +3476,36 @@ sub validateTag {
       }
 
    }
+}
+
+=head2 validateSkill
+
+   Queue up the Skills for cross checking
+
+=cut
+
+sub validateSkill {
+
+   my ($tag) = @_;
+
+   my @skills = split /[|]/, $tag->value;
+
+   # ALL is a valid use in BONUS:SKILL, xCSKILL  - [ 1593872 ] False warning: No SKILL entry for CSKILL:ALL
+   @skills = grep { $_ ne 'ALL' } @skills;
+
+   # We need to filter out %CHOICE for the SKILL tag
+   if ( $tag->id eq 'SKILL' ) {
+      @skills = grep { $_ ne '%CHOICE' } @skills;
+   }
+
+   # To be processed later
+   push @LstTidy::Report::xcheck_to_process,
+   [   'SKILL',
+      $tag->id,
+      $tag->file,
+      $tag->line,
+      @skills,
+   ];
 }
 
 
