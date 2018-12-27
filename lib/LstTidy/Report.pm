@@ -26,7 +26,12 @@ use lib dirname(dirname abs_path $0);
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
 use LstTidy::Parse qw(getHeaderMissingOnLineType getMissingHeaderLineTypes);
-use LstTidy::Validate qw(isValidCategory isValidEntity isValidType);
+use LstTidy::Validate qw(
+   isValidCategory 
+   isValidEntity 
+   isValidSubEntity 
+   isValidType 
+   validSubEntityExists);
 
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
@@ -52,7 +57,6 @@ my %referrer_categories;
 # Format: push @{$referrer_types{$EntityType}{$typename}}, [ $tags{$column}, $file_for_error, $line_for_error ]
 my %referrer_types;
 
-my %validSubEntities;
 
 # Will hold the information for the entries that must be added in %referrer or
 # %referrer_types. The array is needed because all the files must have been
@@ -160,6 +164,10 @@ sub incCountValidTags {
    $count_tags{"Valid"}{"Total"}{$tag}++;
    $count_tags{"Valid"}{$lineType}{$tag}++;
 }
+
+
+
+
 
 =head2 openExportListFileHandles
 
@@ -420,7 +428,7 @@ sub add_to_xcheck_tables {
    return if $file !~ / \A ${inputpath} /xmsi;
 
    # We remove the empty elements in the list
-   @list = grep { $_ ne "" } @list;
+   @list = grep { defined $_ && $_ ne "" } @list;
 
    # If the list of entry is empty, we retrun immediately
    return if scalar @list == 0;
@@ -540,7 +548,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $validSubEntities{'FEAT'}{$1} ) {
+            if ( isValidSubEntity('FEAT', $1) ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -549,9 +557,9 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                FEAT_ENTITY:
-               while ( $validSubEntities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
+               while ( isValidSubEntity('FEAT', $feat_to_check) =~ /^FEAT=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $validSubEntities{'FEAT'}{$feat_to_check} ) {
+                  if ( !validSubEntityExists('FEAT', $feat_to_check) ) {
                      getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
@@ -563,7 +571,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $validSubEntities{'FEAT'}{$feat_to_check},
+                  isValidSubEntity('FEAT', $feat_to_check),
                   $sub_tagName,
                   $file,
                   $line,
@@ -604,7 +612,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $validSubEntities{'ABILITY'}{$1} ) {
+            if ( isValidSubEntity('ABILITY', $1) ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -613,9 +621,9 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                ABILITY_ENTITY:
-               while ( $validSubEntities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
+               while ( isValidSubEntity('ABILITY', $feat_to_check) =~ /^ABILITY=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $validSubEntities{'ABILITY'}{$feat_to_check} ) {
+                  if ( !validSubEntityExists('ABILITY', $feat_to_check) ) {
                      getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
@@ -627,7 +635,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $validSubEntities{'ABILITY'}{$feat_to_check},
+                  isValidSubEntity('ABILITY', $feat_to_check),
                   $sub_tagName,
                   $file,
                   $line,
@@ -775,7 +783,7 @@ sub add_to_xcheck_tables {
          if ( $skill =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the SKILL is a compond tag
-            if ( $validSubEntities{'SKILL'}{$1} ) {
+            if ( isValidSubEntity('SKILL', $1) ) {
                $skill = $1;
                my $entity = $2;
 
@@ -783,7 +791,7 @@ sub add_to_xcheck_tables {
                $sub_tagName =~ s/@@/$skill (@@)/;
 
                add_to_xcheck_tables(
-                  $validSubEntities{'SKILL'}{$skill},
+                  isValidSubEntity('SKILL', $skill),
                   $sub_tagName,
                   $file,
                   $line,
