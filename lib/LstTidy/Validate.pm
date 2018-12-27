@@ -6,7 +6,15 @@ use warnings;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(isValidCategory isValidEntity isValidType setEntityValid);
+our @EXPORT_OK = qw(
+   isValidCategory 
+   isValidEntity 
+   isValidSubEntity 
+   isValidType 
+   setEntityValid 
+   validateLine
+   validSubEntityExists
+   );
 
 use Text::Balanced ();
 
@@ -14,9 +22,13 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Parse qw(mungKey);
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
+use LstTidy::Parse qw(mungKey);
+use LstTidy::Reformat qw(getEntityNameTag);
+# use LstTidy::Report qw(addValidSubEntity);
+
+use Data::Dumper;
 
 # The PRExxx tags. They are used in many of the line types.
 # From now on, they are defined in only one place and every
@@ -276,6 +288,13 @@ my %racePartialMatch;
 # system values that are valid but never defined in the .lst files.
 my %validEntities;
 
+# Will hold the entities that are allowed to include
+# a sub-entity between () in their name.
+# e.g. Skill Focus(Spellcraft)
+# Format: $validSubEntities{$entity_type}{$entity_name} = $sub_entity_type;
+# e.g. :  $validSubEntities{'FEAT'}{'Skill Focus'} = 'SKILL';
+my %validSubEntities;
+
 # Will hold the valid types for the TYPE. or TYPE= found in different tags.
 # Format validTypes{$entitytype}{$typename}
 my %validTypes;
@@ -426,6 +445,23 @@ my %standardOperations = (
    'SWITCHRACE'         => \&validateSwitchRace,
    'TYPE'               => \&processTypes,
 );
+
+
+
+
+
+=head2 addValidSubEntity
+
+   Record validity data for a particular sub-entity of a given entity.
+
+=cut
+
+sub addValidSubEntity {
+
+   my ($entity, $subEntity, $data) = @_;
+
+   $validSubEntities{$entity}{$subEntity} = $data;
+}
 
 
 =head2 checkFirstValue
@@ -606,6 +642,27 @@ sub isValidEntity {
    my ($entitytype, $entityname) = @_;
 
    return exists $validEntities{$entitytype}{$entityname};
+}
+
+sub dumpValidEntities {
+
+   print STDERR Dumper %validEntities;
+
+}
+
+
+
+=head2 isValidSubEntity
+
+   Returns any data stored for the given entity sub-entity combination.
+
+=cut
+
+sub isValidSubEntity {
+
+   my ($entity, $subEntity) = @_;
+
+   $validSubEntities{$entity}{$subEntity};
 }
 
 
@@ -1108,7 +1165,20 @@ sub processBonusTag {
 
    my ($tag) = @_;
 
-   my (undef, $subtag) = split qr/:/, $tag->id, 2;
+   my $subtag;
+
+   if ($tag->id =~ qr(:)) {
+      (undef, $subtag) = split qr/:/, $tag->id, 2;
+   } else {
+      ($subtag) = split qr/\|/, $tag->id, 2;
+   }
+
+
+   if (not defined $subtag) {
+      print STDERR "!!! Full tag: <" . $tag->fullRealTag . qq{>\n};
+      print STDERR "!!! tag: <" . $tag->id . qq{>\n};
+      print STDERR "!!! value <" . $tag->value . qq{>\n};
+   }
 
    # Are there any PRE tags in the BONUS tag.
    if ( $tag->value =~ /(!?PRE[A-Z]*):([^|]*)/ ) {
@@ -2280,7 +2350,7 @@ sub validateClearTag {
 
 =head2 validateDefine
 
-   Extract the defined name and any variables used to defineit, queue them up for cross checking.
+   Extract the defined name and any variables used to define it, queue them up for cross checking.
 
 =cut
 
@@ -2294,7 +2364,7 @@ sub validateDefine {
    # First we store the DEFINE variable name
    if ($var_name) {
       if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
-         LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
+         setEntityValid('DEFINE Variable', $var_name);
 
          #####################################################
          # Export a list of variable names if requested
@@ -2660,6 +2730,437 @@ sub validateKitSpells {
       ];
    }
 }
+
+
+
+
+###############################################################
+# validateLine
+# -------------
+#
+# This function perform validation that must be done on a
+# whole line at a time.
+#
+# Paramter: $line_ref           Ref to a hash containing the tags of the line
+#               $linetype               Type for the current line
+#               $file_for_error   Name of the current file
+#               $line_for_error   Number of the current line
+
+sub validateLine {
+
+   my ( $line_ref, $linetype, $file_for_error, $line_for_error ) = @_;
+
+   my $logger = getLogger();
+
+        ########################################################
+        # Validation for the line identifier
+        ########################################################
+
+        if ( !($linetype eq 'SOURCE'
+                || $linetype eq 'KIT LANGAUTO'
+                || $linetype eq 'KIT NAME'
+                || $linetype eq 'KIT FEAT'
+                || $file_for_error =~ m{ [.] PCC \z }xmsi
+                || $linetype eq 'COMPANIONMOD') # FOLLOWER:Class1,Class2=level
+        ) {
+
+                # We get the line identifier.
+                my $identifier = $line_ref->{ @{LstTidy::Reformat::getLineTypeOrder($linetype)}[0] }[0];
+
+                # We hunt for the bad comma.
+                if($identifier =~ /,/) {
+                        $logger->notice(
+                                qq{"," (comma) should not be used in line identifier name: $identifier},
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+        }
+
+        ########################################################
+        # Special validation for specific tags
+        ########################################################
+
+        if ( 0 && $linetype eq 'SPELL' )        # disabled for now.
+        {
+
+                # Either or both CLASSES and DOMAINS tags must be
+                # present in a normal SPELL line
+
+                if (  exists $line_ref->{'000SpellName'}
+                        && $line_ref->{'000SpellName'}[0] !~ /\.MOD$/
+                        && exists $line_ref->{'TYPE'}
+                        && $line_ref->{'TYPE'}[0] ne 'TYPE:Psionic.Attack Mode'
+                        && $line_ref->{'TYPE'}[0] ne 'TYPE:Psionic.Defense Mode' )
+                {
+                        $logger->info(
+                                qq(No CLASSES or DOMAINS tag found for SPELL "$line_ref->{'000SpellName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        ) if !( exists $line_ref->{'CLASSES'} || exists $line_ref->{'DOMAINS'} );
+                }
+        }
+        elsif ( $linetype eq "ABILITY" ) {
+
+                # On an ABILITY line type:
+                # 0) MUST contain CATEGORY tag
+                # 1) if it has MULT:YES, it  _has_ to have CHOOSE
+                # 2) if it has CHOOSE, it _has_ to have MULT:YES
+                # 3) if it has STACK:YES, it _has_ to have MULT:YES (and CHOOSE)
+
+                # Find lines that modify or remove Categories of Abilityies without naming the Abilities
+                my $MOD_Line = $line_ref->{'000AbilityName'}[0];
+                study $MOD_Line;
+
+                if ( $MOD_Line =~ /\.(MOD|FORGET|COPY=)/ ) {
+                        # Nothing to see here. Move on.
+                }
+                # Find the Abilities lines without Categories
+                elsif ( !$line_ref->{'CATEGORY'} ) {
+                        $logger->warning(
+                                qq(The CATEGORY tag is required in ABILITY "$line_ref->{'000AbilityName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+                my ( $hasCHOOSE, $hasMULT, $hasSTACK );
+
+                $hasCHOOSE = 1 if exists $line_ref->{'CHOOSE'};
+                $hasMULT   = 1 if exists $line_ref->{'MULT'} && $line_ref->{'MULT'}[0] =~ /^MULT:Y/i;
+                $hasSTACK  = 1 if exists $line_ref->{'STACK'} && $line_ref->{'STACK'}[0] =~ /^STACK:Y/i;
+
+                if ( $hasMULT && !$hasCHOOSE ) {
+                        $logger->info(
+                                qq(The CHOOSE tag is mandantory when MULT:YES is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:SPELLLEVEL/i ) {
+                        # The CHOOSE:SPELLLEVEL is exempted from this particular rule.
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when CHOOSE is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:NUMBER/i ) {
+                        # The CHOOSE:NUMBER is exempted from this particular rule.
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when CHOOSE is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+
+                if ( $hasSTACK && !$hasMULT ) {
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when STACK:YES is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+
+                # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
+                if ($hasCHOOSE) {
+
+                        # The CHOSE type tells us the type of sub-entities
+                        my $choose       = $line_ref->{'CHOOSE'}[0];
+                        my $ability_name = $line_ref->{'000AbilityName'}[0];
+                        $ability_name =~ s/.MOD$//;
+
+                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
+                           addValidSubEntity('ABILITY', $ability_name, $1)
+
+                        } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
+
+                           addValidSubEntity('ABILITY', $ability_name, 'FEAT')
+
+                        } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
+
+                           addValidSubEntity('ABILITY', $ability_name, 'WEAPONPROF')
+                        
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
+                        
+                           addValidSubEntity('ABILITY', $ability_name, 'SKILL')
+                        
+                        } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
+
+                           
+                           addValidSubEntity('ABILITY', $ability_name, 'SPELL_SCHOOL')
+                        
+                        } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
+                           
+                           addValidSubEntity('ABILITY', $ability_name, 'SPELL')
+                        
+                        } elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/ || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ ) {
+
+                           # Ad-Lib is a special case that means "Don't look for
+                           # anything else".
+                           addValidSubEntity('ABILITY', $ability_name, 'Ad-Lib')
+
+                        } elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
+
+                           # ad-hod/special list of thingy It adds to the valid
+                           # entities instead of the valid sub-entities.  We do
+                           # this when we find a CHOOSE but we do not know what
+                           # it is for.
+
+                           LstTidy::Validate::splitAndAddToValidEntities('ABILITY', $ability_name, $1);
+                        }
+                }
+
+        } elsif ( $linetype eq "FEAT" ) {
+
+                # [ 1671410 ] xcheck CATEGORY:Feat in Feat object.
+                my $hasCategory = 0;
+                $hasCategory = 1 if exists $line_ref->{'CATEGORY'};
+                if ($hasCategory) {
+                        if ($line_ref->{'CATEGORY'}[0] eq "CATEGORY:Feat" ||
+                            $line_ref->{'CATEGORY'}[0] eq "CATEGORY:Special Ability") {
+                                # Good
+                        }
+                        else {
+                                $logger->info(
+                                        qq(The CATEGORY tag must have the value of Feat or Special Ability when present on a FEAT. Remove or replace "$line_ref->{'CATEGORY'}[0]"),
+                                        $file_for_error,
+                                        $line_for_error
+                                );
+                        }
+                }
+
+                # On a FEAT line type:
+                # 1) if it has MULT:YES, it  _has_ to have CHOOSE
+                # 2) if it has CHOOSE, it _has_ to have MULT:YES
+                # 3) if it has STACK:YES, it _has_ to have MULT:YES (and CHOOSE)
+                my ( $hasCHOOSE, $hasMULT, $hasSTACK );
+
+                $hasCHOOSE = 1 if exists $line_ref->{'CHOOSE'};
+                $hasMULT   = 1 if exists $line_ref->{'MULT'} && $line_ref->{'MULT'}[0] =~ /^MULT:Y/i;
+                $hasSTACK  = 1 if exists $line_ref->{'STACK'} && $line_ref->{'STACK'}[0] =~ /^STACK:Y/i;
+
+                if ( $hasMULT && !$hasCHOOSE ) {
+                        $logger->info(
+                                qq(The CHOOSE tag is mandatory when MULT:YES is present in FEAT "$line_ref->{'000FeatName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:SPELLLEVEL/i ) {
+
+                        # The CHOOSE:SPELLLEVEL is exampted from this particular rule.
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when CHOOSE is present in FEAT "$line_ref->{'000FeatName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:NUMBER/i ) {
+
+                        # The CHOOSE:NUMBER is exampted from this particular rule.
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when CHOOSE is present in FEAT "$line_ref->{'000FeatName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+
+                if ( $hasSTACK && !$hasMULT ) {
+                        $logger->info(
+                                qq(The MULT:YES tag is mandatory when STACK:YES is present in FEAT "$line_ref->{'000FeatName'}[0]"),
+                                $file_for_error,
+                                $line_for_error
+                        );
+                }
+
+                # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
+                if ($hasCHOOSE) {
+
+                        # The CHOSE type tells us the type of sub-entities
+                        my $choose      = $line_ref->{'CHOOSE'}[0];
+                        my $feat_name = $line_ref->{'000FeatName'}[0];
+                        $feat_name =~ s/.MOD$//;
+
+                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
+                                addValidSubEntity('FEAT', $feat_name, $1)
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
+                                addValidSubEntity('FEAT', $feat_name, 'FEAT')
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
+                                addValidSubEntity('FEAT', $feat_name, 'WEAPONPROF')
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
+                                addValidSubEntity('FEAT', $feat_name, 'SKILL')
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
+                                addValidSubEntity('FEAT', $feat_name, 'SPELL_SCHOOL')
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
+                                addValidSubEntity('FEAT', $feat_name, 'SPELL')
+                        }
+                        elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/
+                                || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ )
+                        {
+
+                                # Ad-Lib is a special case that means "Don't look for
+                                # anything else".
+                                addValidSubEntity('FEAT', $feat_name, 'Ad-Lib')
+                        }
+                        elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
+
+                           LstTidy::Validate::splitAndAddToValidEntities('FEAT', $feat_name, $1);
+                        }
+                }
+        }
+        elsif ( $linetype eq "EQUIPMOD" ) {
+
+                # We keep track of the KEYs for the equipmods.
+                if ( exists $line_ref->{'KEY'} ) {
+
+                        # The KEY tag should only have one value and there should always be only
+                        # one KEY tag by EQUIPMOD line.
+
+                        # We extract the key name
+                        my ($key) = ( $line_ref->{'KEY'}[0] =~ /KEY:(.*)/ );
+
+                        if ($key) {
+
+                           LstTidy::Validate::setEntityValid("EQUIPMOD Key", $key);
+
+                        } else {
+
+                                $logger->warning(
+                                        qq(Could not parse the KEY in "$line_ref->{'KEY'}[0]"),
+                                        $file_for_error,
+                                        $line_for_error
+                                );
+                        }
+
+                } else {
+
+                        # [ 1368562 ] .FORGET / .MOD don\'t need KEY entries
+                        my $report_tag = $line_ref->{getEntityNameTag('EQUIPMOD')}[0];
+
+                        if ($report_tag =~ /.FORGET$|.MOD$/) {
+
+                        } else {
+                                $logger->info(
+                                qq(No KEY tag found for "$report_tag"),
+                                $file_for_error,
+                                $line_for_error
+                                );
+                        }
+                }
+                if ( exists $line_ref->{'CHOOSE'} ) {               # [ 1870825 ] EqMod CHOOSE Changes
+                        my $choose = $line_ref->{'CHOOSE'}[0];
+                        my $eqmod_name = $line_ref->{'000ModifierName'}[0];
+                        $eqmod_name =~ s/.MOD$//;
+                        if ( $choose =~ /^CHOOSE:(NUMBER[^|]*)/ ) {
+                        # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|TITLE=Whatever
+                        # Valid: CHOOSE:NUMBER|1|2|3|4|5|6|7|8|TITLE=Whatever
+                        # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|INCREMENT=5|TITLE=Whatever
+                        # Valid: CHOOSE:NUMBER|MAX=99129342|INCREMENT=5|MIN=1|TITLE=Whatever
+                        # Only testing for TITLE= for now.
+                                # Test for TITLE= and warn if not present.
+                                if ( $choose !~ /(TITLE[=])/ ) {
+                                        $logger->info(
+                                        qq(TITLE= is missing in CHOOSE:NUMBER for "$choose"),
+                                        $file_for_error,
+                                        $line_for_error
+                                        );
+                                }
+                        }
+                        # Only CHOOSE:NOCHOICE is Valid
+                        elsif ( $choose =~ /^CHOOSE:NOCHOICE/ ) {
+                        }
+                        # CHOOSE:STRING|Foo|Bar|Monkey|Poo|TITLE=these are choices
+                        elsif ( $choose =~ /^CHOOSE:?(STRING)[^|]*/ ) {
+                                # Test for TITLE= and warn if not present.
+                                if ( $choose !~ /(TITLE[=])/ ) {
+                                        $logger->info(
+                                        qq(TITLE= is missing in CHOOSE:STRING for "$choose"),
+                                        $file_for_error,
+                                        $line_for_error
+                                        );
+                                }
+                        }
+                        # CHOOSE:STATBONUS|statname|MIN=2|MAX=5|TITLE=Enhancement Bonus
+                        # Statname is what I'd want to check to verify against the defined stats, but since it is optional....
+                        elsif ( $choose =~ /^CHOOSE:?(STATBONUS)[^|]*/ ) {
+#                               my $checkstat = $choose;
+#                               $checkstat =~ s/(CHOOSE:STATBONUS)// ;
+#                               $checkstat =~ s/[|]MIN=[-]?\d+\|MAX=\d+\|TITLE=.*//;
+                        }
+                        elsif ( $choose =~ /^CHOOSE:?(SKILLBONUS)[^|]*/ ) {
+                        }
+                        elsif ( $choose =~ /^CHOOSE:?(SKILL)[^|]*/ ) {
+                                if ( $choose !~ /(TITLE[=])/ ) {
+                                        $logger->info(
+                                        qq(TITLE= is missing in CHOOSE:SKILL for "$choose"),
+                                        $file_for_error,
+                                        $line_for_error
+                                        );
+                                }
+                        }
+                        elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.SPELL)[^|]*/ ) {
+                        }
+                        elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.EQTYPE)[^|]*/ ) {
+                        }
+                        # If not above, invaild CHOOSE for equipmod files.
+                        else {
+                                        $logger->warning(
+                                        qq(Invalid CHOOSE for Equipmod spells for "$choose"),
+                                        $file_for_error,
+                                        $line_for_error
+                                        );
+                        }
+                }
+
+        } elsif ( $linetype eq "CLASS" ) {
+
+           # [ 876536 ] All spell casting classes need CASTERLEVEL
+           #
+           # If SPELLTYPE is present and BONUS:CASTERLEVEL is not present,
+           # we warn the user.
+
+           if ( exists $line_ref->{'SPELLTYPE'} && !exists $line_ref->{'BONUS:CASTERLEVEL'} ) {
+              $logger->info(
+                 qq{Missing BONUS:CASTERLEVEL for "} . $line_ref->{getEntityNameTag('CLASS')}[0] . qq{"},
+                 $file_for_error,
+                 $line_for_error
+              );
+           }
+
+        } elsif ( $linetype eq 'SKILL' ) {
+
+                # We must identify the skills that have sub-entity e.g. Speak Language (Infernal)
+
+                if ( exists $line_ref->{'CHOOSE'} ) {
+
+                        # The CHOSE type tells us the type of sub-entities
+                        my $choose      = $line_ref->{'CHOOSE'}[0];
+                        my $skill_name = $line_ref->{'000SkillName'}[0];
+                        $skill_name =~ s/.MOD$//;
+
+                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?Language/ ) {
+                                addValidSubEntity('SKILL', $skill_name, 'LANGUAGE')
+                        }
+                }
+        }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3595,6 +4096,21 @@ sub validateStat {
 
 
 
+=head2 validSubEntityExists
+
+   Returns any data stored for the given entity sub-entity combination.
+
+=cut
+
+sub validSubEntityExists {
+
+   my ($entity, $subEntity) = @_;
+
+   $validSubEntities{$entity}{$subEntity};
+}
+
+
+
 =head2 validateSwitchRace
 
    Queue up the RaceType for cross checking.
@@ -3634,24 +4150,29 @@ sub validateTag {
 
    my ($tag) = @_;
 
-   my $validate;
+   my $valOp;
 
    if ($tag->id =~ qr/^\!?PRE/) {
-
       validatePreTag( $tag, "");
 
-   } elsif ($tag->id =~ qr/^BONUS/) {     $validate = \&processBonusTag;
-
-   } elsif ($tag->lineType ne 'PCC') {    $validate = $nonPCCOperations{$tag->id};
-
-   } elsif ($tag->lineType eq 'SPELL') {  $validate = $spellOperations{$tag->id};
-
-   } else {                               $validate = $standardOperations{$tag->id};
-
+   } elsif ($tag->id =~ qr/^BONUS/) {
+      $valOp = \&processBonusTag;
+   } 
+   
+   if ($tag->lineType eq 'SPELL' && not defined $valOp) {
+      $valOp = $spellOperations{$tag->id};
+   }
+   
+   if ($tag->lineType ne 'PCC' && not defined $valOp) {
+      $valOp = $nonPCCOperations{$tag->id};
    }
 
-   if (defined $validate) {
-      $validate->($tag);
+   if (not defined $valOp) {
+      $valOp = $standardOperations{$tag->id};
+   }
+
+   if (defined $valOp) {
+      $valOp->($tag);
    }
 }
 
