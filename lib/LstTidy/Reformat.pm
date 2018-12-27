@@ -3,6 +3,11 @@ package LstTidy::Reformat;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(getEntityNameTag);
+
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
@@ -487,6 +492,15 @@ our %masterOrder = (
       'DISPLAYLOCATION',
    ],
 
+   'ALIGNMENT' => [
+      '000AlignmentName',
+      'SORTKEY',
+      'ABB',
+      'KEY',
+      'VALIDFORDEITY',
+      'VALIDFORFOLLOWER',
+   ],
+
    'ARMORPROF' => [
       '000ArmorName',
       'KEY',
@@ -751,6 +765,16 @@ our %masterOrder = (
       'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
+   ],
+
+   'DATACONTROL' => [
+      '000DatacontrolName',
+      'DATAFORMAT',
+      'REQUIRED',
+      'SELECTABLE',
+      'VISIBLE',
+      'DISPLAYNAME',
+      'EXPLANATION',
    ],
 
    'DEITY' => [
@@ -1103,6 +1127,11 @@ our %masterOrder = (
       'LANGAUTO:*',                    # Deprecated - 6.0
    ],
 
+   'GLOBALMODIFIER' => [
+      '000GlobalmonName',
+      'EXPLANATION',
+   ],
+
    'KIT ALIGN' => [
       'ALIGN',
       'OPTION',
@@ -1339,19 +1368,19 @@ our %masterOrder = (
       'OPTION',
 
       # These tags load files
-      'DATACONTROL',
-      'STAT',
-      'SAVE',
-      'ALIGNMENT',
       'ABILITY',
       'ABILITYCATEGORY',
+      'ALIGNMENT',
       'ARMORPROF',
       'CLASS',
       'CLASSSKILL',
       'CLASSSPELL',
       'COMPANIONMOD',
+      'DATACONTROL',
+      'DATATABLE',
       'DEITY',
       'DOMAIN',
+      'DYNAMIC',
       'EQUIPMENT',
       'EQUIPMOD',
       'FEAT',
@@ -1360,9 +1389,12 @@ our %masterOrder = (
       'LSTEXCLUDE',
       'PCC',
       'RACE',
+      'SAVE',
       'SHIELDPROF',
+      'SIZE',
       'SKILL',
       'SPELL',
+      'STAT',
       'TEMPLATE',
       'WEAPONPROF',
       '#EXTRAFILE',                    # Fix #EXTRAFILE so it recognizes #EXTRAFILE references (so OGL is a known referenced file again.)
@@ -1474,6 +1506,13 @@ our %masterOrder = (
       'LANGAUTO:*',                    # Deprecated - 6.0
    ],
 
+   'SAVE' => [
+      '000SaveName',
+      'SORTKEY',
+      'KEY',
+      @globalBONUSTags,
+   ],
+
    'SHIELDPROF' => [
       '000ShieldName',
       'KEY',
@@ -1488,6 +1527,21 @@ our %masterOrder = (
       'SAB:*',
       'SA:.CLEAR',                     # Deprecated
       'SA:*',                          # Deprecated
+   ],
+
+   'SIZE' => [
+      '000SizeName',
+      'ABB',
+      'BONUS:ACVALUE',
+      'BONUS:COMBAT:*',
+      'BONUS:ITEMCAPACITY',
+      'BONUS:ITEMCOST',
+      'BONUS:ITEMWEIGHT:*',
+      'BONUS:LOADMULT',
+      'BONUS:SKILL:*',
+      'DISPLAYNAME',
+      'MODIFY:*',
+      'SIZENUM',
    ],
 
    'SKILL' => [
@@ -1617,6 +1671,21 @@ our %masterOrder = (
       'TEMPBONUS:*',
       'TEMPVALUE',
 #     'SPELLPOINTCOST:*',
+   ],
+
+   'STAT' => [
+      '000StatName',
+      'SORTKEY',
+      'ABB',
+      'KEY',
+      'STATMOD',
+      'DEFINE:MAXLEVELSTAT',
+      'DEFINE:*',
+      'MODIFY:*',
+      @globalBONUSTags,
+      'ABILITY',
+      'BONUS:LANG:*',
+      'BONUS:MODSKILLPOINTS:*',
    ],
 
    'SUBCLASS' => [
@@ -1790,6 +1859,7 @@ our %masterOrder = (
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'ADD:TEMPLATE:*',
       'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'DONOTADD:*',
       'EXCHANGELEVEL',
       'SPELLS:*',
       'TEMPLATE:.CLEAR',
@@ -2001,6 +2071,12 @@ our %masterOrder = (
 #     'WEIGHT',                        # Deprecated
    ],
 
+   'VARIABLE' => [
+      '000VariableName',
+      'EXPLANATION',
+      'GLOBAL'
+   ],
+
    'WEAPONPROF' => [
       '000WeaponName',
       'KEY',                           # [ 1695877 ] KEY tag is global
@@ -2017,58 +2093,77 @@ our %masterOrder = (
       'SA:*',                          # Deprecated 6.05.01
    ],
 
-   'VARIABLE' => [
-      '000VariableName',
-      'EXPLANATION',
-   ],
+   # New files already added
 
-   'DATACONTROL' => [
-      '000DatacontrolName',
-      'DATAFORMAT',
-      'REQUIRED',
-      'SELECTABLE',
-      'VISIBLE',
-      'DISPLAYNAME',
-      'EXPLANATION',
-   ],
+# ALIGNMENT
+#      '000AlignmentName',
+# DATACONTROL
+#      '000DatacontrolName',
+# GLOBALMODIFIER
+#      '000GlobalmonName',             # questionable
+# SAVE
+#      '000SaveName',
+# STAT
+#      '000StatName',
+# VARIABLE
+#      '000VariableName',
 
-   'GLOBALMOD' => [
-      '000GlobalmonName',
-      'EXPLANATION',
-   ],
+   # New files, not added
 
-   'ALIGNMENT' => [
-      '000AlignmentName',
-      'SORTKEY',
-      'ABB',
-      'KEY',
-      'VALIDFORDEITY',
-      'VALIDFORFOLLOWER',
-   ],
-
-   'STAT' => [
-      '000StatName',
-      'SORTKEY',
-      'ABB',
-      'KEY',
-      'STATMOD',
-      'DEFINE:MAXLEVELSTAT',
-      'DEFINE:*',
-      'MODIFY:*',
-      @globalBONUSTags,
-      'ABILITY',
-      'BONUS:LANG:*',
-      'BONUS:MODSKILLPOINTS:*',
-   ],
-
-   'SAVE' => [
-      '000SaveName',
-      'SORTKEY',
-      'KEY',
-      @globalBONUSTags,
-   ],
+# 'DATATABLE' => [],
+# 'DYNAMIC' => [],
+#
+# SIZE
+#      '000SizeName',
 
 );
+
+my %columnWithNoTag = (
+   'ABILITY'           => '000AbilityName', 
+   'ABILITYCATEGORY'   => '000AbilityCategory',
+   'ALIGNMENT'         => '000AlignmentName',
+   'ARMORPROF'         => '000ArmorName',
+   'CLASS Level'       => '000Level',
+   'CLASS'             => '000ClassName',
+   'COMPANIONMOD'      => '000Follower',
+   'DATACONTROL'       => '000DatacontrolName',
+   'DEITY'             => '000DeityName',
+   'DOMAIN'            => '000DomainName',
+   'EQUIPMENT'         => '000EquipmentName',
+   'EQUIPMOD'          => '000ModifierName',
+   'FEAT'              => '000FeatName',
+   'GLOBALMOD'         => '000GlobalmodName',
+   'LANGUAGE'          => '000LanguageName',
+   'MASTERBONUSRACE'   => '000MasterBonusRace',
+   'RACE'              => '000RaceName',
+   'SAVE'              => '000SaveName',
+   'SHIELDPROF'        => '000ShieldName',
+   'SIZE'              => '000SizeName',
+   'SKILL'             => '000SkillName',
+   'SPELL'             => '000SpellName',
+   'STAT'              => '000StatName',
+   'SUBCLASS'          => '000SubClassName',
+   'SUBSTITUTIONCLASS' => '000SubstitutionClassName',
+   'TEMPLATE'          => '000TemplateName',
+   'VARIABLE'          => '000VariableName',
+   'WEAPONPROF'        => '000WeaponName',
+);
+
+
+=head2 getEntityNameTag
+
+   Get the name of the first column of a line that does not start with a tag.
+
+=cut
+
+sub getEntityNameTag {
+
+   my ($entity) = @_;
+   $columnWithNoTag{$entity};
+}
+
+
+
 
 my %master_mult;        # Will hold the tags that can be there more then once
 
