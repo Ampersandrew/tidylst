@@ -1214,7 +1214,7 @@ our %SourceLineDef = (
    SepRegEx  => qr{ (?: [|] ) | (?: \t+ ) }xms,  # Catch both | and tab
 );
 
-# Some ppl may still want to use the old ways (for PCGen v5.9.5 and older)
+# Some people may still want to use the old ways (for PCGen v5.9.5 and older)
 if( getOption('oldsourcetag') ) {
    $SourceLineDef{Sep} = q{|};  # use | instead of [tab] to split
 }
@@ -1236,6 +1236,28 @@ our %parseControl = (
    ABILITYCATEGORY => [
       \%SourceLineDef,
       {  Linetype       => 'ABILITYCATEGORY',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+   
+   ALIGNMENT => [
+      \%SourceLineDef,
+      {  Linetype       => 'ALIGNMENT',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
+   ARMORPROF => [
+      \%SourceLineDef,
+      {  Linetype       => 'ARMORPROF',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -1358,6 +1380,17 @@ our %parseControl = (
       },
    ],
 
+   DATACONTROL => [
+      \%SourceLineDef,
+      {  Linetype       => 'DATACONTROL',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
    DEITY => [
       \%SourceLineDef,
       {  Linetype       => 'DEITY',
@@ -1405,6 +1438,17 @@ our %parseControl = (
    FEAT => [
       \%SourceLineDef,
       {  Linetype       => 'FEAT',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
+   GLOBALMOD => [
+      \%SourceLineDef,
+      {  Linetype       => 'GLOBALMOD',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -1579,53 +1623,20 @@ our %parseControl = (
       },
    ],
 
+   SAVE => [
+      \%SourceLineDef,
+      {  Linetype       => 'SAVE',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
    SKILL => [
       \%SourceLineDef,
       {  Linetype       => 'SKILL',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
-   ],
-
-   SPELL => [
-      \%SourceLineDef,
-      {  Linetype       => 'SPELL',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
-   ],
-
-   TEMPLATE => [
-      \%SourceLineDef,
-      {  Linetype       => 'TEMPLATE',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
-   ],
-
-   WEAPONPROF => [
-      \%SourceLineDef,
-      {  Linetype       => 'WEAPONPROF',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
-   ],
-
-   ARMORPROF => [
-      \%SourceLineDef,
-      {  Linetype       => 'ARMORPROF',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -1645,6 +1656,39 @@ our %parseControl = (
       },
    ],
 
+   SPELL => [
+      \%SourceLineDef,
+      {  Linetype       => 'SPELL',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
+   STAT => [
+      \%SourceLineDef,
+      {  Linetype       => 'STAT',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
+   TEMPLATE => [
+      \%SourceLineDef,
+      {  Linetype       => 'TEMPLATE',
+         RegEx          => qr(^([^\t:]+)),
+         Mode           => MAIN,
+         Format         => BLOCK,
+         Header         => BLOCK_HEADER,
+         ValidateKeep   => YES,
+      },
+   ],
+
    VARIABLE => [
       \%SourceLineDef,
       {  Linetype       => 'VARIABLE',
@@ -1656,9 +1700,9 @@ our %parseControl = (
       },
    ],
 
-   DATACONTROL => [
+   WEAPONPROF => [
       \%SourceLineDef,
-      {  Linetype       => 'DATACONTROL',
+      {  Linetype       => 'WEAPONPROF',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -1666,40 +1710,29 @@ our %parseControl = (
          ValidateKeep   => YES,
       },
    ],
-   GLOBALMOD => [
+   
+# New files already added
+
+# ALIGNMENT
+# DATACONTROL
+# GLOBALMODIFIER
+# SAVE
+# STAT
+# VARIABLE
+
+# New files, not added yet
+
+   'DATATABLE' => [
       \%SourceLineDef,
-      {  Linetype       => 'GLOBALMOD',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
    ],
 
-   SAVE => [
+   'DYNAMIC' => [
       \%SourceLineDef,
-      {  Linetype       => 'SAVE',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
    ],
-   STAT => [
+
+   'SIZE' => [
       \%SourceLineDef,
-      {  Linetype       => 'STAT',
-         RegEx          => qr(^([^\t:]+)),
-         Mode           => MAIN,
-         Format         => BLOCK,
-         Header         => BLOCK_HEADER,
-         ValidateKeep   => YES,
-      },
-   ],
-   ALIGNMENT => [
-      \%SourceLineDef,
-      {  Linetype       => 'ALIGNMENT',
+      {  Linetype       => 'DATACONTROL',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
