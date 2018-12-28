@@ -954,7 +954,7 @@ sub doXCheck {
             # -----------------------------
             # If an EQUIPMOD Key entry doesn't exists, we can use the EQUIPMOD
             # name 
-            $message =   ($linetype ne 'EQUIPMOD Key' )                         ? $linetype
+            $message =   ($linetype ne 'EQUIPMOD Key' )      ? $linetype
                        : (isValidEntity('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 
                        : 'EQUIPMOD Key or EQUIPMOD';
          }
