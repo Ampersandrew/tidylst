@@ -15,15 +15,15 @@ use lib dirname(dirname abs_path $0);
 use LstTidy::Log;
 use LstTidy::Options qw(getOption);
 
-my $logger;
+my $log;
 
 sub getLogger {
    
-   return $logger if defined $logger;
+   return $log if defined $log;
 
-   $logger = LstTidy::Log->new(warningLevel=>getOption('warninglevel'));
+   $log = LstTidy::Log->new(warningLevel=>getOption('warninglevel'));
 
-   return $logger;
+   return $log;
 }
 
 1;

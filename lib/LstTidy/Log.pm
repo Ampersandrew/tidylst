@@ -160,7 +160,7 @@ around 'header' => sub {
 
    Log a debug message
 
-   C<$logger->debug([message], [filename], [line number] )>
+   C<$log->debug([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -181,7 +181,7 @@ sub debug {
 
    Log an info message
 
-   C<$logger->info([message], [filename], [line number] )>
+   C<$log->info([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -203,7 +203,7 @@ sub info {
 
    Log a notice message
 
-   C<$logger->notice([message], [filename], [line number] )>
+   C<$log->notice([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -224,7 +224,7 @@ sub notice {
 
    Log a warning message
 
-   C<$logger->warning([message], [filename], [line number] )>
+   C<$log->warning([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -246,7 +246,7 @@ sub warning {
 
    Log an error message
 
-   C<$logger->error([message], [filename], [line number] )>
+   C<$log->error([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -269,7 +269,7 @@ sub error {
 
    This is the method that does the actual logging.
 
-   C<$logger->_log([severity], [message], [filename], [line number] )>
+   C<$log->_log([severity], [message], [filename], [line number] )>
 
    The first three parameters are mandatory, the line number is optional.
 
@@ -343,7 +343,7 @@ sub _log {
    This is the method that does a simple Report for things that we don't have
    Files or line numbers for.
 
-   C<$logger->report( [message] )>
+   C<$log->report( [message] )>
 
    [message] A text string describing the issue.
 

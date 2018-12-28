@@ -698,11 +698,11 @@ sub isValidType {
 sub scanForDeprecatedTags {
    my ( $line, $linetype, $file, $lineNum ) = @_ ;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # Deprecated tags
    if ( $line =~ /\scl\(/ ) {
-      $logger->info(
+      $log->info(
          qq{The Jep function cl() is deprecated, use classlevel() instead},
          $file,
          $lineNum
@@ -711,7 +711,7 @@ sub scanForDeprecatedTags {
 
    # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
    if ( $line =~ /\sBONUS:DAMAGE\s/ ) {
-      $logger->info(
+      $log->info(
          qq{BONUS:DAMAGE is deprecated 5.5.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y instead},
          $file,
          $lineNum
@@ -720,7 +720,7 @@ sub scanForDeprecatedTags {
 
    # [ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
    if ( $line =~ /\sBONUS:TOHIT\s/ ) {
-      $logger->info(
+      $log->info(
          qq{BONUS:TOHIT is deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x instead},
          $file,
          $lineNum
@@ -729,7 +729,7 @@ sub scanForDeprecatedTags {
 
    # [ 1973497 ] HASSPELLFORMULA is deprecated
    if ( $line =~ /\sHASSPELLFORMULA/ ) {
-      $logger->warning(
+      $log->warning(
          qq{HASSPELLFORMULA is no longer needed and is deprecated in PCGen 5.15},
          $file,
          $lineNum
@@ -737,7 +737,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /[\d+|\)]MAX\d+/ ) {
-      $logger->info(
+      $log->info(
          qq{The function aMAXb is deprecated, use the Jep function max(a,b) instead},
          $file,
          $lineNum
@@ -745,7 +745,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /[\d+|\)]MIN\d+/ ) {
-      $logger->info(
+      $log->info(
          qq{The function aMINb is deprecated, use the Jep function min(a,b) instead},
          $file,
          $lineNum
@@ -753,7 +753,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\b]TRUNC\b/ ) {
-      $logger->info(
+      $log->info(
          qq{The function TRUNC is deprecated, use the Jep function floor(a) instead},
          $file,
          $lineNum
@@ -761,7 +761,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sHITDICESIZE\s/ ) {
-      $logger->info(
+      $log->info(
          qq{HITDICESIZE is deprecated, use HITDIE instead},
          $file,
          $lineNum
@@ -769,7 +769,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sSPELL\s/ && $linetype ne 'PCC' ) {
-      $logger->info(
+      $log->info(
          qq{SPELL is deprecated, use SPELLS instead},
          $file,
          $lineNum
@@ -777,7 +777,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sWEAPONAUTO\s/ ) {
-      $logger->info(
+      $log->info(
          qq{WEAPONAUTO is deprecated, use AUTO:WEAPONPROF instead},
          $file,
          $lineNum
@@ -785,7 +785,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sADD:WEAPONBONUS\s/ ) {
-      $logger->info(
+      $log->info(
          qq{ADD:WEAPONBONUS is deprecated, use BONUS instead},
          $file,
          $lineNum
@@ -793,7 +793,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sADD:LIST\s/ ) {
-      $logger->info(
+      $log->info(
          qq{ADD:LIST is deprecated, use BONUS instead},
          $file,
          $lineNum
@@ -801,7 +801,7 @@ sub scanForDeprecatedTags {
    }
 
    if ( $line =~ /\sFOLLOWERALIGN/) {
-      $logger->info(
+      $log->info(
          qq{FOLLOWERALIGN is deprecated, use PREALIGN on Domain instead. Use the -c=pcgen5120 command line switch to fix this problem},
          $file,
          $lineNum
@@ -810,7 +810,7 @@ sub scanForDeprecatedTags {
 
    # [ 1905481 ] Deprecate CompanionMod SWITCHRACE
    if ( $line =~ /\sSWITCHRACE\s/) {
-      $logger->info(
+      $log->info(
          qq{SWITCHRACE is deprecated 5.13.11 - Remove 6.0 - Use RACETYPE:x tag instead },
          $file,
          $lineNum
@@ -819,7 +819,7 @@ sub scanForDeprecatedTags {
 
    # [ 1804786 ] Deprecate SA: replace with SAB:
    if ( $line =~ /\sSA:/) {
-      $logger->info(
+      $log->info(
          qq{SA is deprecated 5.x.x - Remove 6.0 - use SAB instead },
          $file,
          $lineNum
@@ -828,7 +828,7 @@ sub scanForDeprecatedTags {
 
    # [ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
    if ( $line =~ /\sCHOOSE:EQBUILDER\|1/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:EQBUILDER|1 is deprecated use CHOOSE:NOCHOICE instead },
          $file,
          $lineNum
@@ -837,7 +837,7 @@ sub scanForDeprecatedTags {
 
    # [ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
    if ( $line =~ /\sAUTO:ARMORPROF\|TYPE\=/) {
-      $logger->info(
+      $log->info(
          qq{AUTO:ARMORPROF|TYPE=x is deprecated Use AUTO:ARMORPROF|ARMORTYPE=x instead},
          $file,
          $lineNum
@@ -846,7 +846,7 @@ sub scanForDeprecatedTags {
 
    # [ 1870482 ] AUTO:SHIELDPROF changes
    if ( $line =~ /\sAUTO:SHIELDPROF\|TYPE\=/) {
-      $logger->info(
+      $log->info(
          qq{AUTO:SHIELDPROF|TYPE=x is deprecated Use AUTO:SHIELDPROF|SHIELDTYPE=x instead},
          $file,
          $lineNum
@@ -855,7 +855,7 @@ sub scanForDeprecatedTags {
 
    # [ NEWTAG-19 ] CHOOSE:ARMORPROF= is deprecated
    if ( $line =~ /\sCHOOSE:ARMORPROF\=/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:ARMORPROF= is deprecated 5.15 - Remove 6.0. Use CHOOSE:ARMORPROFICIENCY instead},
          $file,
          $lineNum
@@ -864,7 +864,7 @@ sub scanForDeprecatedTags {
 
    # [ NEWTAG-17 ] CHOOSE:FEATADD= is deprecated
    if ( $line =~ /\sCHOOSE:FEATADD\=/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:FEATADD= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
          $file,
          $lineNum
@@ -873,7 +873,7 @@ sub scanForDeprecatedTags {
 
    # [ NEWTAG-17 ] CHOOSE:FEATLIST= is deprecated
    if ( $line =~ /\sCHOOSE:FEATLIST\=/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:FEATLIST= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
          $file,
          $lineNum
@@ -882,7 +882,7 @@ sub scanForDeprecatedTags {
 
    # [ NEWTAG-17 ] CHOOSE:FEATSELECT= is deprecated
    if ( $line =~ /\sCHOOSE:FEATSELECT\=/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:FEATSELECT= is deprecated 5.15 - Remove 6.0. Use CHOOSE:FEAT instead},
          $file,
          $lineNum
@@ -892,7 +892,7 @@ sub scanForDeprecatedTags {
 
    # [ 1888288 ] CHOOSE:COUNT= is deprecated
    if ( $line =~ /\sCHOOSE:COUNT\=/) {
-      $logger->info(
+      $log->info(
          qq{CHOOSE:COUNT= is deprecated 5.13.9 - Remove 6.0. Use SELECT instead},
          $file,
          $lineNum
@@ -1137,12 +1137,12 @@ sub processBonusSlots {
 
    my ($type_list, $formula) = ( split '\|', $tag->value )[1, 2];
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $log = LstTidy::LogFactory::getLogger();
 
    # We first check the slot types
    for my $type ( split ',', $type_list ) {
       unless ( exists $validBonusSlots{$type} ) {
-         $logger->notice(
+         $log->notice(
             qq{Invalid slot type "$type" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -1464,7 +1464,7 @@ sub processPRECHECK {
    }
 
    # Get the logger once outside the loop
-   my $logger = getLogger();
+   my $log = getLogger();
 
    for my $item ( @values ) {
 
@@ -1473,14 +1473,14 @@ sub processPRECHECK {
 
          # If we don't recognise it.
          if ( ! LstTidy::Parse::isValidCheck($check_name) ) {
-            $logger->notice(
+            $log->notice(
                qq{Invalid save check name "$check_name" found in "} . $tag->fullRealValue . q{"},
                $tag->file,
                $tag->line
             );
          }
       } else {
-         $logger->notice(
+         $log->notice(
             $tag->id . qq{ syntax error in "$item" found in "} . $tag->fullRealValue . q{"},
             $tag->file,
             $tag->line
@@ -1811,7 +1811,7 @@ sub validateAbilityLine {
 
    my ($entityName, $lineType, $lineTokens, $file, $line) = @_;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    my $hasCHOOSE = 1 if exists $lineTokens->{'CHOOSE'};
    my $hasMULT   = 1 if exists $lineTokens->{'MULT'} && $lineTokens->{'MULT'}[0] =~ /^MULT:Y/i;
@@ -1829,7 +1829,7 @@ sub validateAbilityLine {
 
    if ( $hasMULT && !$hasCHOOSE ) {
 
-      $logger->info(
+      $log->info(
          qq(The CHOOSE tag is mandantory when MULT:YES is present in ${lineType} "${entityName}"),
          $file,
          $line
@@ -1838,7 +1838,7 @@ sub validateAbilityLine {
    } elsif ( $hasCHOOSE && !$hasMULT && $choose !~ /CHOOSE:(?:SPELLLEVEL|NUMBER)/i ) {
 
       # CHOOSE:SPELLLEVEL and CHOOSE:NUMBER are exempted from this particular rule.
-      $logger->info(
+      $log->info(
          qq(The MULT:YES tag is mandatory when CHOOSE is present in ${lineType} "${entityName}"),
          $file,
          $line
@@ -1846,7 +1846,7 @@ sub validateAbilityLine {
    }
 
    if ( $hasSTACK && !$hasMULT ) {
-      $logger->info(
+      $log->info(
          qq(The MULT:YES tag is mandatory when STACK:YES is present in ${lineType} "${entityName}"),
          $file,
          $line
@@ -2097,7 +2097,7 @@ sub validateBonusChecks {
 
       my ($base, $non_base) = ( 0, 0 );
 
-      my $logger = getLogger();
+      my $log = getLogger();
 
       for my $check ( split q{,}, $checks ) {
 
@@ -2112,7 +2112,7 @@ sub validateBonusChecks {
          }
 
          if ( ! LstTidy::Parse::isValidCheck($cleanCheck) ) {
-            $logger->notice(
+            $log->notice(
                qq{Invalid save check name "$check" found in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -2122,7 +2122,7 @@ sub validateBonusChecks {
 
       # Warn the user if they're mixing base and non-base
       if ( $base && $non_base ) {
-         $logger->info(
+         $log->info(
             qq{Are you sure you want to mix BASE and non-BASE in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -2229,12 +2229,12 @@ sub validateBonusWeildCategory {
    # BONUS:WIELDCATEGORY|<List of category>|<formula>
    my ($category_list, $formula) = ( split '\|', $tag->value )[1, 2];
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $log = LstTidy::LogFactory::getLogger();
 
    # Validate the category to see if valid
    for my $category ( split ',', $category_list ) {
       if ( !exists $validWieldCategory{$category} ) {
-         $logger->notice(
+         $log->notice(
             qq{Invalid category "$category" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -2366,7 +2366,7 @@ sub validateClassesOnSpell {
    my ($tag) = @_;
 
    my %seen;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # First we find all the classes used
    for my $level ( split '\|', $tag->value ) {
@@ -2389,7 +2389,7 @@ sub validateClassesOnSpell {
                ];
 
                if ( $seen{$entity}++ ) {
-                  $logger->notice(
+                  $log->notice(
                      qq{"$entity" found more than once in } . $tag->id,
                      $tag->file,
                      $tag->line
@@ -2402,7 +2402,7 @@ sub validateClassesOnSpell {
          if ( $tag->id . ":$level" eq 'CLASSES:.CLEARALL' ) {
             # Nothing to see here. Move on.
          } else {
-            $logger->warning(
+            $log->warning(
                qq{Missing "=level" after "} . $tag->id . ":$level",
                $tag->file,
                $tag->line
@@ -2469,7 +2469,7 @@ sub validateClearTag {
 sub validateDefine {
 
    my ($tag) = @_;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    my ( $var_name, @formulas ) = split '\|', $tag->value;
 
@@ -2488,7 +2488,7 @@ sub validateDefine {
 
          # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
       } elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
-         $logger->notice(
+         $log->notice(
             qq{Invalid variable name "$var_name" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -2496,7 +2496,7 @@ sub validateDefine {
       }
 
    } else {
-      $logger->notice(
+      $log->notice(
          qq{I was not able to find a proper variable name in "} . $tag->fullTag . q{"},
          $tag->file,
          $tag->line
@@ -2633,7 +2633,7 @@ sub validateDomainsOnSpell {
    my ($tag) = @_;
 
    my %seen;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # First we find all the classes used
    for my $level ( split '\|', $tag->value ) {
@@ -2655,7 +2655,7 @@ sub validateDomainsOnSpell {
             ];
 
             if ( $seen{$entity}++ ) {
-               $logger->notice(
+               $log->notice(
                   qq{"$entity" found more than once in } . $tag->id,
                   $tag->file,
                   $tag->line
@@ -2664,7 +2664,7 @@ sub validateDomainsOnSpell {
          }
 
       } else {
-         $logger->warning(
+         $log->warning(
             qq{Missing "=level" after "} . $tag->id . ":$level",
             $tag->file,
             $tag->line
@@ -2785,7 +2785,7 @@ sub validateEQMODKey {
 
    my ($lineType, $lineTokens, $file, $line) = @_;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # We keep track of the KEYs for the equipmods.
    if ( exists $lineTokens->{'KEY'} ) {
@@ -2799,7 +2799,7 @@ sub validateEQMODKey {
 
       } else {
 
-         $logger->warning(
+         $log->warning(
             qq(Could not parse the KEY in "$lineTokens->{'KEY'}[0]"),
             $file,
             $line
@@ -2816,7 +2816,7 @@ sub validateEQMODKey {
       if ($fullEntityName =~ /.FORGET$|.MOD$/) {
 
       } else {
-         $logger->info(
+         $log->info(
             qq(No KEY tag found for "${fullEntityName}"),
             $file,
             $line
@@ -2912,7 +2912,7 @@ sub validateLine {
 
    my ($lineType, $lineTokens, $file, $line) = @_;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # We get the contents of the tag at the start of the line (the one that only
    # has a value).
@@ -2934,7 +2934,7 @@ sub validateLine {
 
       # We hunt for the bad comma.
       if ($entityName =~ /,/) {
-         $logger->notice(
+         $log->notice(
             qq{"," (comma) should not be used in line entityName name: $entityName},
             $file,
             $line
@@ -2954,7 +2954,7 @@ sub validateLine {
 
       # Find the other Abilities lines without Categories
       } elsif ( !$lineTokens->{'CATEGORY'} ) {
-         $logger->warning(
+         $log->warning(
             qq(The CATEGORY tag is required in ${lineType} "${entityName}"),
             $file,
             $line
@@ -2970,7 +2970,7 @@ sub validateLine {
          my $category = $lineTokens->{'CATEGORY'}[0];
          if ($category !~ qr"CATEGORY:(?:Feat|Special Ability)") {
 
-            $logger->info(
+            $log->info(
                qq(The CATEGORY tag must have the value of Feat or Special Ability ) .
                qq(when present on a FEAT. Remove or replace "${category}"),
                $file,
@@ -2997,7 +2997,7 @@ sub validateLine {
             # Only testing for TITLE= for now.
             # Test for TITLE= and warn if not present.
             if ( $choose !~ /(TITLE[=])/ ) {
-               $logger->info(
+               $log->info(
                   qq(TITLE= is missing in CHOOSE:NUMBER for "$choose"),
                   $file,
                   $line
@@ -3011,7 +3011,7 @@ sub validateLine {
 
             # Test for TITLE= and warn if not present.
             if ( $choose !~ /(TITLE[=])/ ) {
-               $logger->info(
+               $log->info(
                   qq(TITLE= is missing in CHOOSE:STRING for "$choose"),
                   $file,
                   $line
@@ -3025,7 +3025,7 @@ sub validateLine {
 
          } elsif ( $choose =~ /^CHOOSE:?(SKILL)[^|]*/ ) {
             if ( $choose !~ /(TITLE[=])/ ) {
-               $logger->info(
+               $log->info(
                   qq(TITLE= is missing in CHOOSE:SKILL for "$choose"),
                   $file,
                   $line
@@ -3038,7 +3038,7 @@ sub validateLine {
 
          # If not above, invaild CHOOSE for equipmod files.
          } else {
-            $logger->warning(
+            $log->warning(
                qq(Invalid CHOOSE for Equipmod spells for "$choose"),
                $file,
                $line
@@ -3049,7 +3049,7 @@ sub validateLine {
    } elsif ( $lineType eq "CLASS" ) {
 
       if ( exists $lineTokens->{'SPELLTYPE'} && !exists $lineTokens->{'BONUS:CASTERLEVEL'} ) {
-         $logger->info(
+         $log->info(
             qq{Missing BONUS:CASTERLEVEL for "${entityName}"},
             $file,
             $line
@@ -3082,7 +3082,7 @@ sub validateMove {
 
    my ($tag) = @_;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # MOVE:<move type>,<value>
    # ex. MOVE:Walk,30,Fly,20,Climb,10,Swim,10
@@ -3096,7 +3096,7 @@ sub validateMove {
 
       # $type should be a word and $value should be a number
       if ( $type =~ /^\d+$/ ) {
-         $logger->notice(
+         $log->notice(
             qq{I was expecting a move type where I found "$type" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3110,7 +3110,7 @@ sub validateMove {
       }
 
       unless ( $value =~ /^\d+$/ ) {
-         $logger->notice(
+         $log->notice(
             qq{I was expecting a number after "$type" and found "$value" in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3180,7 +3180,7 @@ sub validateNaturalAttacks {
 
    my ($tag) = @_;
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # NATURALATTACKS:<Natural weapon name>,<List of type>,<attacks>,<damage>|...
    #
@@ -3197,7 +3197,7 @@ sub validateNaturalAttacks {
 
          # If Parameter 5 exists, it must be an SPROP
          if (defined $parameters[4]) {
-            $logger->notice(
+            $log->notice(
                qq{5th parameter should be an SPROP in "NATURALATTACKS:$entry"},
                $tag->file,
                $tag->line
@@ -3205,7 +3205,7 @@ sub validateNaturalAttacks {
          }
 
          # Parameter 3 is a number
-         $logger->notice(
+         $log->notice(
             qq{3rd parameter should be a number in "NATURALATTACKS:$entry"},
             $tag->file,
             $tag->line
@@ -3223,7 +3223,7 @@ sub validateNaturalAttacks {
 
       } else {
 
-         $logger->notice(
+         $log->notice(
             qq{Wrong number of parameter for "NATURALATTACKS:$entry"},
             $tag->file,
             $tag->line
@@ -3243,7 +3243,7 @@ sub validateNaturalAttacks {
 sub validateNonKitSpells {
 
    my ($tag) = @_;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # Syntax: SPELLS:<spellbook>|[TIMES=<times per day>|][TIMEUNIT=<unit of time>|][CASTERLEVEL=<CL>|]<Spell list>[|<prexxx tags>]
    # <Spell list> = <Spell name>,<DC> [|<Spell list>]
@@ -3282,7 +3282,7 @@ sub validateNonKitSpells {
             $nb_timeunit++;
             # Is it a valid alignment?
             if (! LstTidy::Parse::isValidFixedValue($1, $key)) {
-               $logger->notice(
+               $log->notice(
                   qq{Invalid value "$key" for tag "$1"},
                   $tag->file,
                   $tag->line
@@ -3331,7 +3331,7 @@ sub validateNonKitSpells {
             # No DC present, the whole param is the spell name
             push @spells, $param;
 
-            $logger->info(
+            $log->info(
                qq{the DC value is missing for "$param" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -3352,7 +3352,7 @@ sub validateNonKitSpells {
    # Validate the number of TIMES, TIMEUNIT, and CASTERLEVEL parameters
    if ( $nb_times != 1 ) {
       if ($nb_times) {
-         $logger->notice(
+         $log->notice(
             qq{TIMES= should not be used more then once in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3360,7 +3360,7 @@ sub validateNonKitSpells {
 
       } else {
 
-         $logger->info(
+         $log->info(
             qq{the TIMES= parameter is missing in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3370,7 +3370,7 @@ sub validateNonKitSpells {
 
    if ( $nb_timeunit != 1 ) {
       if ($nb_timeunit) {
-         $logger->notice(
+         $log->notice(
             qq{TIMEUNIT= should not be used more then once in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3383,7 +3383,7 @@ sub validateNonKitSpells {
             # Nothing to see here. Move along.
          } else {
             # [ 1997408 ] False positive: TIMEUNIT= parameter is missing
-            # $logger->info(
+            # $log->info(
             #       qq{the TIMEUNIT= parameter is missing in "} . $tag->fullTag . q{"},
             #       $tag->file,
             #       $tag->line
@@ -3394,7 +3394,7 @@ sub validateNonKitSpells {
 
    if ( $nb_casterlevel != 1 ) {
       if ($nb_casterlevel) {
-         $logger->notice(
+         $log->notice(
             qq{CASTERLEVEL= should not be used more then once in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3402,7 +3402,7 @@ sub validateNonKitSpells {
 
       } else {
 
-         $logger->info(
+         $log->info(
             qq{the CASTERLEVEL= parameter is missing in "} . $tag->fullTag . q{"},
             $tag->file,
             $tag->line
@@ -3761,7 +3761,7 @@ sub validateSkill {
 sub validateSpellLevelClass {
 
    my ($tag) = @_;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # The syntax for SPELLLEVEL:CLASS is
    # SPELLLEVEL:CLASS|<class-list of spells>
@@ -3806,7 +3806,7 @@ sub validateSpellLevelClass {
 
             } else {
 
-               $logger->notice(
+               $log->notice(
                   qq{Invalid syntax for "$class" in "} . $tag->fullTag . q{"},
                   $tag->file,
                   $tag->line
@@ -3826,7 +3826,7 @@ sub validateSpellLevelClass {
 
          } else {
 
-            $logger->notice(
+            $log->notice(
                qq{Invalid class/spell list paring in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -3836,7 +3836,7 @@ sub validateSpellLevelClass {
       }
 
    } else {
-      $logger->notice(
+      $log->notice(
          qq{No value found for "} . $tag->id . q{"},
          $tag->file,
          $tag->line
@@ -3852,7 +3852,7 @@ sub validateSpellLevelClass {
 sub validateSpellLevelDomain {
 
    my ($tag) = @_;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # The syntax for SPELLLEVEL:DOMAIN is
    # SPELLLEVEL:CLASS|<domain-list of spells>
@@ -3885,7 +3885,7 @@ sub validateSpellLevelDomain {
 
             } else {
 
-               $logger->notice(
+               $log->notice(
                   qq{Invalid syntax for "$domain" in "} . $tag->fullTag . q{"},
                   $tag->file,
                   $tag->line
@@ -3904,7 +3904,7 @@ sub validateSpellLevelDomain {
             ];
 
          } else {
-            $logger->notice(
+            $log->notice(
                qq{Invalid domain/spell list paring in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -3914,7 +3914,7 @@ sub validateSpellLevelDomain {
       }
 
    } else {
-      $logger->notice(
+      $log->notice(
          qq{No value found for "} . $tag->id . q{"},
          $tag->file,
          $tag->line
@@ -3954,7 +3954,7 @@ sub validateSpells {
 sub validateStat {
 
    my ($tag) = @_;
-   my $logger = getLogger();
+   my $log = getLogger();
 
    if ( $tag->lineType eq 'KIT STAT' ) {
 
@@ -3968,7 +3968,7 @@ sub validateStat {
 
          if ( !defined $stat ) {
             # Syntax error
-            $logger->notice(
+            $log->notice(
                qq{Invalid syntax for "$stat_expression" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -3979,7 +3979,7 @@ sub validateStat {
 
          if ( !exists $stat_count_for{$stat} ) {
             # The stat is not part of the official list
-            $logger->notice(
+            $log->notice(
                qq{Invalid attribute name "$stat" in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -3992,7 +3992,7 @@ sub validateStat {
       # We check to see if some stat are repeated
       for my $stat ( LstTidy::Parse::getValidSystemArr('stats')) {
          if ( $stat_count_for{$stat} > 1 ) {
-            $logger->notice(
+            $log->notice(
                qq{Found $stat more then once in "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line

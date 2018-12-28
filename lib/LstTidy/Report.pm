@@ -307,38 +307,38 @@ sub report {
    $maxNumLength++;
    my $format = "% ${maxNumLength}d";
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    my $header = $reportType . ' Tags';
 
-   $logger->header(LstTidy::LogHeader::get($header));
+   $log->header(LstTidy::LogHeader::get($header));
 
    my $first = 1;
    LINE_TYPE:
    for my $lineType ( sort grep {$_ ne 'Total'} keys %{ $count_tags{$reportType} } ) {
 
       my $lineHead = $first ? "Line Type: $lineType\n" : "\nLine Type: $lineType\n";
-      $logger->report($lineHead);
+      $log->report($lineHead);
 
       for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{$lineType} } ) {
 
          my $line = "    $tag";
          $line .= ( " " x ( 26 - length($tag) ) );
          $line .= sprintf $format, $count_tags{$reportType}{$lineType}{$tag};
-         $logger->report($line);
+         $log->report($line);
       }
 
       $first = 0;
    }
 
-   $logger->report("\nTotal:\n");
+   $log->report("\nTotal:\n");
 
    for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
 
       my $line = "    $tag";
       $line .= ( " " x ( 26 - length($tag) ) );
       $line .= sprintf $format, $count_tags{$reportType}{"Total"}{$tag};
-      $logger->report($line);
+      $log->report($line);
 
    }
 }
@@ -350,24 +350,24 @@ sub report {
 
 sub reportBonus {
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
-   $logger->header(LstTidy::LogHeader::get('Bonus and PRE'));
+   $log->header(LstTidy::LogHeader::get('Bonus and PRE'));
 
    my $first = 1;
    LINE_TYPE:
    for my $lineType (sort keys %bonusAndPreTagReport) {
 
       my $lineHead = $first ? "Line Type: $lineType" : "\nLine Type: $lineType";
-      $logger->report($lineHead);
+      $log->report($lineHead);
 
       for my $tag (sort keys %{$bonusAndPreTagReport{$lineType}}) {
-         $logger->report("  $tag");
+         $log->report("  $tag");
       }
       $first = 0;
    }
 
-   $logger->report("================================================================");
+   $log->report("================================================================");
 }
 
 
@@ -965,10 +965,10 @@ sub doXCheck {
       }
    }
 
-   my $logger = getLogger();
+   my $log = getLogger();
 
    # Print the report sorted by file name and line number.
-   $logger->header(LstTidy::LogHeader::get('CrossRef'));
+   $log->header(LstTidy::LogHeader::get('CrossRef'));
 
    # This will add a message for every message in to_report - which should be every message
    # that was added to to_report.
@@ -978,9 +978,9 @@ sub doXCheck {
 
          # If it is an EQMOD Key missing, it is less severe
          if ($line_ref->[1] eq 'EQUIPMOD Key') {
-            $logger->info(  $message, $file, $line_ref->[0] );
+            $log->info(  $message, $file, $line_ref->[0] );
          } else {
-            $logger->notice(  $message, $file, $line_ref->[0] );
+            $log->notice(  $message, $file, $line_ref->[0] );
          }
       }
    }
@@ -1001,11 +1001,11 @@ sub doXCheck {
    }
 
    # Print the type report sorted by file name and line number.
-   $logger->header(LstTidy::LogHeader::get('Type CrossRef'));
+   $log->header(LstTidy::LogHeader::get('Type CrossRef'));
 
    for my $file ( sort keys %to_report ) {
       for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-         $logger->notice(
+         $log->notice(
             qq{No $line_ref->[1] type found for "$line_ref->[2]"},
             $file,
             $line_ref->[0]
@@ -1029,12 +1029,12 @@ sub doXCheck {
    }
 
    # Set the header in the singleton logger object
-   $logger->header(LstTidy::LogHeader::get('Category CrossRef'));
+   $log->header(LstTidy::LogHeader::get('Category CrossRef'));
 
    # Print the category report sorted by file name and line number.
    for my $file ( sort keys %to_report ) {
       for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-         $logger->notice(
+         $log->notice(
             qq{No $line_ref->[1] category found for "$line_ref->[2]"},
             $file,
             $line_ref->[0]
@@ -1047,15 +1047,15 @@ sub doXCheck {
    # Print the tag that do not have defined headers if requested
    if ( getOption('missingheader') ) {
 
-      my $logger = getLogger();
-      $logger->header(LstTidy::LogHeader::get('Missing Header'));
+      my $log = getLogger();
+      $log->header(LstTidy::LogHeader::get('Missing Header'));
 
       for my $linetype (sort getMissingHeaderLineTypes()) {
 
-         $logger->report("Line Type: ${linetype}");
+         $log->report("Line Type: ${linetype}");
 
          for my $header ( sort reportTagSort getHeaderMissingOnLineType()) {
-            $logger->report("  ${header}");
+            $log->report("  ${header}");
          }
       }
    }
