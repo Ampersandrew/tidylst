@@ -6,7 +6,7 @@ use warnings;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(getEntityNameTag);
+our @EXPORT_OK = qw(getEntityName getEntityNameTag);
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
@@ -2149,6 +2149,30 @@ my %columnWithNoTag = (
    'WEAPONPROF'        => '000WeaponName',
 );
 
+my %master_mult;        # Will hold the tags that can be there more then once
+
+my %validTags;         # Will hold the valid tags for each type of file.
+
+
+
+=head2 getEntityName
+
+   C<getEntityName(lineType, lineTokens)>
+
+   Get the name of the entity in this Line, uses the lineType to look up the
+   tag holding the tag name.
+
+=cut
+
+sub getEntityName {
+
+   my ($lineType, $lineTokens) = @_;
+
+   my $tagName    = @{getLineTypeOrder($lineType)}[0];
+   my $identifier = $lineTokens->{ $tagName }[0];
+}
+
+
 
 =head2 getEntityNameTag
 
@@ -2164,10 +2188,6 @@ sub getEntityNameTag {
 
 
 
-
-my %master_mult;        # Will hold the tags that can be there more then once
-
-my %validTags;         # Will hold the valid tags for each type of file.
 
 =head2 getValidLineTypes
 
@@ -2224,6 +2244,7 @@ sub constructValidTags {
       }
    }
 }
+
 
 =head2 isValidMultiTag
 
