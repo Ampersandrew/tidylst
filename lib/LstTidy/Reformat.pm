@@ -2169,7 +2169,7 @@ sub getEntityName {
    my ($lineType, $lineTokens) = @_;
 
    my $tagName    = @{getLineTypeOrder($lineType)}[0];
-   my $identifier = $lineTokens->{ $tagName }[0];
+   $lineTokens->{ $tagName }[0];
 }
 
 
