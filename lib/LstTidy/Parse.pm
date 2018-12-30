@@ -222,87 +222,66 @@ my @validSystemVarNames = qw(
 # Valid filetype are the only ones that will be parsed Some filetype are valid
 # but not parsed yet (no function name)
 my %parsableFileType = (
-   'ABILITY'         => \&parseFile,
-   'ABILITYCATEGORY' => \&parseFile,
-   'BIOSET'          => \&parseFile,
-   'CLASS'           => \&parseFile,
-   'COMPANIONMOD'    => \&parseFile,
-   'DEITY'           => \&parseFile,
-   'DOMAIN'          => \&parseFile,
-   'EQUIPMENT'       => \&parseFile,
-   'EQUIPMOD'        => \&parseFile,
-   'FEAT'            => \&parseFile,
-   'INFOTEXT'        => 0,
-   'KIT'             => \&parseFile,
-   'LANGUAGE'        => \&parseFile,
-   'LSTEXCLUDE'      => 0,
-   'PCC'             => 1,
-   'RACE'            => \&parseFile,
-   'SKILL'           => \&parseFile,
-   'SOURCELONG'      => 0,
-   'SOURCESHORT'     => 0,
-   'SOURCEWEB'       => 0,
-   'SOURCEDATE'      => 0,
-   'SOURCELINK'      => 0,
-   'SPELL'           => \&parseFile,
-   'TEMPLATE'        => \&parseFile,
-   'WEAPONPROF'      => \&parseFile,
-   'ARMORPROF'       => \&parseFile,
-   'SHIELDPROF'      => \&parseFile,
-   'VARIABLE'        => \&parseFile,
-   'DATACONTROL'     => \&parseFile,
-   'GLOBALMODIFIER'  => \&parseFile,
-   '#EXTRAFILE'      => 1,
-   'SAVE'            => \&parseFile,
-   'STAT'            => \&parseFile,
-   'ALIGNMENT'       => \&parseFile,
+
+   INFOTEXT        => 0,
+   LSTEXCLUDE      => 0,
+   SOURCEDATE      => 0,
+   SOURCELINK      => 0,
+   SOURCELONG      => 0,
+   SOURCESHORT     => 0,
+   SOURCEWEB       => 0,
+
+   '#EXTRAFILE'    => 1,
+   PCC             => 1,
+
+   ABILITY         => \&parseFile,
+   ABILITYCATEGORY => \&parseFile,
+   ALIGNMENT       => \&parseFile,
+   ARMORPROF       => \&parseFile,
+   BIOSET          => \&parseFile,
+   CLASS           => \&parseFile,
+   COMPANIONMOD    => \&parseFile,
+   DATACONTROL     => \&parseFile,
+   DEITY           => \&parseFile,
+   DOMAIN          => \&parseFile,
+   EQUIPMENT       => \&parseFile,
+   EQUIPMOD        => \&parseFile,
+   FEAT            => \&parseFile,
+   GLOBALMODIFIER  => \&parseFile,
+   KIT             => \&parseFile,
+   LANGUAGE        => \&parseFile,
+   RACE            => \&parseFile,
+   SAVE            => \&parseFile,
+   SHIELDPROF      => \&parseFile,
+   SKILL           => \&parseFile,
+   SPELL           => \&parseFile,
+   STAT            => \&parseFile,
+   TEMPLATE        => \&parseFile,
+   VARIABLE        => \&parseFile,
+   WEAPONPROF      => \&parseFile,
 );
 
 # Header use for the comment for each of the tag used in the script
+# This data structure maps line type (not file type) to tag to label
+# Line type comes from the parseControl structure.
 my %tagheader = (
    default => {
-      '000ClassName'                      => '# Class Name',
+
+      '001DomainEffect'                   => 'Description',
       '001SkillName'                      => 'Class Skills (All skills are seperated by a pipe delimiter \'|\')',
 
-      '000DomainName'                     => '# Domain Name',
-      '001DomainEffect'                   => 'Description',
-
       'DESC'                              => 'Description',
-
-      '000AbilityName'                    => '# Ability Name',
-      '000FeatName'                       => '# Feat Name',
-
-      '000AbilityCategory',               => '# Ability Category Name',
-
-      '000LanguageName'                   => '# Language',
-
-      'FAVCLASS'                          => 'Favored Class',
-      'XTRASKILLPTSPERLVL'                => 'Skills/Level',
-      'STARTFEATS'                        => 'Starting Feats',
-
-      '000SkillName'                      => '# Skill Name',
-
-      'KEYSTAT'                           => 'Key Stat',
       'EXCLUSIVE'                         => 'Exclusive?',
-      'USEUNTRAINED'                      => 'Untrained?',
+      'FAVCLASS'                          => 'Favored Class',
+      'KEYSTAT'                           => 'Key Stat',
       'SITUATION'                         => 'Situational Skill',
-
-      '000TemplateName'                   => '# Template Name',
-
-      '000WeaponName'                     => '# Weapon Name',
-      '000ArmorName'                      => '# Armor Name',
-      '000ShieldName'                     => '# Shield Name',
-
-      '000VariableName'                   => '# Name',
-      '000GlobalmodName'                  => '# Name',
-      '000DatacontrolName'                => '# Name',
-      '000SaveName'                       => '# Name',
-      '000StatName'                       => '# Name',
-      '000AlignmentName'                  => '# Name',
+      'STARTFEATS'                        => 'Starting Feats',
+      'USEUNTRAINED'                      => 'Untrained?',
+      'XTRASKILLPTSPERLVL'                => 'Skills/Level',
       'DATAFORMAT'                        => 'Dataformat',
       'REQUIRED'                          => 'Required',
       'SELECTABLE'                        => 'Selectable',
-      'DISPLAYNAME'                       => 'Displayname',
+      'DISPLAYNAME'                       => 'Display name',
 
       'ABILITY'                           => 'Ability',
       'ACCHECK'                           => 'AC Penalty Check',
@@ -710,8 +689,12 @@ my %tagheader = (
       'XPCOST'                            => 'XP Cost',
       'XTRAFEATS'                         => 'Extra Feats',
    },
+      
+   ABILITY => {
+      '000AbilityName'           => '# Ability Name',
+   },
 
-   'ABILITYCATEGORY' => {
+   ABILITYCATEGORY => {
       '000AbilityCategory'       => '# Ability Category',
       'CATEGORY'                 => 'Category of Object',
       'DISPLAYLOCATION'          => 'Display Location',
@@ -726,6 +709,14 @@ my %tagheader = (
       'VISIBLE'                  => 'Visible',
    },
 
+   ALIGNMENT => {
+      '000AlignmentName'         => '# Name',
+   },
+
+   ARMORPROF => {
+      '000ArmorName'             => '# Armor Name',
+   },
+
    'BIOSET AGESET' => {
       'AGESET'                   => '# Age set',
    },
@@ -734,7 +725,7 @@ my %tagheader = (
       'RACENAME'                 => '# Race name',
    },
 
-   'CLASS' => {
+   CLASS => {
       '000ClassName'             => '# Class Name',
       'FACT:CLASSTYPE'           => 'Class Type',
       'CLASSTYPE'                => 'Class Type',
@@ -755,7 +746,7 @@ my %tagheader = (
       '000Level'                 => '# Level',
    },
 
-   'COMPANIONMOD' => {
+   COMPANIONMOD => {
       '000Follower'              => '# Class of the Master',
       '000MasterBonusRace'       => '# Race of familiar',
       'COPYMASTERBAB'            => 'Copy Masters BAB',
@@ -766,7 +757,12 @@ my %tagheader = (
       'USEMASTERSKILL'           => 'Use Masters skills?',
    },
 
-   'DEITY' => {
+   DATACONTROL => {
+      '000DatacontrolName'       => '# Name',
+      'EXPLANATION'              => 'Explanation',
+   },
+
+   DEITY => {
       '000DeityName'             => '# Deity Name',
       'DOMAINS'                  => 'Domains',
       'FOLLOWERALIGN'            => 'Clergy AL',
@@ -783,7 +779,11 @@ my %tagheader = (
       'ABILITY'                  => 'Granted Ability',
    },
 
-   'EQUIPMENT' => {
+   DOMAIN => {
+      '000DomainName'            => '# Domain Name',
+   },
+
+   EQUIPMENT => {
       '000EquipmentName'         => '# Equipment Name',
       'BASEITEM'                 => 'Base Item for EQMOD',
       'RESIZE'                   => 'Can be Resized',
@@ -793,7 +793,7 @@ my %tagheader = (
       'MODS'                     => 'Requires Modification?',
    },
 
-   'EQUIPMOD' => {
+   EQUIPMOD => {
       '000ModifierName'          => '# Modifier Name',
       'ADDPROF'                  => 'Add Req. Prof.',
       'ARMORTYPE'                => 'Change Armor Type',
@@ -807,6 +807,10 @@ my %tagheader = (
       'NAMEOPT'                  => 'Naming Option',
       'PLUS'                     => 'Plus',
       'REPLACES'                 => 'Keys to replace',
+   },
+
+   FEAT => {
+      '000FeatName'                       => '# Feat Name',
    },
 
    GLOBALMODIFIER => {
@@ -857,11 +861,15 @@ my %tagheader = (
       'VALUES'                   => 'Table Values',
    },
 
-   'MASTERBONUSRACE' => {
+   LANGUAGE => {
+      '000LanguageName'          => '# Language',
+   }
+
+   MASTERBONUSRACE => {
       '000MasterBonusRace'       => '# Race of familiar',
    },
 
-   'RACE' => {
+   RACE => {
       '000RaceName'              => '# Race Name',
       'FACT'                     => 'Base size',
       'FAVCLASS'                 => 'Favored Class',
@@ -871,21 +879,37 @@ my %tagheader = (
       'MONSTERCLASS'             => 'Monster Class Name and Starting Level',
    },
 
-   'SPELL' => {
+   SAVE => {
+      '000SaveName'              => '# Name',
+   },
+
+   SHILEDPROF => {
+      '000ShieldName'            => '# Shield Name',
+   },
+
+   SKILL => {
+      '000SkillName'             => '# Skill Name',
+   },
+
+   SPELL => {
       '000SpellName'             => '# Spell Name',
       'CLASSES'                  => 'Classes of caster',
       'DOMAINS'                  => 'Domains granting the spell',
    },
 
-   'SUBCLASS' => {
+   STAT => {
+      '000StatName'              => '# Name',
+   },
+
+   SUBCLASS => {
       '000SubClassName'          => '# Subclass',
    },
 
-   'SUBSTITUTIONCLASS' => {
+   SUBSTITUTIONCLASS => {
       '000SubstitutionClassName' => '# Substitution Class',
    },
 
-   'TEMPLATE' => {
+   TEMPLATE => {
       '000TemplateName'          => '# Template Name',
       'ADDLEVEL'                 => 'Add Levels',
       'BONUS:MONSKILLPTS'        => 'Bonus Monster Skill Points',
@@ -894,23 +918,13 @@ my %tagheader = (
       'GENDERLOCK'               => 'Lock Gender Selection',
    },
 
-   'VARIABLE' => {
+   VARIABLE => {
       '000VariableName'          => '# Variable Name',
       'EXPLANATION'              => 'Explanation',
    },
 
-   'DATACONTROL' => {
-      '000DatacontrolName'       => '# Name',
-      'EXPLANATION'              => 'Explanation',
-   },
-   'ALIGNMENT' => {
-      '000AlignmentName'         => '# Name',
-   },
-   'STAT' => {
-      '000StatName'              => '# Name',
-   },
-   'SAVE' => {
-      '000SaveName'              => '# Name',
+   WEAPONPROF => {
+      '000WeaponName'            => '# Weapon Name',
    },
 
 );
@@ -1645,9 +1659,9 @@ our %parseControl = (
       },
    ],
 
-   SKILL => [
+   SHIELDPROF => [
       \%SourceLineDef,
-      {  Linetype       => 'SKILL',
+      {  Linetype       => 'SHIELDPROF',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -1656,9 +1670,9 @@ our %parseControl = (
       },
    ],
 
-   SHIELDPROF => [
+   SKILL => [
       \%SourceLineDef,
-      {  Linetype       => 'SHIELDPROF',
+      {  Linetype       => 'SKILL',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
