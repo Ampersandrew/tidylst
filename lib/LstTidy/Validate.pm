@@ -3434,6 +3434,29 @@ sub validateNumericTags {
    ];
 }
 
+
+
+
+
+=head2 missingValue
+
+=cut
+
+sub missingValue {
+
+   my ($tag, $enclosingTag) = @_;
+
+   my $message = q{Check for missing ":", no value for "} . $tag->id . q{"};
+
+   if ($enclosingTag) {
+      $message .= qq{ found in "$enclosingTag"} 
+   }
+
+   $log->warning($message, $tag->file, $tag->line);
+}
+
+
+
 =head2 validatePreTag
 
    Validate the PRExxx tags. This function is reentrant and can be called
@@ -3454,7 +3477,7 @@ sub validatePreTag {
    my ($tag, $enclosingTag) = @_;
 
    if ( !length($tag->value) && $tag->id ne "PRE:.CLEAR" ) {
-      missingValue();
+      missingValue($tag, $enclosingTag);
       return;
    }
 
