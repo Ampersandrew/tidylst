@@ -434,7 +434,7 @@ our %masterOrder = (
       'ADD:WEAPONPROFS',
       'ADDSPELLLEVEL',
       'REMOVE',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:LANGUAGES:*',
       'BONUS:WEAPON:*',
       'FOLLOWERS',
@@ -465,16 +465,17 @@ our %masterOrder = (
       'UNENCUMBEREDMOVE',
       'TEMPBONUS:*',
       'TEMPVALUE:*',
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
+
       'ADD:FEAT:*',                    # Deprecated 6.05.01
+      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'APPLIEDNAME',                   # Deprecated 6.05.01
-      'SA:.CLEAR',                     # Deprecated
-      'SA:*',                          # Deprecated
-      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'LANGAUTO:.CLEAR',               # Deprecated - 6.0
       'LANGAUTO:*',                    # Deprecated - 6.0
+      'SA:.CLEAR',                     # Deprecated
+      'SA:*',                          # Deprecated
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'ABILITYCATEGORY' => [
@@ -510,9 +511,10 @@ our %masterOrder = (
       'HANDS',
       @PRETags,
       @SOURCETags,
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+
       'SA:.CLEAR',                     # Deprecated
       'SA:*',                          # Deprecated
    ],
@@ -537,7 +539,7 @@ our %masterOrder = (
    'CLASS' => [
       '000ClassName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'HD',
@@ -597,11 +599,11 @@ our %masterOrder = (
       'ADD:TEMPLATE:*',
       'ADD:VFEAT:*',
       'CHANGEPROF',
-      'DOMAIN:*',                      # [ 1973526 ] DOMAIN is supported on Class line
+      'DOMAIN:*',
       'ADDDOMAINS:*',
       'REMOVE',
-      'BONUS:HD:*',                    # Class Lines
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:HD:*',
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'REP:*',
       'SPELLLIST',
@@ -629,8 +631,9 @@ our %masterOrder = (
       'UNENCUMBEREDMOVE',
       'TEMPBONUS',
       'ROLE',
-      'HASSPELLFORMULA',               # [ 1893279 ] HASSPELLFORMULA Class Line tag  # [ 1973497 ] HASSPELLFORMULA is deprecated
+
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'HASSPELLFORMULA',               # [ 1893279 ] HASSPELLFORMULA Class Line tag  # [ 1973497 ] HASSPELLFORMULA is deprecated
       'LANGAUTO:.CLEAR',               # Deprecated - 6.0
       'LANGAUTO:*',                    # Deprecated - 6.0
    ],
@@ -658,8 +661,8 @@ our %masterOrder = (
       @PRETags,
       'SAB:.CLEAR',
       'SAB:*',
-      'BONUS:HD:*',                    # Class Lines
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:HD:*',
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'TEMPDESC',
       'DEFINE:*',
@@ -707,25 +710,26 @@ our %masterOrder = (
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
+
       'ADD:FEAT:*',                    # Deprecated 6.05.01
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
-      'SPECIALS',                      # Deprecated 6.05.01
-      'FEAT',                          # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
-      'SA:.CLEAR:*',                   # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
-      'LANGAUTO:*',                    # Deprecated - 6.0
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'FEAT',                          # Deprecated 6.05.01
       'FEATAUTO:.CLEAR',               # Deprecated - 6.0
       'FEATAUTO:*',                    # Deprecated - 6.0
+      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
+      'LANGAUTO:*',                    # Deprecated - 6.0
+      'SA:.CLEAR:*',                   # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'SPECIALS',                      # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'COMPANIONMOD' => [
       '000Follower',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'FOLLOWER',
       'TYPE',
       'HD',
@@ -748,23 +752,24 @@ our %masterOrder = (
       'ADD:LANGUAGE',
       'DEFINE:*',
       'DEFINESTAT:*',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'RACETYPE',
       'SWITCHRACE:*',
-      'TEMPLATE:*',                    # [ 2946558 ] TEMPLATE can be used in COMPANIONMOD lines
+      'TEMPLATE:*',
       'STACK',
       'MULT',
       'CHOOSE',
       'SELECT',
       'DESC:.CLEAR',
       'DESC:*',
-      'FEAT:.CLEAR',                   # Deprecated 6.05.01
-      'FEAT:*',                        # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
-      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
+
       'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
+      'FEAT:*',                        # Deprecated 6.05.01
+      'FEAT:.CLEAR',                   # Deprecated 6.05.01
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'DATACONTROL' => [
@@ -780,7 +785,7 @@ our %masterOrder = (
    'DEITY' => [
       '000DeityName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'DOMAINS:*',
@@ -793,7 +798,7 @@ our %masterOrder = (
       @SOURCETags,
       @PRETags,
       @QUALIFYTags,
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'DEFINE:*',
       'DEFINESTAT:*',
       'SR',
@@ -826,7 +831,7 @@ our %masterOrder = (
    'DOMAIN' => [
       '000DomainName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       @PRETags,
@@ -862,7 +867,7 @@ our %masterOrder = (
       'SAB:*',
       'DEFINE:*',
       'DEFINESTAT:*',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       @SOURCETags,
       'DESCISPI',
       'DESC:.CLEAR',
@@ -945,7 +950,7 @@ our %masterOrder = (
       'DR',
       'SPELL:*',
       'SPELLS:*',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:EQM:*',
       'BONUS:EQMARMOR:*',
       'BONUS:EQMWEAPON:*',
@@ -1006,7 +1011,7 @@ our %masterOrder = (
       'VISION',
       'SR',
       'DR',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:EQM:*',
       'BONUS:EQMARMOR:*',
       'BONUS:EQMWEAPON:*',
@@ -1030,27 +1035,26 @@ our %masterOrder = (
       'SPELLS:*',
       'AUTO:EQUIP:*',
       'UNENCUMBEREDMOVE',
+
       'RATEOFFIRE',                    #  Deprecated 6.05.01
-      'VFEAT:*',                       #  Deprecated 6.05.01
       'SA:.CLEAR',                     #  Deprecated 6.05.01
       'SA:*',                          #  Deprecated 6.05.01
+      'VFEAT:*',                       #  Deprecated 6.05.01
    ],
 
 # This entire File is being deprecated
    'FEAT' => [
       '000FeatName',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'TYPE:.CLEAR',
       'TYPE',
       'VISIBLE',
-      'CATEGORY',                      # [ 1671410 ] xcheck CATEGORY:Feat in Feat object.
+      'CATEGORY',
       @PRETags,
       @QUALIFYTags,
       'SERVESAS',
-      'SA:.CLEAR',
-      'SA:*',
       'SAB:.CLEAR',
       'SAB:*',
       'DEFINE:*',
@@ -1058,8 +1062,8 @@ our %masterOrder = (
       'SPELL:*',
       'SPELLS:*',
       'DESCISPI',
-      'DESC:.CLEAR',                   # [ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
-      'DESC:*',                        # [ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
+      'DESC:.CLEAR',
+      'DESC:*',
       'STACK',
       'MULT',
       'CHOOSE',
@@ -1095,7 +1099,7 @@ our %masterOrder = (
       'ADD:WEAPONPROFS',
       'ADDSPELLLEVEL',
       'APPLIEDNAME',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'CHANGEPROF:*',
       'FOLLOWERS',
@@ -1122,9 +1126,12 @@ our %masterOrder = (
       'SPELLLEVEL:DOMAIN:*',
       'UNENCUMBEREDMOVE',
       'TEMPBONUS',
+
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'LANGAUTO:.CLEAR',               # Deprecated - 6.0
       'LANGAUTO:*',                    # Deprecated - 6.0
+      'SA:.CLEAR',                     # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
    ],
 
    'GLOBALMODIFIER' => [
@@ -1290,7 +1297,7 @@ our %masterOrder = (
 
    'LANGUAGE' => [
       '000LanguageName',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'TYPE',
       'SOURCEPAGE',
@@ -1312,19 +1319,19 @@ our %masterOrder = (
       'BONUS:HP:*',
       'BONUS:MOVEMULT:*',
       'BONUS:POSTMOVEADD:*',
-      'BONUS:SAVE:*',                  # Global        Replacement for CHECKS
+      'BONUS:SAVE:*',
       'BONUS:SKILL:*',
       'BONUS:STAT:*',
       'BONUS:UDAM:*',
       'BONUS:VAR:*',
       'ADD:LANGUAGE',
-      'ABILITY:*',                     # [ 2596967 ] ABILITY not recognized for MASTERBONUSRACE
-      'VFEAT:*',                       # Deprecated 6.05.01
-      'SA:.CLEAR',                     # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
+      'ABILITY:*',
       'SAB:.CLEAR',
       'SAB:*',
 
+      'SA:.CLEAR',                     # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'PCC' => [
@@ -1333,7 +1340,7 @@ our %masterOrder = (
       'GAMEMODE',
       'GENRE',
       'BOOKTYPE',
-      'KEY',                           # KEY is allowed
+      'KEY',
       'PUBNAMELONG',
       'PUBNAMESHORT',
       'PUBNAMEWEB',
@@ -1342,11 +1349,11 @@ our %masterOrder = (
       'TYPE',
       'PRECAMPAIGN',
       '!PRECAMPAIGN',
-      'SHOWINMENU',                    # [ 1718370 ] SHOWINMENU tag missing for PCC files
+      'SHOWINMENU',
       'SOURCELONG',
       'SOURCESHORT',
       'SOURCEWEB',
-      'SOURCEDATE',                    # [ 1584007 ] New Tag: SOURCEDATE in PCC
+      'SOURCEDATE',
       'COVER',
       'COPYRIGHT',
       'LOGO',
@@ -1361,7 +1368,7 @@ our %masterOrder = (
       'ISMATURE',
       'BIOSET',
       'HIDETYPE',
-      'COMPANIONLIST',                 # [ 1672551 ] PCC tag COMPANIONLIST
+      'COMPANIONLIST',
       'REQSKILL',
       'STATUS',
       'FORWARDREF',
@@ -1406,7 +1413,7 @@ our %masterOrder = (
    'RACE' => [
       '000RaceName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'FAVCLASS',
@@ -1430,7 +1437,7 @@ our %masterOrder = (
       'WEAPONBONUS:*',
       'CHANGEPROF:*',
       'PROF',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:LANGUAGES:*',
       'CSKILL:.CLEAR',
       'CSKILL',
@@ -1439,12 +1446,9 @@ our %masterOrder = (
       'MONCCSKILL',
       'AUTO:ARMORPROF:*',
       'AUTO:EQUIP:*',
-      'AUTO:FEAT:*',                   #  Deprecated 6.05.01
       'AUTO:LANG:*',
       'AUTO:SHIELDPROF:*',
       'AUTO:WEAPONPROF:*',
-      'VFEAT:*',                       #  Deprecated 6.05.01
-      'FEAT:*',                        #  Deprecated 6.05.01
       'ABILITY:*',
       'MFEAT:*',
       'LEGS',
@@ -1487,11 +1491,9 @@ our %masterOrder = (
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
       'ADD:SPELLCASTER:*',
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'REGION',
       'SUBREGION',
       'SPELLKNOWN:CLASS:*',
@@ -1499,11 +1501,17 @@ our %masterOrder = (
       'SPELLLEVEL:CLASS:*',
       'SPELLLEVEL:DOMAIN:*',
       'KIT',
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
+      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'FEAT:*',                        # Deprecated 6.05.01
+      'LANGAUTO:*',                    # Deprecated - 6.0
+      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
       'SA:.CLEAR',                     # Deprecated
       'SA:*',                          # Deprecated
-      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
-      'LANGAUTO:*',                    # Deprecated - 6.0
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'SAVE' => [
@@ -1522,9 +1530,10 @@ our %masterOrder = (
       'HANDS',
       @PRETags,
       @SOURCETags,
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+
       'SA:.CLEAR',                     # Deprecated
       'SA:*',                          # Deprecated
    ],
@@ -1547,7 +1556,7 @@ our %masterOrder = (
    'SKILL' => [
       '000SkillName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'KEYSTAT',
@@ -1568,10 +1577,9 @@ our %masterOrder = (
       'SITUATION',
       'DEFINE',
       'DEFINESTAT:*',
-      'VFEAT:*',                       # Deprecated 6.05.01
       'AUTO:EQUIP:*',
       'ABILITY',
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'CSKILL:.CLEAR',
       'CSKILL',
@@ -1583,8 +1591,10 @@ our %masterOrder = (
       'DESC',
       'TEMPDESC',
       'TEMPBONUS',
+
       'SA:.CLEAR:*',                   # Deprecated
       'SA:*',                          # Deprecated
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'SOURCE' => [
@@ -1597,7 +1607,7 @@ our %masterOrder = (
    'SPELL' => [
       '000SpellName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'TYPE',
@@ -1606,7 +1616,6 @@ our %masterOrder = (
       'DOMAINS',
       'STAT:*',
       'PPCOST',
-#     'SPELLPOINTCOST:*',              # Delay implementing this until SPELLPOINTCOST is documented
       'SCHOOL:.CLEAR',
       'SCHOOL:*',
       'SUBSCHOOL',
@@ -1633,7 +1642,6 @@ our %masterOrder = (
       @PRETags,
       'DEFINE',
       'DEFINESTAT:*',
-#     @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
       'BONUS:PPCOST',                  # SPELL has a short list of BONUS tags
       'BONUS:CASTERLEVEL:*',
       'BONUS:CHECKS',
@@ -1647,7 +1655,7 @@ our %masterOrder = (
       'BONUS:MOVEMULT:*',
       'BONUS:POSTMOVEADD',
       'BONUS:RANGEMULT:*',
-      'BONUS:SAVE:*',                  # Global        Replacement for CHECKS
+      'BONUS:SAVE:*',
       'BONUS:SIZEMOD',
       'BONUS:SKILL:*',
       'BONUS:STAT:*',
@@ -1670,7 +1678,6 @@ our %masterOrder = (
       'TEMPDESC',
       'TEMPBONUS:*',
       'TEMPVALUE',
-#     'SPELLPOINTCOST:*',
    ],
 
    'STAT' => [
@@ -1690,28 +1697,22 @@ our %masterOrder = (
 
    'SUBCLASS' => [
       '000SubClassName',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'HD',
-#     'ABB',                           # Invalid for SubClass
       'COST',
       'PROHIBITCOST',
       'CHOICE',
       'SPELLSTAT',
       'SPELLTYPE',
-      'LANGAUTO:.CLEAR',               # Deprecated 6.05.01
-      'LANGAUTO:*',                    # Deprecated 6.05.01
       'LANGBONUS:.CLEAR',
       'LANGBONUS:*',
-      'BONUS:ABILITYPOOL:*',           # SubClass has a short list of BONUS tags
       'BONUS:CASTERLEVEL:*',
       'BONUS:CHECKS:*',
       'BONUS:COMBAT:*',
       'BONUS:DC:*',
-      'BONUS:FEAT:*',                  # Deprecated 6.05.01
       'BONUS:HD:*',
-      'BONUS:SAVE:*',                  # Global Replacement for CHECKS
       'BONUS:SKILL:*',
       'BONUS:UDAM:*',
       'BONUS:VAR:*',
@@ -1722,11 +1723,9 @@ our %masterOrder = (
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
       'ADD:SPELLCASTER:*',
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'REMOVE',
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
@@ -1744,21 +1743,28 @@ our %masterOrder = (
       'CSKILL',
       'CCSKILL:.CLEAR',
       'CCSKILL',
-      'DOMAIN:*',                      # [ 1973526 ] DOMAIN is supported on Class line
+      'DOMAIN:*',
       'ADDDOMAINS',
       'UNENCUMBEREDMOVE',
       @SOURCETags,
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
+      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'BONUS:ABILITYPOOL:*',           # SubClass has a short list of BONUS tags
+      'BONUS:FEAT:*',                  # Deprecated 6.05.01
+      'BONUS:SAVE:*',                  # Global Replacement for CHECKS
+      'LANGAUTO:*',                    # Deprecated 6.05.01
+      'LANGAUTO:.CLEAR',               # Deprecated 6.05.01
       'SA:.CLEAR:*',                   # Deprecated
       'SA:*',                          # Deprecated
-      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
    ],
 
    'SUBSTITUTIONCLASS' => [
       '000SubstitutionClassName',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
-#     'ABB',                           # Invalid for SubClass
       'COST',
       'PROHIBITCOST',
       'CHOICE',
@@ -1769,9 +1775,8 @@ our %masterOrder = (
       'BONUS:CHECKS:*',
       'BONUS:COMBAT:*',
       'BONUS:DC:*',
-      'BONUS:FEAT:*',                  # Deprecated 6.05.01
       'BONUS:HD:*',
-      'BONUS:SAVE:*',                  # Global Replacement for CHECKS
+      'BONUS:SAVE:*',
       'BONUS:SKILL:*',
       'BONUS:UDAM:*',
       'BONUS:VAR:*',
@@ -1782,11 +1787,9 @@ our %masterOrder = (
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
       'ADD:SPELLCASTER:*',
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
       'REMOVE',
@@ -1807,7 +1810,11 @@ our %masterOrder = (
       'ADDDOMAINS',
       'UNENCUMBEREDMOVE',
       @SOURCETags,
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'BONUS:FEAT:*',                  # Deprecated 6.05.01
       'SA:.CLEAR:*',                   # Deprecated
       'SA:*',                          # Deprecated
    ],
@@ -1832,12 +1839,10 @@ our %masterOrder = (
       'SR',
       'DR',
       'DOMAIN:*',
-      'SA:.CLEAR:*',                   # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
       'SAB:.CLEAR',
       'SAB:*',
-      'BONUS:HD:*',                    # Class Lines
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:HD:*',
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'HITDIE',
       'ABILITY:*',
@@ -1847,42 +1852,45 @@ our %masterOrder = (
       'CSKILL:*',
       'CCSKILL:.CLEAR',
       'CCSKILL:*',
-      'LANGAUTO.CLEAR',                # Deprecated - Remove 6.0
-      'LANGAUTO:*',                    # Deprecated - Remove 6.0
       'ADD:.CLEAR',
       'ADD:*',
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
-      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'DONOTADD:*',
       'EXCHANGELEVEL',
       'SPELLS:*',
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
-      'VFEAT:*',                       # Deprecated 6.05.01
       'AUTO:ARMORPROF:*',
       'AUTO:EQUIP:*',
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'AUTO:SHIELDPROF:*',
       'AUTO:WEAPONPROF:*',
       'CHANGEPROF:*',
       'REMOVE',
       'ADDDOMAINS',
       'WEAPONBONUS',
-      'FEATAUTO:.CLEAR',               # Deprecated 6.05.01
-      'FEATAUTO:*',                    # Deprecated 6.05.01
       'SUBCLASS',
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
       'PREVAREQ:*',
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
+      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'FEATAUTO:*',                    # Deprecated 6.05.01
+      'FEATAUTO:.CLEAR',               # Deprecated 6.05.01
+      'LANGAUTO.CLEAR',                # Deprecated - Remove 6.0
+      'LANGAUTO:*',                    # Deprecated - Remove 6.0
+      'SA:.CLEAR:*',                   # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
       'SPECIALS',                      # Deprecated
       'SPELL',                         # Deprecated
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'SUBSTITUTIONLEVEL' => [
@@ -1907,12 +1915,10 @@ our %masterOrder = (
       'SR',
       'DR',
       'DOMAIN',
-      'SA:.CLEAR:*',                   # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
       'SAB:.CLEAR',
       'SAB:*',
-      'BONUS:HD:*',                    # Class Lines
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      'BONUS:HD:*',
+      @globalBONUSTags,
       'BONUS:WEAPON:*',
       'HITDIE',
       'ABILITY:*',
@@ -1927,35 +1933,38 @@ our %masterOrder = (
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'EXCHANGELEVEL',
-      'SPECIALS',                      # Deprecated 6.05.01
       'SPELL',
       'SPELLS:*',
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
-      'VFEAT:*',                       # Deprecated 6.05.01
       'AUTO:ARMORPROF:*',
       'AUTO:EQUIP:*',
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'AUTO:SHIELDPROF:*',
       'AUTO:WEAPONPROF:*',
       'CHANGEPROF:*',
       'REMOVE',
       'ADDDOMAINS',
       'WEAPONBONUS',
-      'FEATAUTO:.CLEAR',               # Deprecated 6.05.01
-      'FEATAUTO:*',                    # Deprecated 6.05.01
       'SUBCLASS',
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
+      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'FEATAUTO:*',                    # Deprecated 6.05.01
+      'FEATAUTO:.CLEAR',               # Deprecated 6.05.01
       'LANGAUTO.CLEAR',                # Deprecated - Remove 6.0
       'LANGAUTO:*',                    # Deprecated - Remove 6.0
-      'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
+      'SA:.CLEAR:*',                   # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'SPECIALS',                      # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'SWITCHRACE' => [
@@ -1965,7 +1974,7 @@ our %masterOrder = (
    'TEMPLATE' => [
       '000TemplateName',
       'SORTKEY',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'FACT:AppliedName',
@@ -1985,8 +1994,6 @@ our %masterOrder = (
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
       @SOURCETags,
-      'SA:.CLEAR',                     # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
       'SAB:.CLEAR',
       'SAB:*',
       'DEFINE:*',
@@ -1994,10 +2001,10 @@ our %masterOrder = (
       'LEVEL:*',
       @PRETags,
       @QUALIFYTags,
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
-      'BONUSFEATS',                    # Template Bonus
-      'BONUS:MONSKILLPTS',             # Template Bonus
-      'BONUSSKILLPOINTS',              # Template Bonus
+      @globalBONUSTags,
+      'BONUSFEATS',
+      'BONUS:MONSKILLPTS',
+      'BONUSSKILLPOINTS',
       'BONUS:WEAPON:*',
       'NONPP',
       'STACK',
@@ -2013,17 +2020,12 @@ our %masterOrder = (
       'ADD:ABILITY:*',
       'ADD:CLASSSKILLS',
       'ADD:EQUIP:*',
-      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:LANGUAGE:*',
       'ADD:TEMPLATE:*',
-      'ADD:VFEAT:*',                   # Deprecated 6.05.01
       'FAVOREDCLASS',
       'ABILITY:*',
-      'FEAT:*',                        # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
       'AUTO:ARMORPROF:*',
       'AUTO:EQUIP:*',
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'AUTO:LANG:*',
       'AUTO:SHIELDPROF:*',
       'AUTO:WEAPONPROF:*',
@@ -2033,7 +2035,6 @@ our %masterOrder = (
       'LANGBONUS:.CLEAR',
       'LANGBONUS:*',
       'MOVE',
-      'MOVEA',                         # Deprecated 6.05.01
       'MOVECLONE',
       'REGION',
       'SUBREGION',
@@ -2063,12 +2064,19 @@ our %masterOrder = (
       'DESC:*',
       'TEMPDESC',
       'TEMPBONUS',
-      'SPELL:*',                       # Deprecated 5.x.x - Remove 6.0 - use SPELLS
+
+      'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
-#     'HEIGHT',                        # Deprecated
-      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
+      'ADD:VFEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'FEAT:*',                        # Deprecated 6.05.01
       'LANGAUTO:*',                    # Deprecated - 6.0
-#     'WEIGHT',                        # Deprecated
+      'LANGAUTO:.CLEAR',               # Deprecated - 6.0
+      'MOVEA',                         # Deprecated 6.05.01
+      'SA:.CLEAR',                     # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'SPELL:*',                       # Deprecated 5.x.x - Remove 6.0 - use SPELLS
+      'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
    'VARIABLE' => [
@@ -2079,16 +2087,17 @@ our %masterOrder = (
 
    'WEAPONPROF' => [
       '000WeaponName',
-      'KEY',                           # [ 1695877 ] KEY tag is global
+      'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
       'TYPE',
       'HANDS',
       @PRETags,
       @SOURCETags,
-      @globalBONUSTags,              # [ 1956340 ] Centralize global BONUS tags
+      @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
    ],
@@ -2132,7 +2141,7 @@ my %columnWithNoTag = (
    'EQUIPMENT'         => '000EquipmentName',
    'EQUIPMOD'          => '000ModifierName',
    'FEAT'              => '000FeatName',
-   'GLOBALMOD'         => '000GlobalmodName',
+   'GLOBALMODIFIER'    => '000GlobalmodName',
    'LANGUAGE'          => '000LanguageName',
    'MASTERBONUSRACE'   => '000MasterBonusRace',
    'RACE'              => '000RaceName',
