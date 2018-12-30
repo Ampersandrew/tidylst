@@ -251,7 +251,7 @@ my %parsableFileType = (
    'SHIELDPROF'      => \&parseFile,
    'VARIABLE'        => \&parseFile,
    'DATACONTROL'     => \&parseFile,
-   'GLOBALMOD'       => \&parseFile,
+   'GLOBALMODIFIER'  => \&parseFile,
    '#EXTRAFILE'      => 1,
    'SAVE'            => \&parseFile,
    'STAT'            => \&parseFile,
@@ -809,6 +809,11 @@ my %tagheader = (
       'REPLACES'                 => 'Keys to replace',
    },
 
+   GLOBALMODIFIER => {
+      '000GlobalmodName'         => '# Name',
+      'EXPLANATION'              => 'Explanation',
+   },
+
    'KIT STARTPACK' => {
       'STARTPACK'                => '# Kit Name',
       'APPLY'                    => 'Apply method to char',
@@ -891,11 +896,6 @@ my %tagheader = (
 
    'VARIABLE' => {
       '000VariableName'          => '# Variable Name',
-      'EXPLANATION'              => 'Explanation',
-   },
-
-   'GLOBALMOD' => {
-      '000GlobalmodName'         => '# Name',
       'EXPLANATION'              => 'Explanation',
    },
 
@@ -1200,7 +1200,7 @@ my %writefiletype = (
    'EQUIPMENT'       => 1,
    'EQUIPMOD'        => 1,
    'FEAT'            => 1,
-   'GLOBALMOD'       => 1,
+   'GLOBALMODIFIER'  => 1,
    'KIT'             => 1,
    'LANGUAGE'        => 1,
    'PCC'             => 1,
@@ -1457,9 +1457,9 @@ our %parseControl = (
       },
    ],
 
-   GLOBALMOD => [
+   GLOBALMODIFIER => [
       \%SourceLineDef,
-      {  Linetype       => 'GLOBALMOD',
+      {  Linetype       => 'GLOBALMODIFIER',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
