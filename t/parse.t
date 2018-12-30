@@ -42,7 +42,7 @@ my %enabled = (
    'SHIELDPROF'      => [ 'code'  => "SHIELDPROF is parsed " ],
    'VARIABLE'        => [ 'code'  => "VARIABLE is parsed " ],
    'DATACONTROL'     => [ 'code'  => "DATACONTROL is parsed " ],
-   'GLOBALMOD'       => [ 'code'  => "GLOBALMOD is parsed " ],
+   'GLOBALMODIFIER'  => [ 'code'  => "GLOBALMODIFIER is parsed " ],
    '#EXTRAFILE'      => [ 1       => "#EXTRAFILE is not parsed " ],
    'SAVE'            => [ 'code'  => "SAVE is parsed " ],
    'STAT'            => [ 'code'  => "STAT is parsed " ],
