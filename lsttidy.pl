@@ -1215,52 +1215,52 @@ sub FILETYPE_parse {
    }
    continue { $line++ }
 
-        #####################################################
-        #####################################################
-        # We find all the header lines
-        for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
-                my $curent_linetype = $newlines[$line_index][0];
-                my $line_tokens = $newlines[$line_index][1];
-                my $next_linetype;
-                $next_linetype = $newlines[ $line_index + 1 ][0]
-                if $line_index + 1 < @newlines;
+   #####################################################
+   #####################################################
+   # We find all the header lines
+   for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
+      my $curent_linetype = $newlines[$line_index][0];
+      my $line_tokens     = $newlines[$line_index][1];
 
-                # A header line either begins with the curent line_type header
-                # or the next line header.
-                #
-                # Only comment -- $line_token is not a hash --  can be header lines
-                if ( ref($line_tokens) ne 'HASH' ) {
+      my $next_linetype;
+      if ($line_index + 1 < @newlines) {
+         $next_linetype = $newlines[ $line_index + 1 ][0] 
+      }
 
-                        # We are on a comment line, we need to find the
-                        # curent and the next line header.
+      # A header line either begins with the curent line_type header
+      # or the next line header.
+      #
+      # Only comment -- $line_token is not a hash --  can be header lines
+      if ( ref($line_tokens) ne 'HASH' ) {
 
+         # We are on a comment line, we need to find the
+         # curent and the next line header.
 
+         # Curent header
+         my $this_header =
+            $curent_linetype
+               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
+               : "";
 
-                        # Curent header
-                        my $this_header =
-                                $curent_linetype
-                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
-                                : "";
+         # Next line header
+         my $next_header =
+            $next_linetype
+               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
+               : "";
 
-                        # Next line header
-                        my $next_header =
-                                $next_linetype
-                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
-                                : "";
+         if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
+            || ( $next_header && index( $line_tokens, $next_header ) == 0 ) )
+         {
 
-                        if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
-                                || ( $next_header && index( $line_tokens, $next_header ) == 0 ) )
-                        {
+            # It is a header, let's tag it as such.
+            $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
+         } else {
 
-                                # It is a header, let's tag it as such.
-                                $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
-                        } else {
-
-                                # It is just a comment, we won't botter with it ever again.
-                                $newlines[$line_index] = $line_tokens;
-                        }
-                }
-        }
+            # It is just a comment, we won't botter with it ever again.
+            $newlines[$line_index] = $line_tokens;
+         }
+      }
+   }
 
 
         #################################################################
@@ -1898,16 +1898,17 @@ sub FILETYPE_parse {
 
 {
 
-        my %class_skill;
-        my %class_spell;
-        my %domain_spell;
+   my %class_skill;
+   my %class_spell;
+   my %domain_spell;
 
-        sub parseFile {
-                my ( $lines_ref, $filetype, $filename ) = @_;
+   sub parseFile {
 
-                ##################################################################
-                # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-                #
+      my ( $lines_ref, $filetype, $filename ) = @_;
+
+      ##################################################################
+      # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
+      #
 
 #  if(isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
 #  {
@@ -2727,102 +2728,109 @@ sub mylength {
 # check_clear_tag_order
 # ---------------------
 #
-# Verify that the .CLEAR tags are put correctly before the
+# Verify that the .CLEAR tags are correctly put before the
 # tags that they clear.
 #
 # Parameter:  $line_ref         : Hash reference to the line
-#                       $file_for_error
-#                       $line_for_error
+#             $file_for_error
+#             $line_for_error
 
 sub check_clear_tag_order {
-        my ( $line_ref, $file_for_error, $line_for_error ) = @_;
 
-        TAG:
-        for my $tag ( keys %$line_ref ) {
+   my ( $line_ref, $file_for_error, $line_for_error ) = @_;
 
-                # if the current value is not an array, there is only one
-                # tag and no order to check.
-                next unless ref( $line_ref->{$tag} );
+   TAG:
+   for my $tag ( keys %$line_ref ) {
 
-                # if only one of a kind, skip the rest
-                next TAG if scalar @{ $line_ref->{$tag} } <= 1;
+      # if the current value is not an array, there is only one
+      # tag and no order to check.
+      next unless ref( $line_ref->{$tag} );
 
-                my %value_found;
+      # if only one of a kind, skip the rest
+      next TAG if scalar @{ $line_ref->{$tag} } <= 1;
 
-                if ( $tag eq "SA" ) {
+      my %value_found;
 
-                # The SA tag is special because it is only checked
-                # up to the first (
-                for ( @{ $line_ref->{$tag} } ) {
-                        if (/:\.?CLEAR.?([^(]*)/) {
+      if ( $tag eq "SA" ) {
 
-                                # clear tag either clear the whole thing,
-                                # in which case it must be the very beginning,
-                                # or it clear a particular value, in which case
-                                # it must be before any such value.
-                                if ( $1 ne "" ) {
+         # The SA tag is special because it is only checked
+         # up to the first (
+         
+         for ( @{ $line_ref->{$tag} } ) {
+            if (/:\.?CLEAR.?([^(]*)/) {
 
-                                # Let's check if the value was found before
-                                $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
-                                        if exists $value_found{$1};
-                                }
-                                else {
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ( $1 ne "" ) {
 
-                                # Let's check if any value was found before
-                                $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
-                                        if keys %value_found;
-                                }
-                        }
-                        elsif ( / : ([^(]*) /xms ) {
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
+                  }
 
-                                # Let's store the value
-                                $value_found{$1} = 1;
-                        }
-                        else {
-                                $log->error(
-                                "Didn't anticipate this tag: $_",
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-                }
-                else {
-                for ( @{ $line_ref->{$tag} } ) {
-                        if (/:\.?CLEAR.?(.*)/) {
+               } else {
 
-                                # clear tag either clear the whole thing,
-                                # in which case it must be the very beginning,
-                                # or it clear a particular value, in which case
-                                # it must be before any such value.
-                                if ( $1 ne "" ) {
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
+                  }
+               }
+            
+            } elsif ( / : ([^(]*) /xms ) {
 
-                                # Let's check if the value was found before
-                                $log->notice( qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
-                                        if exists $value_found{$1};
-                                }
-                                else {
+               # Let's store the value
+               $value_found{$1} = 1;
+            
+            } else {
+               $log->error(
+                  "Didn't anticipate this tag: $_",
+                  $file_for_error,
+                  $line_for_error
+               );
+            }
+         }
 
-                                # Let's check if any value was found before
-                                $log->notice( qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
-                                        if keys %value_found;
-                                }
-                        }
-                        elsif (/:(.*)/) {
+      } else {
 
-                                # Let's store the value
-                                $value_found{$1} = 1;
-                        }
-                        else {
-                                $log->error(
-                                        "Didn't anticipate this tag: $_",
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                }
-                }
-        }
+         for ( @{ $line_ref->{$tag} } ) {
+            if (/:\.?CLEAR.?(.*)/) {
+
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ( $1 ne "" ) {
+
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice( qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
+                  }
+
+               } else {
+
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice( qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
+                  }
+               }
+
+            } elsif (/:(.*)/) {
+
+               # Let's store the value
+               $value_found{$1} = 1;
+
+            } else {
+               $log->error(
+                  "Didn't anticipate this tag: $_",
+                  $file_for_error,
+                  $line_for_error
+               );
+            }
+         }
+      }
+   }
 }
 
 ###############################################################
