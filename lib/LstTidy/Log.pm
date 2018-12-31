@@ -8,6 +8,9 @@ use constant {
    ERROR      => 3, # PCGEN will not work properly or the script is foobar
 };
 
+# have deleted informational (who's going to type that on the command line?)
+our $wlPattern = qr{^(?:d|debug|e|err|error|i|info|n|notice|w|warn|warning)}i;
+
 use Mouse;
 use Mouse::Util::TypeConstraints;
 use Scalar::Util;
@@ -34,6 +37,12 @@ has 'isStartOfLog' => (
    default => 1,
 );
 
+has 'isOutputting' => (
+   is      => 'rw',
+   isa     => 'Bool',
+   default => 1,
+);
+
 has 'previousFile' => (
    is      => 'rw',
    isa     => 'Str',
@@ -54,7 +63,23 @@ has 'warningLevel' => (
    coerce   => 1,
 );
 
-# make sue the construction warning level is a number in range
+has 'collectedWarnings' => (
+   is      => 'rw',
+   isa     => 'ArrayRef',
+   default => sub { [] },
+);
+
+sub doOutput {
+   my ($self) = shift;
+
+   if ($self->isOutputting) {
+      warn @_
+   } else {
+      push @{ $self->collectedWarnings }, @_
+   }
+}
+
+# make sure the construction warning level is a number in range
 
 around 'BUILDARGS' => sub {
 
@@ -135,7 +160,7 @@ around 'header' => sub {
 
    Log a debug message
 
-   C<$logger->debug([message], [filename], [line number] )>
+   C<$log->debug([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -156,7 +181,7 @@ sub debug {
 
    Log an info message
 
-   C<$logger->info([message], [filename], [line number] )>
+   C<$log->info([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -178,7 +203,7 @@ sub info {
 
    Log a notice message
 
-   C<$logger->notice([message], [filename], [line number] )>
+   C<$log->notice([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -199,7 +224,7 @@ sub notice {
 
    Log a warning message
 
-   C<$logger->warning([message], [filename], [line number] )>
+   C<$log->warning([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -221,7 +246,7 @@ sub warning {
 
    Log an error message
 
-   C<$logger->error([message], [filename], [line number] )>
+   C<$log->error([message], [filename], [line number] )>
 
    The first two parameters are mandatory, the line number is optional.
 
@@ -244,7 +269,7 @@ sub error {
 
    This is the method that does the actual logging.
 
-   C<$logger->_log([severity], [message], [filename], [line number] )>
+   C<$log->_log([severity], [message], [filename], [line number] )>
 
    The first three parameters are mandatory, the line number is optional.
 
@@ -263,11 +288,11 @@ sub _log {
    my ( $warning_level, $message, $file_name, $line_number ) = ( @_, undef );
 
    # Verify if warning level should be displayed
-   return if ( $self->warningLevel() < $warning_level );
+   return if ( $self->warningLevel < $warning_level );
 
    # Print the header if needed
-   if ($self->printHeader()) {
-      warn $self->header();
+   if ($self->printHeader) {
+      $self->doOutput($self->header);
       $self->printHeader(0);
       $self->isStartOfLog(0);
    }
@@ -287,19 +312,25 @@ sub _log {
    }->{$warning_level};
 
    # Add the line number if we have one.
-   $output .= "(Line ${line_number}): " if defined $line_number;
+   if (defined $line_number) {
+      $output .= "(Line ${line_number}): "
+   }
 
    # Add the message we were asked to output.
    $output .= $message;
    
    # Make sure there is a new-line at the end of the output.
-   $output .= "\n" unless $message =~ /\n$/;
+   if ($message !~ /\n$/) {
+      $output .= "\n"
+   }
 
    # We display the file only if it is not the same are the last
    # time _log was called
-   warn "$file_name\n" if $file_name ne $self->previousFile();
+   if ($file_name ne $self->previousFile) {
+      $self->doOutput("$file_name\n") 
+   }
 
-   warn $output; 
+   $self->doOutput($output); 
 
    # Set the file name of the file this message originated from
    # so that we only write each file name once.
@@ -312,7 +343,7 @@ sub _log {
    This is the method that does a simple Report for things that we don't have
    Files or line numbers for.
 
-   C<$logger->report( [message] )>
+   C<$log->report( [message] )>
 
    [message] A text string describing the issue.
 
@@ -322,44 +353,18 @@ sub report {
    my ($self, $message) = @_;
 
    # Print the header if needed
-   if ($self->printHeader()) {
-      warn $self->header();
+   if ($self->printHeader) {
+      $self->doOutput($self->header);
       $self->printHeader(0);
       $self->isStartOfLog(0);
    }
    
    # Make sure there is a new-line at the end of the output.
-   $message .= "\n" unless $message =~ /\n$/;
+   if ($message !~ /\n$/) {
+      $message .= "\n" 
+   }
 
-   warn $message; 
-};
-
-=head2 checkWarningLevel
-
-   Check that warning level is valid, if it is not, then return a default
-
-   Returns a valid warning level, if the warning level passed was invalid, also
-   return an error string.
-
-=cut
-
-sub checkWarningLevel {
-
-   my ($wl) = @_;
-
-   if  (Scalar::Util::looks_like_number $wl) {
-
-      if ($wl < ERROR || $wl > DEBUG) {
-         # return a valid default and an error string for the user
-         return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
-      } 
-
-   } elsif ($wl !~ qr{^(?:d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning)}i) {
-      # return a valid default and an error string for the user
-      return (NOTICE, "\nInvalid warning level: ${wl}\nValid options are: error, warning, notice, info and debug\n");
-   };
-
-   return $wl;
+   $self->doOutput($message); 
 };
 
 # Private operation that coerces a valid string into a warning level. If passed an
@@ -367,7 +372,7 @@ sub checkWarningLevel {
 
 sub _coerceWarning {
 
-   if ($_ =~ qr{d|debug|e|err|error|i|info|informational|n|notice|w|warn|warning}i) {
+   if ($_ =~ $wlPattern) {
 
       return { 
          d => DEBUG,

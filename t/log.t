@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 33;
+use Test::More tests => 37;
 use Test::Warn;
 
 use_ok ('LstTidy::Log');
@@ -102,11 +102,22 @@ warnings_like {$log->warning('A warning', "my_bar.lst")} [qr"^\*=>A\s+warning",]
 warnings_like {$log->error('An error', "my_bar.lst")} [qr"^\*\*\*An\s+error",], "Test error";
 
 # ************************************************************ 
-#  Test isStartOfLog and header for second header
+# Test alternative to warning
 
-is(LstTidy::Log::checkWarningLevel('info'), 'info', "Valid warning level is unchanged");
+is($log->isOutputting, 1, "Object is set up to output via warn.");
 
-my ($wl, $err) = LstTidy::Log::checkWarningLevel('Frobnitz');
+is($log->isOutputting(0), 0, "Object is now gathering output.");
 
-is($wl, 5, "Invalid warning level is changed");
-like($err, qr{Invalid warning level: Frobnitz}, "Error string is returned");
+$log->header('Third header');
+
+$log->notice(q{Something to note}, "my_bar.lst");
+
+my ($header, $filename, $message) = ( @{ $log->collectedWarnings } );
+
+is($header, "\nThird header", "Header was printed");
+is($filename, "my_bar.lst\n", "header added, filename is also printed");
+is($message, qq{   Something to note\n}, "Message is correct");
+
+is(scalar @{$log->collectedWarnings}, 3, "Collected Warnings has three entries.");
+$log->collectedWarnings( [] );
+is(scalar @{$log->collectedWarnings}, 0, "Collected Warnings has been emptied.");

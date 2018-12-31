@@ -128,6 +128,20 @@ sub fullRealTag {
    my $sep = $self->id =~ m/:/ ? q{} : q{:};
 
    return $self->realId() . $sep . $self->value();
-};
+}
+
+sub clone {
+   my ($self, %params) = @_;
+
+   my $newTag = $self->meta->clone_object($self, %params);
+
+   if (exists $params{id}) {
+      $newTag->id($params{id}) ;
+   }
+
+   return $newTag;
+}
+
+__PACKAGE__->meta->make_immutable;
 
 1;

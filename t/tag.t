@@ -8,7 +8,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use Test::More tests => 37;
+use Test::More tests => 44;
 
 use_ok ('LstTidy::Tag');
 
@@ -89,17 +89,17 @@ is($tag->value, undef, "value constructed correctly");
 # Test the negated PRE sets id & value and realId correctly
 
 $tag = LstTidy::Tag->new(
-   fullTag => '!PREFOO:1|Wibble',
+   fullTag => '!PREFOO:1,Wibble',
    lineType => 'ABILITY',
    file     => 'foo_abilities.lst',
 );
 
 is($tag->id, 'PREFOO', "PREFOO tag constructed correctly");
 is($tag->realId, '!PREFOO', "!PREFOO real tag constructed correctly");
-is($tag->value, "1|Wibble", "value constructed correctly");
+is($tag->value, "1,Wibble", "value constructed correctly");
 
-is($tag->fullTag, 'PREFOO:1|Wibble', "Full tag reconstituted correctly.");
-is($tag->fullRealTag, '!PREFOO:1|Wibble', "Full real tag reconstituted correctly.");
+is($tag->fullTag, 'PREFOO:1,Wibble', "Full tag reconstituted correctly.");
+is($tag->fullRealTag, '!PREFOO:1,Wibble', "Full real tag reconstituted correctly.");
 
 
 $tag = LstTidy::Tag->new(
@@ -136,3 +136,19 @@ $tag->noMoreErrors(1);
 
 is($tag->noMoreErrors, 1, "set no more errors is 1");
 
+$tag = LstTidy::Tag->new(
+   fullTag  => 'ABILITY:FEAT|AUTOMATIC|Toughness|!PREFOO:1,Wibble',
+   lineType => 'ABILITY',
+   file     => 'foo_abilities.lst',
+);
+
+my $subTag = $tag->clone(id => '!PREFOO', value => '1,Wibble');
+
+is($subTag->id, 'PREFOO', "PREFOO tag correct after clone");
+is($subTag->realId, '!PREFOO', "!PREFOO real tag correct after clone");
+is($subTag->value, "1,Wibble", "value correct after clone");
+is($subTag->lineType, 'ABILITY', "lineType correct after clone");
+is($subTag->file, 'foo_abilities.lst', "File correct after clone");
+
+is($subTag->fullTag, 'PREFOO:1,Wibble', "Full tag reconstituted correctly after clone.");
+is($subTag->fullRealTag, '!PREFOO:1,Wibble', "Full real tag reconstituted correctly after clone.");

@@ -3,13 +3,18 @@ package LstTidy::Convert;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw(convertEntities doTagConversions);
+
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::LogFactory;
-use LstTidy::Options;
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption isConversionActive);
 
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
@@ -310,7 +315,7 @@ sub convertAddTags {
          $tag->value("($theRest)$addCount");
       }
 
-      if (LstTidy::Options::isConversionActive('ALL:ADD Syntax Fix') && ($type == 1 || $type == 2)) {
+      if (isConversionActive('ALL:ADD Syntax Fix') && ($type == 1 || $type == 2)) {
 
          $tag->id("ADD:");
          $addTag =~ s/ADD://;
@@ -322,7 +327,7 @@ sub convertAddTags {
       # the tag wasn't recognised as a valid ADD and is not a comment
       if ( index( $tag->fullTag, '#' ) != 0 ) {
 
-         LstTidy::LogFactory::getLogger->notice(
+         getLogger()->notice(
             qq{Invalid ADD tag "} . $tag->fullTag . q{" found in } . $tag->lineType,
             $tag->file,
             $tag->line
@@ -385,7 +390,7 @@ sub convertBonusCombatBAB {
             # We add the TYPE= statement at the end
             $tag->value($tag->value .= '|TYPE=Base.REPLACE');
 
-            LstTidy::LogFactory::getLogger->warning(
+            getLogger()->warning(
                q{Adding "|TYPE=Base.REPLACE" to "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -396,7 +401,7 @@ sub convertBonusCombatBAB {
 
             # We add the .REPLACE part
             $tag->value($tag->value =~ s/\|TYPE=Base/\|TYPE=Base.REPLACE/r);
-            LstTidy::LogFactory::getLogger->warning(
+            getLogger()->warning(
                qq{Adding ".REPLACE" to "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -404,7 +409,7 @@ sub convertBonusCombatBAB {
 
          } elsif ( !$is_type_base ) {
 
-            LstTidy::LogFactory::getLogger->info(
+            getLogger()->info(
                qq{Verify the TYPE of "} . $tag->fullTag . q{"},
                $tag->file,
                $tag->line
@@ -415,7 +420,7 @@ sub convertBonusCombatBAB {
 
          # If there is a BONUS:COMBAT elsewhere, we report it for manual
          # inspection.
-         LstTidy::LogFactory::getLogger->info(
+         getLogger()->info(
             qq{Verify this tag "} . $tag->origTag . q{"}, 
             $tag->file, 
             $tag->line
@@ -533,8 +538,8 @@ sub convertEntities {
    $line =~ s/\x95/*/g;
    $line =~ s/\x96/-/g;
    $line =~ s/\x97/-/g;
-   $line =~ s-\x98-<sup>~</sup>-g;
-   $line =~ s-\x99-<sup>TM</sup>-g;
+   # $line =~ s-\x98-<sup>~</sup>-g;
+   # $line =~ s-\x99-<sup>TM</sup>-g;
    $line =~ s/\x9B/>/g;
    $line =~ s/\x9C/oe/g;
 
@@ -580,7 +585,7 @@ sub convertEqModKeys {
 
             $tag->value($tag->value =~ s/\Q$old_key\E/$convertEquipmodKey{$old_key}/r);
 
-            LstTidy::LogFactory::getLogger->notice(
+            getLogger()->notice(
                qq(=> Replacing "$old_key" with "$convertEquipmodKey{$old_key}" in ") . $tag->origTag . q("),
                $tag->file,
                $tag->line
@@ -631,8 +636,8 @@ sub convertMove {
         
    Convert old style PREALIGN to new style
 
-   PREALIGN now accept text (two letters) instead of numbers to specify
-   alignments.  All the PREALIGN tags must be reformated to use textual form.
+   PREALIGN now accepts text (two letters) instead of numbers to specify
+   alignments. All the PREALIGN tags must be reformated to use textual form.
 
 =cut
 
@@ -752,7 +757,7 @@ sub convertPreSpellType {
             $value .= ",$st=$num_levels";
          }
 
-         LstTidy::LogFactory::getLogger()->notice(
+         getLogger()->notice(
             qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:} . $tag->value . qq{" found and converted in } . $tag->lineType,
             $tag->file,
             $tag->line
@@ -770,7 +775,7 @@ sub convertPreSpellType {
 
       $tag->value($tag->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
-      LstTidy::LogFactory::getLogger()->notice(
+      getLogger()->notice(
          qq{Invalid embedded PRESPELLTYPE tag "} . $tag->fullTag . q{" found and converted } . $tag->lineType . q{.},
          $tag->file,
          $tag->line
@@ -930,28 +935,28 @@ sub doTagConversions {
 
    my ($tag) = @_;
 
-   if (LstTidy::Options::isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($tag)      }
-   if (LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($tag)    }
-   if (LstTidy::Options::isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($tag)           }
-   if (LstTidy::Options::isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($tag)     }
-   if (LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($tag)         }
-   if (LstTidy::Options::isConversionActive('ALL:Find Willpower'))                  { reportWillpower($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($tag)              }
-   if (LstTidy::Options::isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($tag)          }
-   if (LstTidy::Options::isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($tag)      }
-   if (LstTidy::Options::isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($tag)           }
-   if (LstTidy::Options::isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($tag)        }
-   if (LstTidy::Options::isConversionActive('ALL:Willpower to Will') )              { convertWillpower($tag)         }
-   if (LstTidy::Options::isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($tag)  }
-   if (LstTidy::Options::isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($tag)     }
-   if (LstTidy::Options::isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($tag)               }
-   if (LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($tag)         }
-   if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($tag) }
-   if (LstTidy::Options::isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($tag)        }
+   if (isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($tag)      }
+   if (isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($tag)         }
+   if (isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($tag)    }
+   if (isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($tag)         }
+   if (isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($tag)           }
+   if (isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($tag)     }
+   if (isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($tag)         }
+   if (isConversionActive('ALL:Find Willpower'))                  { reportWillpower($tag)          }
+   if (isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($tag)              }
+   if (isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($tag)          }
+   if (isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($tag)          }
+   if (isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($tag)          }
+   if (isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($tag)      }
+   if (isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($tag)           }
+   if (isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($tag)        }
+   if (isConversionActive('ALL:Willpower to Will') )              { convertWillpower($tag)         }
+   if (isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($tag)  }
+   if (isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($tag)     }
+   if (isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($tag)               }
+   if (isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($tag)         }
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($tag) }
+   if (isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($tag)        }
 }
 
 =head2 ensureLeadingDigit
@@ -1011,7 +1016,7 @@ sub removePreAlign {
    if ( $tag->value =~ /PREALIGN/ ) {
 
       if ( $tag->value =~ /PREMULT/ ) {
-         LstTidy::LogFactory::getLogger->warning(
+         getLogger()->warning(
             qq(PREALIGN found in PREMULT, you will have to remove it yourself ") . $tag->origTag . q("),
             $tag->file,
             $tag->line
@@ -1025,7 +1030,7 @@ sub removePreAlign {
 
       } else {
 
-         LstTidy::LogFactory::getLogger->warning(
+         getLogger()->warning(
             qq(Found PREALIGN where I was not expecting it ") . $tag->origTag . q("),
             $tag->file,
             $tag->line
@@ -1046,7 +1051,7 @@ sub reportRaceCSkill {
    my ($tag) = @_;
 
    if ($tag->lineType eq "RACE" && $tag->id eq "CSKILL") {
-      LstTidy::LogFactory::getLogger->warning(
+      getLogger()->warning(
          qq{Found CSKILL in RACE file},
          $tag->file,
          $tag->line
@@ -1066,7 +1071,7 @@ sub reportReplacement {
    my $output = (defined $suffix) ? qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . qq(" $suffix)
                                   : qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . q(");
 
-   LstTidy::LogFactory::getLogger->warning($output, $tag->file, $tag->line);
+   getLogger()->warning($output, $tag->file, $tag->line);
 }
 
 =head2 reportWillpower

@@ -3,12 +3,41 @@ package LstTidy::Report;
 use strict;
 use warnings;
 
+require Exporter;
+
+our @ISA = qw(Exporter);
+our @EXPORT_OK = qw( 
+   add_to_xcheck_tables
+   doXCheck
+   incCountInvalidTags 
+   incCountValidTags 
+   openExportListFileHandles
+   printToExportList
+   registerReferrer
+   registerXCheck
+   reportInvalid
+   reportValid
+   );
+
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption isConversionActive);
+use LstTidy::Parse qw(getHeaderMissingOnLineType getMissingHeaderLineTypes);
+use LstTidy::Validate qw(
+   isValidCategory 
+   isValidEntity 
+   isValidSubEntity 
+   isValidType 
+   validSubEntityExists);
+
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
+
+# populated in additional line processing used for a report
+my %bonusAndPreTagReport = ();
 
 # Will hold the number of each tag found (by linetype)
 my %count_tags;
@@ -28,7 +57,6 @@ my %referrer_categories;
 # Format: push @{$referrer_types{$EntityType}{$typename}}, [ $tags{$column}, $file_for_error, $line_for_error ]
 my %referrer_types;
 
-my %valid_sub_entities;
 
 # Will hold the information for the entries that must be added in %referrer or
 # %referrer_types. The array is needed because all the files must have been
@@ -66,6 +94,22 @@ my %Hardcoded_Variables = map { $_ => 1 } (
    'mastervar',
    'APPLIEDAS',
 );
+
+
+=head2 addToBonusAndPreReport
+
+=cut
+
+sub addToBonusAndPreReport {
+
+   my ($lineRef, $fileType, $tagType) = @_;
+
+   for my $tag ( @{ $lineRef->{$tagType} } ) {
+      $bonusAndPreTagReport{$fileType}{$tag} = 1;
+   };
+}
+                                
+
 
 =head2 closeExportListFileHandles
 
@@ -120,6 +164,10 @@ sub incCountValidTags {
    $count_tags{"Valid"}{"Total"}{$tag}++;
    $count_tags{"Valid"}{$lineType}{$tag}++;
 }
+
+
+
+
 
 =head2 openExportListFileHandles
 
@@ -197,7 +245,7 @@ sub openExportListFileHandles {
    }
 
    # We need to list the tags that use Willpower
-   if ( LstTidy::Options::isConversionActive('ALL:Find Willpower') ) {
+   if ( isConversionActive('ALL:Find Willpower') ) {
       open $filehandles{Willpower}, '>', 'willpower.csv';
       print { $filehandles{Willpower} } qq{"Tag","Line","Filename"\n};
    }
@@ -235,52 +283,94 @@ sub registerReferrer {
 =cut
 
 sub registerXCheck {
-   my ($preType, $tag, $file, $line, @values) = @_;
+   my ($entityType, $tag, $file, $line, @values) = @_;
    
-   push @xcheck_to_process, [ $preType, $tag, $file, $line, @values ];
+   push @xcheck_to_process, [ $entityType, $tag, $file, $line, @values ];
 }
 
-=head2 reportInvalid
+=head2 report
 
    Print a report for the number of invalid tags found.
 
 =cut
 
-sub reportInvalid {
+sub report {
 
-   print STDERR "\n================================================================\n";
-   print STDERR "Invalid tags found\n";
-   print STDERR "----------------------------------------------------------------\n";
+   my ($reportType) = @_;
+
+   my $maxNumLength = 0;
+   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
+      if (length($count_tags{$reportType}{"Total"}{$tag}) >= $maxNumLength) {
+         $maxNumLength = length($count_tags{$reportType}{"Total"}{$tag});
+      }
+   }
+   $maxNumLength++;
+   my $format = "% ${maxNumLength}d";
+
+   my $log = getLogger();
+
+   my $header = $reportType . ' Tags';
+
+   $log->header(LstTidy::LogHeader::get($header));
 
    my $first = 1;
-   INVALID_LINE_TYPE:
-   for my $linetype ( sort keys %{ $count_tags{"Invalid"} } ) {
+   LINE_TYPE:
+   for my $lineType ( sort grep {$_ ne 'Total'} keys %{ $count_tags{$reportType} } ) {
 
-      next INVALID_LINE_TYPE if $linetype eq "Total";
+      my $lineHead = $first ? "Line Type: $lineType\n" : "\nLine Type: $lineType\n";
+      $log->report($lineHead);
 
-      print STDERR "\n" unless $first;
-      print STDERR "Line Type: $linetype\n";
-
-      for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{$linetype} } ) {
+      for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{$lineType} } ) {
 
          my $line = "    $tag";
-         $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{$linetype}{$tag};
-         print STDERR "$line\n";
+         $line .= ( " " x ( 26 - length($tag) ) );
+         $line .= sprintf $format, $count_tags{$reportType}{$lineType}{$tag};
+         $log->report($line);
       }
 
       $first = 0;
    }
 
-   print STDERR "\nTotal:\n";
+   $log->report("\nTotal:\n");
 
-   for my $tag ( sort reportTagSort keys %{ $count_tags{"Invalid"}{"Total"} } ) {
+   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
 
       my $line = "    $tag";
-      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Invalid"}{"Total"}{$tag};
-      print STDERR "$line\n";
+      $line .= ( " " x ( 26 - length($tag) ) );
+      $line .= sprintf $format, $count_tags{$reportType}{"Total"}{$tag};
+      $log->report($line);
 
    }
 }
+
+
+=head2 reportBonus
+
+=cut
+
+sub reportBonus {
+
+   my $log = getLogger();
+
+   $log->header(LstTidy::LogHeader::get('Bonus and PRE'));
+
+   my $first = 1;
+   LINE_TYPE:
+   for my $lineType (sort keys %bonusAndPreTagReport) {
+
+      my $lineHead = $first ? "Line Type: $lineType" : "\nLine Type: $lineType";
+      $log->report($lineHead);
+
+      for my $tag (sort keys %{$bonusAndPreTagReport{$lineType}}) {
+         $log->report("  $tag");
+      }
+      $first = 0;
+   }
+
+   $log->report("================================================================");
+}
+
+
 
 =head2 reportTagSort
 
@@ -301,50 +391,6 @@ sub reportTagSort {
    my $not_right = $right =~ s{^!}{}xms;
 
    $left cmp $right || $not_left <=> $not_right;
-}
-
-=head2 reportValid
-   
-   Print a report for the number of valid tags found.
-   
-=cut
-
-sub reportValid {
-
-   print STDERR "\n================================================================\n";
-   print STDERR "Valid tags found\n";
-   print STDERR "----------------------------------------------------------------\n";
-
-   my $first = 1;
-   REPORT_LINE_TYPE:
-   for my $line_type ( sort keys %{ $count_tags{"Valid"} } ) {
-      next REPORT_LINE_TYPE if $line_type eq "Total";
-
-      print STDERR "\n" unless $first;
-      print STDERR "Line Type: $line_type\n";
-
-      for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{$line_type} } ) {
-
-         my $tagdisplay = $tag;
-         $tagdisplay .= "*" if LstTidy::Reformat::isValidMultiTag($line_type, $tag);
-         my $line = "    $tagdisplay";
-         $line .= ( " " x ( 26 - length($tagdisplay) ) ) . $count_tags{"Valid"}{$line_type}{$tag};
-
-         print STDERR "$line\n";
-      }
-
-      $first = 0;
-   }
-
-   print STDERR "\nTotal:\n";
-
-   for my $tag ( sort reportTagSort keys %{ $count_tags{"Valid"}{"Total"} } ) {
-
-      my $line = "    $tag";
-      $line .= ( " " x ( 26 - length($tag) ) ) . $count_tags{"Valid"}{"Total"}{$tag};
-
-      print STDERR "$line\n";
-   }
 }
 
 
@@ -382,7 +428,7 @@ sub add_to_xcheck_tables {
    return if $file !~ / \A ${inputpath} /xmsi;
 
    # We remove the empty elements in the list
-   @list = grep { $_ ne "" } @list;
+   @list = grep { defined $_ && $_ ne "" } @list;
 
    # If the list of entry is empty, we retrun immediately
    return if scalar @list == 0;
@@ -502,7 +548,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $valid_sub_entities{'FEAT'}{$1} ) {
+            if ( isValidSubEntity('FEAT', $1) ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -511,10 +557,10 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                FEAT_ENTITY:
-               while ( $valid_sub_entities{'FEAT'}{$feat_to_check} =~ /^FEAT=(.*)/ ) {
+               while ( isValidSubEntity('FEAT', $feat_to_check) =~ /^FEAT=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $valid_sub_entities{'FEAT'}{$feat_to_check} ) {
-                     LstTidy::LogFactory::getLogger()->notice(
+                  if ( !validSubEntityExists('FEAT', $feat_to_check) ) {
+                     getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
                         $line
@@ -525,7 +571,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'FEAT'}{$feat_to_check},
+                  isValidSubEntity('FEAT', $feat_to_check),
                   $sub_tagName,
                   $file,
                   $line,
@@ -566,7 +612,7 @@ sub add_to_xcheck_tables {
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
-            if ( $valid_sub_entities{'ABILITY'}{$1} ) {
+            if ( isValidSubEntity('ABILITY', $1) ) {
                my $original_feat = $feat;
                my $feat_to_check = $feat = $1;
                my $entity              = $2;
@@ -575,10 +621,10 @@ sub add_to_xcheck_tables {
 
                # Find the real entity type in case of FEAT=
                ABILITY_ENTITY:
-               while ( $valid_sub_entities{'ABILITY'}{$feat_to_check} =~ /^ABILITY=(.*)/ ) {
+               while ( isValidSubEntity('ABILITY', $feat_to_check) =~ /^ABILITY=(.*)/ ) {
                   $feat_to_check = $1;
-                  if ( !exists $valid_sub_entities{'ABILITY'}{$feat_to_check} ) {
-                     LstTidy::LogFactory::getLogger()->notice(
+                  if ( !validSubEntityExists('ABILITY', $feat_to_check) ) {
+                     getLogger()->notice(
                         qq{Cannot find the sub-entity for "$original_feat"},
                         $file,
                         $line
@@ -589,7 +635,7 @@ sub add_to_xcheck_tables {
                }
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'ABILITY'}{$feat_to_check},
+                  isValidSubEntity('ABILITY', $feat_to_check),
                   $sub_tagName,
                   $file,
                   $line,
@@ -737,7 +783,7 @@ sub add_to_xcheck_tables {
          if ( $skill =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the SKILL is a compond tag
-            if ( $valid_sub_entities{'SKILL'}{$1} ) {
+            if ( isValidSubEntity('SKILL', $1) ) {
                $skill = $1;
                my $entity = $2;
 
@@ -745,7 +791,7 @@ sub add_to_xcheck_tables {
                $sub_tagName =~ s/@@/$skill (@@)/;
 
                add_to_xcheck_tables(
-                  $valid_sub_entities{'SKILL'}{$skill},
+                  isValidSubEntity('SKILL', $skill),
                   $sub_tagName,
                   $file,
                   $line,
@@ -824,7 +870,7 @@ sub add_to_xcheck_tables {
       }
 
    } else {
-      LstTidy::LogFactory::getLogger()->error(
+      getLogger()->error(
          "Invalid Entry type for $tagName (add_to_xcheck_tables): $entityType",
          $file,
          $line
@@ -886,7 +932,7 @@ sub doXCheck {
                # This looks wrong, everything else gets added to the report if its
                # not valid!!! Still this is what pretty lst used to do.
 
-               if (LstTidy::Validate::isEntityValid($item, $entry)) {
+               if (isValidEntity($item, $entry)) {
                   $addToReport = 1;
                   last ITEM;
                }
@@ -902,14 +948,14 @@ sub doXCheck {
 
          } else {
 
-            $addToReport = !LstTidy::Validate::isEntityValid($linetype, $entry);
+            $addToReport = !isValidEntity($linetype, $entry);
 
             # Special case for EQUIPMOD Key
             # -----------------------------
             # If an EQUIPMOD Key entry doesn't exists, we can use the EQUIPMOD
             # name 
-            $message =   ($linetype ne 'EQUIPMOD Key' )                         ? $linetype
-                       : (LstTidy::Validate::isEntityValid('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 
+            $message =   ($linetype ne 'EQUIPMOD Key' )      ? $linetype
+                       : (isValidEntity('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 
                        : 'EQUIPMOD Key or EQUIPMOD';
          }
 
@@ -919,10 +965,10 @@ sub doXCheck {
       }
    }
 
-   my $logger = LstTidy::LogFactory::getLogger();
+   my $log = getLogger();
 
    # Print the report sorted by file name and line number.
-   $logger->header(LstTidy::LogHeader::get('CrossRef'));
+   $log->header(LstTidy::LogHeader::get('CrossRef'));
 
    # This will add a message for every message in to_report - which should be every message
    # that was added to to_report.
@@ -932,14 +978,12 @@ sub doXCheck {
 
          # If it is an EQMOD Key missing, it is less severe
          if ($line_ref->[1] eq 'EQUIPMOD Key') {
-            $logger->info(  $message, $file, $line_ref->[0] );
+            $log->info(  $message, $file, $line_ref->[0] );
          } else {
-            $logger->notice(  $message, $file, $line_ref->[0] );
+            $log->notice(  $message, $file, $line_ref->[0] );
          }
       }
    }
-   
-   my %valid_types = LstTidy::Validate::getValidTypes();
 
    ###############################################
    # Type report
@@ -948,7 +992,7 @@ sub doXCheck {
    %to_report = ();
    for my $linetype ( sort %referrer_types ) {
       for my $entry ( sort keys %{ $referrer_types{$linetype} } ) {
-         if (! exists $valid_types{$linetype}{$entry} ) {
+         if (! isValidType($linetype, $entry) ) {
             for my $array ( @{ $referrer_types{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
@@ -957,19 +1001,17 @@ sub doXCheck {
    }
 
    # Print the type report sorted by file name and line number.
-   $logger->header(LstTidy::LogHeader::get('Type CrossRef'));
+   $log->header(LstTidy::LogHeader::get('Type CrossRef'));
 
    for my $file ( sort keys %to_report ) {
       for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-         $logger->notice(
+         $log->notice(
             qq{No $line_ref->[1] type found for "$line_ref->[2]"},
             $file,
             $line_ref->[0]
          );
       }
    }
-   
-   my %valid_categories = LstTidy::Validate::getValidCategories();
 
    ###############################################
    # Category report
@@ -978,7 +1020,7 @@ sub doXCheck {
    %to_report = ();
    for my $linetype ( sort %referrer_categories ) {
       for my $entry ( sort keys %{ $referrer_categories{$linetype} } ) {
-         if (!exists $valid_categories{$linetype}{$entry} ) {
+         if (! isValidCategory($linetype, $entry) ) {
             for my $array ( @{ $referrer_categories{$linetype}{$entry} } ) {
                push @{ $to_report{ $array->[1] } }, [ $array->[2], $linetype, $array->[0] ];
             }
@@ -987,12 +1029,12 @@ sub doXCheck {
    }
 
    # Set the header in the singleton logger object
-   $logger->header(LstTidy::LogHeader::get('Category CrossRef'));
+   $log->header(LstTidy::LogHeader::get('Category CrossRef'));
 
    # Print the category report sorted by file name and line number.
    for my $file ( sort keys %to_report ) {
       for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
-         $logger->notice(
+         $log->notice(
             qq{No $line_ref->[1] category found for "$line_ref->[2]"},
             $file,
             $line_ref->[0]
@@ -1005,17 +1047,15 @@ sub doXCheck {
    # Print the tag that do not have defined headers if requested
    if ( getOption('missingheader') ) {
 
-      my $logger = LstTidy::LogFactory::getLogger();
-      $logger->header(LstTidy::LogHeader::get('Missing Header'));
+      my $log = getLogger();
+      $log->header(LstTidy::LogHeader::get('Missing Header'));
 
-      my %missing_headers = %{ LstTidy::Parse::getMissingHeaders() };
+      for my $linetype (sort getMissingHeaderLineTypes()) {
 
-      for my $linetype ( sort keys %missing_headers ) {
+         $log->report("Line Type: ${linetype}");
 
-         $logger->report("Line Type: ${linetype}");
-
-         for my $header ( sort reportTagSort keys %{ $missing_headers{$linetype} } ) {
-            $logger->report("  ${header}");
+         for my $header ( sort reportTagSort getHeaderMissingOnLineType()) {
+            $log->report("  ${header}");
          }
       }
    }

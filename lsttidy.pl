@@ -6,7 +6,7 @@ use Fatal qw( open close );             # Force some built-ins to die on error
 use English qw( -no_match_vars );       # No more funky punctuation variables
 
 my $VERSION        = "1.00.00";
-my $VERSION_DATE   = "2018-12-2";
+my $VERSION_DATE   = "2018-12-22";
 my ($PROGRAM_NAME) = "PCGen LstTidy";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
@@ -14,38 +14,34 @@ my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
 my $today = localtime;
 
 use Carp;
-use Getopt::Long;
 use FileHandle;
-use Pod::Html    ();     # We do not import any function for
-use Pod::Text    ();     # the modules other than "system" modules
-use Pod::Usage   ();
-use File::Find   ();
+use Pod::Html ();  # We do not import any function for
+use Pod::Text ();  # the modules other than "system" modules
+use Pod::Usage ();
+use File::Find ();
 use File::Basename ();
-use Text::Balanced ();
 
-# expand library path so we can find LstTidy modules
+# Expand the local library path so we can find LstTidy modules
 use File::Basename qw(dirname);
-use Cwd  qw(abs_path);
+use Cwd qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
-
+                        
+use LstTidy::Convert qw(convertEntities);
 use LstTidy::Log;
-use LstTidy::LogFactory;
+use LstTidy::LogFactory qw(getLogger);
 use LstTidy::LogHeader;
 use LstTidy::Options qw(getOption setOption isConversionActive);
-use LstTidy::Parse;
-use LstTidy::Reformat;
+use LstTidy::Parse qw(parseLine);
+use LstTidy::Reformat qw(getEntityNameTag);
 use LstTidy::Report;
-use LstTidy::Validate;
+use LstTidy::Validate qw(validateLine);
 
 # Subroutines
 sub FILETYPE_parse;
-sub validate_line;
-sub additionnal_line_parsing;
-sub additionnal_file_parsing;
+sub parseFile;
 sub check_clear_tag_order;
 sub find_full_path;
 sub create_dir;
-sub embedded_coma_split;
 sub record_bioset_tags;
 sub generate_bioset_files;
 sub generate_css;
@@ -53,133 +49,68 @@ sub generate_css;
 # Print version information
 print STDERR "$VERSION_LONG\n";
 
-# -------------------------------------------------------------
+#######################################################################
 # Parameter parsing
-# -------------------------------------------------------------
 
 # Parse the command line options and set the error message if there are any issues.
-my $error_message = "\n" . LstTidy::Options::parseOptions(@ARGV);
+my $errorMessage = "\n" . LstTidy::Options::parseOptions(@ARGV);
 
-# The command line has been processed, if conversions have been requested, make
-# sure the tag validity data in Reformat.pm is updated. In order to convert a
-# tag it must be recognised as valid. 
-
-LstTidy::Reformat::addTagsForConversions(); 
-
-# Test function or display variables
-# or anything else I need.
-
+# Test function or display variables or anything else I need.
 if ( getOption('test') ) {
 
    print "No tests set\n";
    exit;
 }
 
-# Warning Level
+# The command line has been processed, if conversions have been requested, make
+# sure the tag validity data in Reformat.pm is updated. In order to convert a
+# tag it must be recognised as valid. 
+LstTidy::Reformat::addTagsForConversions(); 
 
-# Check the warning level passed on the command line to ensure it is valid.
-# Whether the check passes or fals, a valid level is returned. If the level we
-# gave it was invalid, an error string is also returned. If it returned an
-# error string it also set an options to ensure the error string is printed.
+# Create the singleton logging object
+my $log = getLogger();
 
-my ($level, $mess) = LstTidy::Log::checkWarningLevel(getOption('warninglevel'));
-
-setOption('warninglevel', $level);
-$error_message .= $mess if defined $mess;
-
-# Create the singleton logging object using the warning level verified above.
-my $log = LstTidy::LogFactory::getLogger();
-
-# Path options
-
-if (!getOption('inputpath') && !getOption('filetype') && !(getOption('man') || getOption('htmlhelp')))
-{
-   $error_message .= "\n-inputpath parameter is missing\n";
-   setOption('help', 1);
-}
-
-#####################################
-# Redirect STDERR if needed
+#######################################################################
+# Redirect STDERR if requeseted  
 
 if (getOption('outputerror')) {
    open STDERR, '>', getOption('outputerror');
-   print STDERR "Error log for ", $VERSION_LONG, "\n";
-   print STDERR "At ", $today, " on the data files in the \'", getOption('inputpath') , "\' directory\n";
+   print STDERR "Error log for $VERSION_LONG\n";
+   print STDERR qq{On the files in "} . getOption('inputpath') . qq{" on $today\n};
 }
 
-#####################################
-# -systempath option
-#
-# If present, call the function to
-# generate the "game mode" variables.
+#######################################################################
+# Path options
 
-if ( getOption('systempath') ne q{} ) {
-   LstTidy::Parse::parseSystemFiles(getOption('systempath'), $log);
-} 
+if (!getOption('inputpath') && !getOption('filetype') && 
+   !(getOption('man') || getOption('htmlhelp')))
+{
+   $errorMessage .= "\n-inputpath parameter is missing\n";
+   setOption('help', 1);
+}
 
-LstTidy::Parse::updateValidity();
+# Verify that the outputpath exists
+if ( getOption('outputpath') && !-d getOption('outputpath') ) {
 
-# Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
-my @valid_system_alignments  = LstTidy::Parse::getValidSystemArr('alignments');
-my @valid_system_stats       = LstTidy::Parse::getValidSystemArr('stats');
+   $errorMessage = "\nThe directory " . getOption('outputpath') . " does not exist.";
 
-# Limited choice tags
-my %tag_fix_value = (
-   ACHECK               => { YES => 1, NO => 1, WEIGHT => 1, PROFICIENT => 1, DOUBLE => 1 },
-   ALIGN                => { map { $_ => 1 } @valid_system_alignments },
-   APPLY                => { INSTANT => 1, PERMANENT => 1 },
-   BONUSSPELLSTAT       => { map { $_ => 1 } ( @valid_system_stats, 'NONE' ) },
-   DESCISIP             => { YES => 1, NO => 1 },
-   EXCLUSIVE            => { YES => 1, NO => 1 },
-   FORMATCAT            => { FRONT => 1, MIDDLE => 1, PARENS => 1 },       # [ 1594671 ] New tag: equipmod FORMATCAT
-   FREE                 => { YES => 1, NO => 1 },
-   KEYSTAT              => { map { $_ => 1 } @valid_system_stats },
-   HASSUBCLASS          => { YES => 1, NO => 1 },
-   ALLOWBASECLASS       => { YES => 1, NO => 1 },
-   HASSUBSTITUTIONLEVEL => { YES => 1, NO => 1 },
-   ISD20                => { YES => 1, NO => 1 },
-   ISLICENSED           => { YES => 1, NO => 1 },
-   ISOGL                => { YES => 1, NO => 1 },
-   ISMATURE             => { YES => 1, NO => 1 },
-   MEMORIZE             => { YES => 1, NO => 1 },
-   MULT                 => { YES => 1, NO => 1 },
-   MODS                 => { YES => 1, NO => 1, REQUIRED => 1 },
-   MODTOSKILLS          => { YES => 1, NO => 1 },
-   NAMEISPI             => { YES => 1, NO => 1 },
-   RACIAL               => { YES => 1, NO => 1 },
-   REMOVABLE            => { YES => 1, NO => 1 },
-   RESIZE               => { YES => 1, NO => 1 },                          # [ 1956719 ] Add RESIZE tag to Equipment file
-   PREALIGN             => { map { $_ => 1 } @valid_system_alignments }, 
-   PRESPELLBOOK         => { YES => 1, NO => 1 },
-   SHOWINMENU           => { YES => 1, NO => 1 },                          # [ 1718370 ] SHOWINMENU tag missing for PCC files
-   STACK                => { YES => 1, NO => 1 },
-   SPELLBOOK            => { YES => 1, NO => 1 },
-   SPELLSTAT            => { map { $_ => 1 } ( @valid_system_stats, 'SPELL', 'NONE', 'OTHER' ) },
-   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
-   USEUNTRAINED         => { YES => 1, NO => 1 },
-   USEMASTERSKILL       => { YES => 1, NO => 1 },
-   VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
-);
+   Pod::Usage::pod2usage(
+      {
+         -msg     => $errorMessage,
+         -exitval => 1,
+         -output  => \*STDERR,
+      }
+   );
+   exit;
+}
 
-# This hash is used to convert 1 character choices to proper fix values.
-my %tag_proper_value_for = (
-   'Y'     =>  'YES',
-   'N'     =>  'NO',
-   'W'     =>  'WEIGHT',
-   'Q'     =>  'QUALIFY',
-   'P'     =>  'PROFICIENT',
-   'R'     =>  'REQUIRED',
-   'true'  =>  'YES',
-   'false' =>  'NO',
-);
-
-#####################################
+#######################################################################
 # Diplay usage information
 
 if ( getOption('help') or $LstTidy::Options::error ) {
    Pod::Usage::pod2usage(
       {   
-         -msg     => $error_message,
+         -msg     => $errorMessage,
          -exitval => 1,
          -output  => \*STDERR
       }
@@ -187,13 +118,13 @@ if ( getOption('help') or $LstTidy::Options::error ) {
    exit;
 }
 
-#####################################
+#######################################################################
 # Display the man page
 
 if (getOption('man')) {
    Pod::Usage::pod2usage(
       {
-         -msg     => $error_message,
+         -msg     => $errorMessage,
          -verbose => 2,
          -output  => \*STDERR
       }
@@ -201,7 +132,7 @@ if (getOption('man')) {
    exit;
 }
 
-#####################################
+#######################################################################
 # Generate the HTML man page and display it
 
 if ( getOption('htmlhelp') ) {
@@ -222,691 +153,57 @@ if ( getOption('htmlhelp') ) {
    exit;
 }
 
-my %source_tags        = ()  if LstTidy::Options::isConversionActive('SOURCE line replacement');
-my $source_curent_file = q{} if LstTidy::Options::isConversionActive('SOURCE line replacement');
+#######################################################################
+# -systempath option
+#
+# If a system path was passed on the command line, call the function to
+# generate the "game mode" variables.
 
-my %classskill_files   = ()  if LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS');
+if ( getOption('systempath') ne q{} ) {
+   LstTidy::Parse::parseSystemFiles(getOption('systempath'));
+} 
 
-my %classspell_files   = ()  if LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL');
+# For Some tags, validity is based on the system mode variables 
+LstTidy::Parse::updateValidity();
 
-my %class_files        = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
-my %class_spelltypes   = ()  if LstTidy::Options::isConversionActive('SPELL:Add TYPE tags');
 
-my %Spells_For_EQMOD   = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD');
-my %Spell_Files        = ()  if LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                                || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD');
-
-my %bonus_prexxx_tag_report = ()  if LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report');
-
-my %PREALIGN_conversion_5715 = qw(
-   0   LG
-   1   LN
-   2   LE
-   3   NG
-   4   TN
-   5   NE
-   6   CG
-   7   CN
-   8   CE
-   9   NONE
-   10  Deity
-) if LstTidy::Options::isConversionActive('ALL:PREALIGN conversion');
-
-my %Key_conversion_56 = qw(
-        BIND            BLIND
-) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
-#       ABENHABON       BNS_ENHC_AB
-#       ABILITYMINUS    BNS_ENHC_AB
-#       ABILITYPLUS     BNS_ENHC_AB
-#       ACDEFLBON       BNS_AC_DEFL
-#       ACENHABON       BNS_ENHC_AC
-#       ACINSIBON       BNS_AC_INSI
-#       ACLUCKBON       BNS_AC_LUCK
-#       ACOTHEBON       BNS_AC_OTHE
-#       ACPROFBON       BNS_AC_PROF
-#       ACSACRBON       BNS_AC_SCRD
-#       ADAARH          ADAM
-#       ADAARH          ADAM
-#       ADAARL          ADAM
-#       ADAARM          ADAM
-#       ADAWE           ADAM
-#       AMINAT          ANMATD
-#       AMMO+1          PLUS1W
-#       AMMO+2          PLUS2W
-#       AMMO+3          PLUS3W
-#       AMMO+4          PLUS4W
-#       AMMO+5          PLUS5W
-#       AMMODARK        DARK
-#       AMMOSLVR        SLVR
-#       ARFORH          FRT_HVY
-#       ARFORL          FRT_LGHT
-#       ARFORM          FRT_MOD
-#       ARMFOR          FRT_LGHT
-#       ARMFORH         FRT_HVY
-#       ARMFORM         FRT_MOD
-#       ARMORENHANCE    BNS_ENHC_AC
-#       ARMR+1          PLUS1A
-#       ARMR+2          PLUS2A
-#       ARMR+3          PLUS3A
-#       ARMR+4          PLUS4A
-#       ARMR+5          PLUS5A
-#       ARMRADMH        ADAM
-#       ARMRADML        ADAM
-#       ARMRADMM        ADAM
-#       ARMRMITH        MTHRL
-#       ARMRMITL        MTHRL
-#       ARMRMITM        MTHRL
-#       ARWCAT          ARW_CAT
-#       ARWDEF          ARW_DEF
-#       BANEA           BANE_A
-#       BANEM           BANE_M
-#       BANER           BANE_R
-#       BASHH           BASH_H
-#       BASHL           BASH_L
-#       BIND            BLIND
-#       BONSPELL        BNS_SPELL
-#       BONUSSPELL      BNS_SPELL
-#       BRIENAI         BRI_EN_A
-#       BRIENM          BRI_EN_M
-#       BRIENT          BRI_EN_T
-#       CHAOSA          CHAOS_A
-#       CHAOSM          CHAOS_M
-#       CHAOSR          CHAOS_R
-#       CLDIRNAI        CIRON
-#       CLDIRNW         CIRON
-#       DAGSLVR         SLVR
-#       DEFLECTBONUS    BNS_AC_DEFL
-#       DRGNAR          DRACO
-#       DRGNSH          DRACO
-#       DRKAMI          DARK
-#       DRKSH           DARK
-#       DRKWE           DARK
-#       ENBURM          EN_BUR_M
-#       ENBURR          EN_BUR_R
-#       ENERGM          ENERG_M
-#       ENERGR          ENERG_R
-#       FLAMA           FLM_A
-#       FLAMM           FLM_M
-#       FLAMR           FLM_R
-#       FLBURA          FLM_BR_A
-#       FLBURM          FLM_BR_M
-#       FLBURR          FLM_BR_R
-#       FROSA           FROST_A
-#       FROSM           FROST_M
-#       FROSR           FROST_R
-#       GHTOUA          GHOST_A
-#       GHTOUAM         GHOST_AM
-#       GHTOUM          GHOST_M
-#       GHTOUR          GHOST_R
-#       HCLDIRNW        CIRON/2
-#       HOLYA           HOLY_A
-#       HOLYM           HOLY_M
-#       HOLYR           HOLY_R
-#       ICBURA          ICE_BR_A
-#       ICBURM          ICE_BR_M
-#       ICBURR          ICE_BR_R
-#       LAWA            LAW_A
-#       LAWM            LAW_M
-#       LAWR            LAW_R
-#       LUCKBONUS       BNS_SAV_LUC
-#       LUCKBONUS2      BNS_SKL_LCK
-#       MERCA           MERC_A
-#       MERCM           MERC_M
-#       MERCR           MERC_R
-#       MICLE           MI_CLE
-#       MITHAMI         MTHRL
-#       MITHARH         MTHRL
-#       MITHARL         MTHRL
-#       MITHARM         MTHRL
-#       MITHGO          MTHRL
-#       MITHSH          MTHRL
-#       MITHWE          MTHRL
-#       NATENHA         BNS_ENHC_NAT
-#       NATURALARMOR    BNS_ENHC_NAT
-#       PLUS1AM         PLUS1W
-#       PLUS1AMI        PLUS1W
-#       PLUS1WI         PLUS1W
-#       PLUS2AM         PLUS2W
-#       PLUS2AMI        PLUS2W
-#       PLUS2WI         PLUS2W
-#       PLUS3AM         PLUS3W
-#       PLUS3AMI        PLUS3W
-#       PLUS3WI         PLUS3W
-#       PLUS4AM         PLUS4W
-#       PLUS4AMI        PLUS4W
-#       PLUS4WI         PLUS4W
-#       PLUS5AM         PLUS5W
-#       PLUS5AMI        PLUS5W
-#       PLUS5WI         PLUS5W
-#       RESIMP          RST_IMP
-#       RESIST          RST_IST
-#       RESISTBONUS     BNS_SAV_RES
-#       SAVINSBON       BNS_SAV_INS
-#       SAVLUCBON       BNS_SAV_LUC
-#       SAVOTHBON       BNS_SAV_OTH
-#       SAVPROBON       BNS_SAV_PRO
-#       SAVRESBON       BNS_SAV_RES
-#       SAVSACBON       BNS_SAV_SAC
-#       SE50CST         SPL_CHRG
-#       SECW            SPL_CMD
-#       SESUCAMA        A_1USEMI
-#       SESUCAME        A_1USEMI
-#       SESUCAMI        A_1USEMI
-#       SESUCDMA        D_1USEMI
-#       SESUCDME        D_1USEMI
-#       SESUCDMI        D_1USEMI
-#       SESUUA          SPL_1USE
-#       SEUA            SPL_ACT
-#       SE_1USEACT      SPL_1USE
-#       SE_50TRIGGER    SPL_CHRG
-#       SE_COMMANDWORD  SPL_CMD
-#       SE_USEACT       SPL_ACT
-#       SHBURA          SHK_BR_A
-#       SHBURM          SHK_BR_M
-#       SHBURR          SHK_BR_R
-#       SHDGRT          SHDW_GRT
-#       SHDIMP          SHDW_IMP
-#       SHDOW           SHDW
-#       SHFORH          FRT_HVY
-#       SHFORL          FRT_LGHT
-#       SHFORM          FRT_MOD
-#       SHLDADAM        ADAM
-#       SHLDDARK        DARK
-#       SHLDMITH        MTHRL
-#       SHOCA           SHOCK_A
-#       SHOCM           SHOCK_M
-#       SHOCR           SHOCK_R
-#       SKILLBONUS      BNS_SKL_CIR
-#       SKILLBONUS2     BNS_SKL_CMP
-#       SKLCOMBON       BNS_SKL_CMP
-#       SLICK           SLK
-#       SLKGRT          SLK_GRT
-#       SLKIMP          SLK_IMP
-#       SLMV            SLNT_MV
-#       SLMVGRT         SLNT_MV_GRT
-#       SLMVIM          SLNT_MV_IM
-#       SLVRAMI         ALCHM
-#       SLVRWE1         ALCHM
-#       SLVRWE2         ALCHM
-#       SLVRWEF         ALCHM
-#       SLVRWEH         ALCHM/2
-#       SLVRWEL         ALCHM
-#       SPELLRESI       BNS_SPL_RST
-#       SPELLRESIST     BNS_SPL_RST
-#       SPLRES          SPL_RST
-#       SPLSTR          SPL_STR
-#       THNDRA          THNDR_A
-#       THNDRM          THNDR_M
-#       THNDRR          THNDR_R
-#       UNHLYA          UNHLY_A
-#       UNHLYM          UNHLY_M
-#       UNHLYR          UNHLY_R
-#       WEAP+1          PLUS1W
-#       WEAP+2          PLUS2W
-#       WEAP+3          PLUS3W
-#       WEAP+4          PLUS4W
-#       WEAP+5          PLUS5W
-#       WEAPADAM        ADAM
-#       WEAPDARK        DARK
-#       WEAPMITH        MTHRL
-#       WILDA           WILD_A
-#       WILDS           WILD_S
-#       ) if LstTidy::Options::isConversionActive('ALL:EQMOD has new keys');
-
-if(LstTidy::Options::isConversionActive('ALL:EQMOD has new keys'))
-{
-   my ($old_key,$new_key);
-   while (($old_key,$new_key) = each %Key_conversion_56)
-   {
-      if($old_key eq $new_key) {
-         print "==> $old_key\n";
-         delete $Key_conversion_56{$old_key};
-      }
-   }
-}
-
-my %srd_weapon_name_conversion_433 = (
-   q{Sword (Great)}                => q{Greatsword},
-   q{Sword (Long)}                 => q{Longsword},
-   q{Dagger (Venom)}               => q{Venom Dagger},
-   q{Dagger (Assassin's)}          => q{Assassin's Dagger},
-   q{Mace (Smiting)}               => q{Mace of Smiting},
-   q{Mace (Terror)}                => q{Mace of Terror},
-   q{Greataxe (Life-Drinker)}      => q{Life Drinker},
-   q{Rapier (Puncturing)}          => q{Rapier of Puncturing},
-   q{Scimitar (Sylvan)}            => q{Sylvan Scimitar},
-   q{Sword (Flame Tongue)}         => q{Flame Tongue},
-   q{Sword (Planes)}               => q{Sword of the Planes},
-   q{Sword (Luck Blade)}           => q{Luck Blade},
-   q{Sword (Subtlety)}             => q{Sword of Subtlety},
-   q{Sword (Holy Avenger)}         => q{Holy Avenger},
-   q{Sword (Life Stealing)}        => q{Sword of Life Stealing},
-   q{Sword (Nine Lives Stealer)}   => q{Nine Lives Stealer},
-   q{Sword (Frost Brand)}          => q{Frost Brand},
-   q{Trident (Fish Command)}       => q{Trident of Fish Command},
-   q{Trident (Warning)}            => q{Trident of Warning},
-   q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
-) if LstTidy::Options::isConversionActive('ALL: 4.3.3 Weapon name change');
-
+# PCC processing
+my %files = ();
 
 # Constants for master_line_type
 
 # Line importance (Mode)
-use constant MAIN               => 1;      # Main line type for the file
-use constant SUB                => 2;      # Sub line type, must be linked to a MAIN
-use constant SINGLE     => 3;      # Idependant line type
-use constant COMMENT    => 4;      # Comment or empty line.
+use constant MAIN          => 1;      # Main line type for the file
+use constant SUB           => 2;      # Sub line type, must be linked to a MAIN
+use constant SINGLE        => 3;      # Idependant line type
+use constant COMMENT       => 4;      # Comment or empty line.
 
 # Line formatting option
-use constant LINE                       => 1;   # Every line formatted by itself
-use constant BLOCK              => 2;   # Lines formatted as a block
-use constant FIRST_COLUMN       => 3;   # Only the first column of the block
+use constant LINE          => 1;   # Every line formatted by itself
+use constant BLOCK         => 2;   # Lines formatted as a block
+use constant FIRST_COLUMN  => 3;   # Only the first column of the block
                                                 # gets aligned
 
 # Line header option
-use constant NO_HEADER          => 1;   # No header
-use constant LINE_HEADER        => 2;   # One header before each line
-use constant BLOCK_HEADER       => 3;   # One header for the block
+use constant NO_HEADER     => 1;   # No header
+use constant LINE_HEADER   => 2;   # One header before each line
+use constant BLOCK_HEADER  => 3;   # One header for the block
 
 # Standard YES NO constants
 use constant NO  => 0;
 use constant YES => 1;
 
 
-my %double_PCC_tags = (
-        'BONUS:ABILITYPOOL',    => 1,
-        'BONUS:CASTERLEVEL',    => 1,
-        'BONUS:CHECKS',         => 1,
-        'BONUS:COMBAT',         => 1,
-        'BONUS:DC',                     => 1,
-        'BONUS:DOMAIN',         => 1,
-        'BONUS:DR',                     => 1,
-        'BONUS:FEAT',           => 1,
-        'BONUS:FOLLOWERS',      => 1,
-        'BONUS:HP',                     => 1,
-        'BONUS:MISC',           => 1,
-        'BONUS:MOVEADD',                => 1,
-        'BONUS:MOVEMULT',               => 1,
-        'BONUS:PCLEVEL',                => 1,
-        'BONUS:POSTMOVEADD',    => 1,
-        'BONUS:POSTRANGEADD',   => 1,
-        'BONUS:RANGEADD',               => 1,
-        'BONUS:RANGEMULT',      => 1,
-        'BONUS:SITUATION',              => 1,
-        'BONUS:SIZEMOD',                => 1,
-        'BONUS:SKILL',          => 1,
-        'BONUS:SKILLPOINTS',    => 1,
-        'BONUS:SKILLPOOL',      => 1,
-        'BONUS:SKILLRANK',      => 1,
-        'BONUS:SLOTS',          => 1,
-        'BONUS:SPECIALTYSPELLKNOWN',            => 1,
-        'BONUS:SPELLCAST',      => 1,
-        'BONUS:SPELLCASTMULT',  => 1,
-        'BONUS:SPELLKNOWN',     => 1,
-        'BONUS:STAT',           => 1,
-        'BONUS:UDAM',           => 1,
-        'BONUS:VAR',            => 1,
-        'BONUS:VISION',         => 1,
-        'BONUS:WEAPONPROF',     => 1,
-        'BONUS:WIELDCATEGORY',  => 1,
- );
-
-
-my @SOURCE_Tags = (
-        'SOURCELONG',
-        'SOURCESHORT',
-        'SOURCEWEB',
-        'SOURCEPAGE:.CLEAR',
-        'SOURCEPAGE',
-        'SOURCELINK',
-);
-
-my @QUALIFY_Tags = (
-        'QUALIFY:ABILITY',
-        'QUALIFY:CLASS',
-        'QUALIFY:DEITY',
-        'QUALIFY:DOMAIN',
-        'QUALIFY:EQUIPMENT',
-        'QUALIFY:EQMOD',
-        'QUALIFY:FEAT',
-        'QUALIFY:RACE',
-        'QUALIFY:SPELL',
-        'QUALIFY:SKILL',
-        'QUALIFY:TEMPLATE',
-        'QUALIFY:WEAPONPROF',
-);
-
-# [ 1956340 ] Centralize global BONUS tags
-# The global BONUS:xxx tags. They are used in many of the line types.
-# From now on, they are defined in only one place and every
-# line type will get the same sort order.
-# BONUSes only valid for specific line types are listed on those line types
-my @Global_BONUS_Tags = (
-        'BONUS:ABILITYPOOL:*',          # Global
-        'BONUS:CASTERLEVEL:*',          # Global
-        'BONUS:CHECKS:*',                       # Global        DEPRECATED
-        'BONUS:COMBAT:*',                       # Global
-        'BONUS:CONCENTRATION:*',                # Global
-        'BONUS:DC:*',                   # Global
-        'BONUS:DOMAIN:*',                       # Global
-        'BONUS:DR:*',                   # Global
-        'BONUS:FEAT:*',                 # Global
-        'BONUS:FOLLOWERS',              # Global
-        'BONUS:HP:*',                   # Global
-        'BONUS:MISC:*',                 # Global
-        'BONUS:MOVEADD:*',              # Global
-        'BONUS:MOVEMULT:*',             # Global
-        'BONUS:PCLEVEL:*',              # Global
-        'BONUS:POSTMOVEADD:*',          # Global
-        'BONUS:POSTRANGEADD:*',         # Global
-        'BONUS:RANGEADD:*',             # Global
-        'BONUS:RANGEMULT:*',            # Global
-        'BONUS:SAVE:*',                         # Global        Replacement for CHECKS
-        'BONUS:SITUATION:*',            # Global
-        'BONUS:SIZEMOD:*',              # Global
-        'BONUS:SKILL:*',                        # Global
-        'BONUS:SKILLPOINTS:*',          # Global
-        'BONUS:SKILLPOOL:*',            # Global
-        'BONUS:SKILLRANK:*',            # Global
-        'BONUS:SLOTS:*',                        # Global
-        'BONUS:SPECIALTYSPELLKNOWN:*',                  # Global
-        'BONUS:SPELLCAST:*',            # Global
-        'BONUS:SPELLCASTMULT:*',        # Global
-#       'BONUS:SPELLPOINTCOST:*',       # Global
-        'BONUS:SPELLKNOWN:*',           # Global
-        'BONUS:STAT:*',                 # Global
-        'BONUS:UDAM:*',                 # Global
-        'BONUS:VAR:*',                  # Global
-        'BONUS:VISION:*',                       # Global
-        'BONUS:WEAPONPROF:*',           # Global
-        'BONUS:WIELDCATEGORY:*',        # Global
-#       'BONUS:DAMAGE:*',                       # Deprecated
-#       'BONUS:DEFINE:*',                       # Not listed in the Docs
-#       'BONUS:EQM:*',                  # Equipment and EquipMod files only
-#       'BONUS:EQMARMOR:*',             # Equipment and EquipMod files only
-#       'BONUS:EQMWEAPON:*',            # Equipment and EquipMod files only
-#       'BONUS:ESIZE:*',                        # Not listed in the Docs
-#       'BONUS:HD',                             # Class Lines
-#       'BONUS:LANGUAGES:*',            # Not listed in the Docs
-#       'BONUS:LANG:*',                 # BONUS listed in the Code which is to be used instead of the deprecated BONUS:LANGNUM tag.
-#       'BONUS:MONSKILLPTS',            # Templates
-#       'BONUS:REPUTATION:*',           # Not listed in the Docs
-#       'BONUS:RING:*',                 # Not listed in the Docs
-#       'BONUS:SCHOOL:*',                       # Not listed in the Docs
-#       'BONUS:SPELL:*',                        # Not listed in the Docs
-#       'BONUS:TOHIT:*',                        # Deprecated
-#       'BONUS:WEAPON:*',                       # Equipment and EquipMod files only
-);
-
-# Global tags allowed in PCC files.
-my @double_PCC_tags = (
-        'BONUS:ABILITYPOOL:*',          
-        'BONUS:CASTERLEVEL:*',          
-        'BONUS:CHECKS:*',                       
-        'BONUS:COMBAT:*',                       
-        'BONUS:CONCENTRATION:*',
-        'BONUS:DC:*',                   
-        'BONUS:DOMAIN:*',                       
-        'BONUS:DR:*',                   
-        'BONUS:FEAT:*',                 
-        'BONUS:FOLLOWERS',              
-        'BONUS:HP:*',                   
-        'BONUS:MISC:*',                 
-        'BONUS:MOVEADD:*',              
-        'BONUS:MOVEMULT:*',             
-        'BONUS:PCLEVEL:*',              
-        'BONUS:POSTMOVEADD:*',          
-        'BONUS:POSTRANGEADD:*',         
-        'BONUS:RANGEADD:*',             
-        'BONUS:RANGEMULT:*',            
-        'BONUS:SAVE:*',                 
-        'BONUS:SIZEMOD:*',              
-        'BONUS:SKILL:*',                        
-        'BONUS:SKILLPOINTS:*',          
-        'BONUS:SKILLPOOL:*',            
-        'BONUS:SKILLRANK:*',            
-        'BONUS:SLOTS:*',                        
-        'BONUS:SPECIALTYSPELLKNOWN:*',
-        'BONUS:SPELLCAST:*',            
-        'BONUS:SPELLCASTMULT:*',        
-        'BONUS:SPELLKNOWN:*',           
-        'BONUS:STAT:*',                 
-        'BONUS:UDAM:*',                 
-        'BONUS:VAR:*',                  
-        'BONUS:VISION:*',                       
-        'BONUS:WEAPONPROF:*',           
-        'BONUS:WIELDCATEGORY:*',        
-);      
-
-
-# Order for the tags for each line type.
-my %masterOrder = (
-
-);
-
-# Working variables
-my %column_with_no_tag = (
-
-        'ABILITY' => [
-                '000AbilityName',
-        ],
-
-        'ABILITYCATEGORY' => [
-                '000AbilityCategory',
-        ],
-
-        'ARMORPROF' => [
-                '000ArmorName',
-        ],
-
-        'CLASS' => [
-                '000ClassName',
-        ],
-
-        'CLASS Level' => [
-                '000Level',
-        ],
-
-        'COMPANIONMOD' => [
-                '000Follower',
-        ],
-
-        'DEITY' => [
-                '000DeityName',
-        ],
-
-        'DOMAIN' => [
-                '000DomainName',
-        ],
-
-        'EQUIPMENT' => [
-                '000EquipmentName',
-        ],
-
-        'EQUIPMOD' => [
-                '000ModifierName',
-        ],
-
-        'FEAT' => [
-                '000FeatName',
-        ],
-
-        'LANGUAGE' => [
-                '000LanguageName',
-        ],
-
-        'MASTERBONUSRACE' => [
-                '000MasterBonusRace',
-        ],
-
-        'RACE' => [
-                '000RaceName',
-        ],
-
-        'SHIELDPROF' => [
-                '000ShieldName',
-        ],
-
-        'SKILL' => [
-                '000SkillName',
-        ],
-
-        'SPELL' => [
-                '000SpellName',
-        ],
-
-        'SUBCLASS' => [
-                '000SubClassName',
-        ],
-
-        'SUBSTITUTIONCLASS' => [
-                '000SubstitutionClassName',
-        ],
-
-        'TEMPLATE' => [
-                '000TemplateName',
-        ],
-
-        'WEAPONPROF' => [
-                '000WeaponName',
-        ],
-
-        'VARIABLE' => [
-                '000VariableName',
-        ],
-
-        'DATACONTROL' => [
-                '000DatacontrolName',
-        ],
-
-        'GLOBALMOD' => [
-                '000GlobalmodName',
-        ],
-
-        'ALIGNMENT' => [
-                '000AlignmentName',
-        ],
-
-        'SAVE' => [
-                '000SaveName',
-        ],
-
-        'STAT' => [
-                '000StatName',
-        ],
-
-);
-
-# Added FACT:Basesize despite the fact that this appears to be unused arw - 20180830
-my %token_FACT_tag = map { $_ => 1 } (
-        'FACT:Abb',
-        'FACT:AppliedName',
-        'FACT:Basesize',
-        'FACT:ClassType',
-        'FACT:SpellType',
-        'FACT:Symbol',
-        'FACT:Worshippers',
-        'FACT:Title',
-        'FACT:Appearance',
-        'FACT:RateOfFire',
-);
-
-my %token_FACTSET_tag = map { $_ => 1 } (
-        'FACTSET:Pantheon',
-        'FACTSET:Race',
-);
-
-my %token_BONUS_MONSKILLPTS_types = map { $_ => 1 } (
-        'LOCKNUMBER',
-);
-
-# Add the CHOOSE type.
-# CHOOSE:xxx will not become separate tags but we need to be able to
-# validate the different CHOOSE types.
-my %token_CHOOSE_tag = map { $_ => 1 } (
-        'ABILITY',
-        'ABILITYSELECTION',
-        'ALIGNMENT',
-        'ARMORPROFICIENCY',
-        'CHECK',
-        'CLASS',
-        'DEITY',
-        'DOMAIN',
-        'EQBUILDER.SPELL',              # EQUIPMENT ONLY
-        'EQUIPMENT',
-        'FEAT',
-        'FEATSELECTION',
-        'LANG',
-        'LANGAUTO',             # Deprecated
-        'NOCHOICE',
-        'NUMBER',
-        'NUMCHOICES',
-        'PCSTAT',
-        'RACE',
-        'SCHOOLS',
-        'SHIELDPROFICIENCY',
-        'SIZE',
-        'SKILL',
-        'SKILLBONUS',
-        'SPELLLEVEL',
-        'SPELLS',
-        'STATBONUS',            # EQUIPMENT ONLY
-        'STRING',
-        'TEMPLATE',
-        'USERINPUT',
-        'WEAPONFOCUS',
-        'WEAPONPROFICIENCY',
-        'STAT',                                 # Deprecated
-        'WEAPONPROF',                   # Deprecated
-        'WEAPONPROFS',                  # Deprecated
-        'SPELLLIST',                    # Deprecated
-        'SPELLCLASSES',                 # Deprecated
-        'PROFICIENCY',                  # Deprecated
-        'SHIELDPROF',                   # Deprecated
-        'EQUIPTYPE',                    # Deprecated
-        'CSKILLS',                              # Deprecated
-        'HP',                                   # Deprecated 6.00 - Remove 6.02
-        'CCSKILLLIST',                  # Deprecated 5.13.9 - Remove 5.16. Use CHOOSE:SKILLSNAMED instead.
-        'ARMORTYPE',                    # Deprecated 
-        'ARMORPROF',                    # Deprecated 5.15 - Remove 6.0
-        'SKILLSNAMED',                  # Deprecated
-        'SALIST',                               # Deprecated 6.00 - Remove 6.02
-        'FEATADD',                              # Deprecated 5.15 - Remove 6.00
-        'FEATLIST',                             # Deprecated 5.15 - Remove 6.00
-        'FEATSELECT',                   # Deprecated 5.15 - Remove 6.00
-);
-
-
-
-
-
 ################################################################################
 # Global variables used by the validation code
-
-# Will hold the portions of a race that have been matched with wildcards.
-# For example, if Elf% has been matched (given no default Elf races).
-my %race_partial_match; 
-
-# Will hold the valid types for the TYPE. or TYPE= found in different tags.
-# Format valid_types{$entitytype}{$typename}
-my %valid_types;
-
-# Will hold the valid categories for CATEGORY=
-# found in abilities.
-my %valid_categories;   
-
-my %valid_sub_entities; # Will hold the entities that are allowed to include
-                                # a sub-entity between () in their name.
-                                # e.g. Skill Focus(Spellcraft)
-                                # Format: $valid_sub_entities{$entity_type}{$entity_name}
-                                #               = $sub_entity_type;
-                                # e.g. :  $valid_sub_entities{'FEAT'}{'Skill Focus'} = 'SKILL';
-
 
 # Add pre-defined valid entities
 for my $var_name (LstTidy::Parse::getValidSystemArr('vars')) {
    LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
 }
+
+# Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
+my @valid_system_stats = LstTidy::Parse::getValidSystemArr('stats');
 
 for my $stat (@valid_system_stats) {
    LstTidy::Validate::setEntityValid('DEFINE Variable', $stat);
@@ -933,28 +230,20 @@ INIT {
 
 my $tablength = 6;      # Tabulation each 6 characters
 
-my %files_to_parse;     # Will hold the file to parse (including path)
-my @lines;                      # Will hold all the lines of the file
-my @modified_files;     # Will hold the name of the modified files
+# Finds the CVS lines at the top of LST files,so we can delete them
+# and replace with a single line LstTidy Header.
+my $CVSPattern       = qr{\#.*CVS.*Revision}i;
+my $newHeaderPattern = qr{\#.*reformatt?ed by}i;
+my $LstTidyHeader    = "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+
+my %filesToParse;    # Will hold the file to parse (including path)
+my @lines;           # Will hold all the lines of the file
+my @nodifiedFiles;   # Will hold the name of the modified files
 
 #####################################
 # Verify if the inputpath was given
 
 if (getOption('inputpath')) {
-
-   # Verify if the outputpath exist
-   if ( getOption('outputpath') && !-d getOption('outputpath') ) {
-
-      $error_message = "\nThe directory " . getOption('outputpath') . " does not exists.";
-
-      Pod::Usage::pod2usage(
-         {  -msg     => $error_message,
-            -exitval => 1,
-            -output  => \*STDERR,
-         }
-      );
-      exit;
-   }
 
    # Construct the valid tags for all file types
    LstTidy::Reformat::constructValidTags();
@@ -962,649 +251,675 @@ if (getOption('inputpath')) {
    ##########################################################
    # Files that needs to be open for special conversions
 
-   if ( LstTidy::Options::isConversionActive('Export lists') ) {
+   if ( isConversionActive('Export lists') ) {
       LstTidy::Report::openExportListFileHandles();
    }
 
-        ##########################################################
-        # Cross-checking must be activated for the CLASSSPELL
-        # conversion to work
-        if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
-           setOption('xcheck', 1);
-        }
-
-        ##########################################################
-        # Parse all the .pcc file to find the other file to parse
-
-        # First, we list the .pcc files in the directory
-        my @filelist;
-        my %filelist_notpcc;
-        my %filelist_missing;
-
-        # Regular expressions for the files that must be skiped by mywanted.
-        my @filetoskip = (
-                qr(^\.\#),                      # Files begining with .# (CVS conflict and deleted files)
-                qr(^custom),            # Customxxx files generated by PCGEN
-                qr(placeholder\.txt$),  # The CMP directories are full of these
-                qr(\.zip$)i,            # Archives present in the directories
-                qr(\.rar$)i,
-                qr(\.jpg$),                     # JPEG image files present in the directories
-                qr(\.png$),                     # PNG image files present in the directories
-#               gr(Thumbs\.db$),                # thumbnails image files used with Win32 OS
-                qr(readme\.txt$),               # Readme files
-#               qr(notes\.txt$),                # Notes files
-                qr(\.bak$),                     # Backup files
-                qr(\.java$),            # Java code files
-                qr(\.htm$),                     # HTML files
-                qr(\.xml$),
-                qr(\.css$),
-
-                qr(\.DS_Store$),                # Used with Mac OS
-        );
-
-        # Regular expressions for the directory that must be skiped by mywanted
-        my @dirtoskip = (
-                qr(cvs$)i,                      # /cvs directories
-                qr([.]svn[/])i,         # All .svn directories
-                qr([.]svn$)i,           # All .svn directories
-                qr([.]git[/])i,         # All .git directories
-                qr([.]git$)i,           # All .git directories
-                qr(customsources$)i,    # /customsources (for files generated by PCGEN)
-                qr(gamemodes)i,         # for the system gameModes directories
-#               qr(alpha)i
-        );
-
-        sub mywanted {
-
-                # We skip the files from directory matching the REGEX in @dirtoskip
-                for my $regex (@dirtoskip) {
-                        return if $File::Find::dir =~ $regex;
-                }
-
-                # We also skip the files that match the REGEX in @filetoskip
-                for my $regex (@filetoskip) {
-                        return if $_ =~ $regex;
-                }
-
-                if ( !-d && m/ [.] pcc \z /xmsi ) {
-                        push @filelist, $File::Find::name;
-                }
-
-                if ( !-d && !/ [.] pcc \z /xmsi ) {
-                        $filelist_notpcc{$File::Find::name} = lc $_;
-                }
-        }
-        File::Find::find( \&mywanted, getOption('inputpath') );
-
-        $log->header(LstTidy::LogHeader::get('PCC'));
-
-        # Second we parse every .PCC and look for filetypes
-        for my $pcc_file_name ( sort @filelist ) {
-                open my $pcc_fh, '<', $pcc_file_name;
-
-                # Needed to find the full path
-                my $currentbasedir = File::Basename::dirname($pcc_file_name);
-
-                my $must_write          = NO;
-                my $BOOKTYPE_found      = NO;
-                my $GAMEMODE_found      = q{};          # For the PCC export list
-                my $SOURCELONG_found    = q{};          #
-                my $SOURCESHORT_found   = q{};          #
-                my $LST_found           = NO;
-                my @pcc_lines           = ();
-                my %found_filetype;
-                my $continue            = YES;
-
-                PCC_LINE:
-                while ( <$pcc_fh> ) {
-                   last PCC_LINE if !$continue;
-
-                   chomp;
-                   $must_write += s/[\x0d\x0a]//g; # Remove the real and weird CR-LF
-                   $must_write += s/\s+$//;        # Remove any tralling white spaces
-
-                   push @pcc_lines, $_;
-
-                   my ( $tag, $value ) = LstTidy::Parse::extractTag( $_, 'PCC', $pcc_file_name, $INPUT_LINE_NUMBER );
-
-                   # if extractTag returns a defined value, no further
-                   # processing is neeeded. If value is not defined then the
-                   # tag that was returned should be  processed further. 
-                   if (not defined $value) {
-
-                      my $tag =  LstTidy::Tag->new(
-                         fullTag  => $tag,
-                         lineType => 'PCC', 
-                         file     => $pcc_file_name, 
-                         line     => $INPUT_LINE_NUMBER,
-                      );
-
-                      # Potentally modify the tag
-                      LstTidy::Parse::parseTag( $tag );
-                      ($tag, $value) = ($tag->readId, $tag->value);
-                   }
-
-                      
-                      
-
-                   if ( $tag && "$tag:$value" ne $pcc_lines[-1] ) {
-
-                      # The parseTag function modified the values.
-                      $must_write = YES;
-                      if ( $double_PCC_tags{$tag} ) {
-                         $pcc_lines[-1] = "$tag$value";
-                      }
-                      else { 
-                         $pcc_lines[-1] = "$tag:$value";
-                      }
-                   }
-
-                   if ($tag) {
-                      if (LstTidy::Parse::isParseableFileType($tag)) {
-
-                         # Keep track of the filetypes found
-                         $found_filetype{$tag}++;
-
-                         $value =~ s/^([^|]*).*/$1/;
-                         my $lstfile = find_full_path( $value, $currentbasedir, getOption('basepath') );
-                         $files_to_parse{$lstfile} = $tag;
-
-                         # Check to see if the file exists
-                         if ( !-e $lstfile ) {
-
-                            $filelist_missing{$lstfile} = [ $pcc_file_name, $INPUT_LINE_NUMBER ];
-                            delete $files_to_parse{$lstfile};
-
-                         } elsif (LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') && $tag eq 'CLASS' ) {
-
-                            # [ 653596 ] Add a TYPE tag for all SPELLs
-                            #
-                            # The CLASS files must be read before any other
-                            $class_files{$lstfile} = 1;
-
-                         } elsif ( $tag eq 'SPELL' && ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD')
-                               || LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD') ) ) {
-
-                            #[ 677962 ] The DMG wands have no charge.
-                            #[ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-                            #
-                            # We keep a list of the SPELL files because they
-                            # need to be put in front of the others.
-
-                            $Spell_Files{$lstfile} = 1;
-
-                         } elsif ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
-                            && ( $tag eq 'CLASSSPELL' || $tag eq 'CLASS' || $tag eq 'DOMAIN' ) ) {
-
-                            # CLASSSPELL conversion
-                            # We keep the list of CLASSSPELL, CLASS and DOMAIN
-                            # since they must be parse before all the orthers.
-                            $classspell_files{$tag}{$lstfile} = 1;
-
-                            # We comment out the CLASSSPELL line
-                            if ( $tag eq 'CLASSSPELL' ) {
-                               push @pcc_lines, q{#} . pop @pcc_lines;
-                               $must_write = YES;
-
-                               $log->warning(
-                                  qq{Commenting out "$pcc_lines[$#pcc_lines]"},
-                                  $pcc_file_name,
-                                  $INPUT_LINE_NUMBER
-                               );
-                            }
-
-                         } elsif (LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL' ) {
-
-                            # CLASSSKILL conversion
-                            # We keep the list of CLASSSKILL files
-                            $classskill_files{$lstfile} = 1;
-
-                            # Make a comment out of the line.
-                            push @pcc_lines, q{#} . pop @pcc_lines;
-                            $must_write = YES;
-
-                            $log->warning(
-                               qq{Commenting out "$pcc_lines[$#pcc_lines]"},
-                               $pcc_file_name,
-                               $INPUT_LINE_NUMBER
-                            );
-
-                         }
-
-                         delete $filelist_notpcc{$lstfile} if exists $filelist_notpcc{$lstfile};
-                         $LST_found = YES;
-
-                      } elsif (LstTidy::Reformat::isValidTag('PCC', $tag)) {
-
-                         # All the tags that do not have file should be cought here
-
-                         # Get the SOURCExxx tags for future ref.
-                         if (LstTidy::Options::isConversionActive('SOURCE line replacement')
-                              && (    $tag eq 'SOURCELONG'
-                                   || $tag eq 'SOURCESHORT'
-                                   || $tag eq 'SOURCEWEB'
-                                   || $tag eq 'SOURCEDATE' ) ) 
-                         {
-                            my $path = File::Basename::dirname($pcc_file_name);
-
-                            if ( exists $source_tags{$path}{$tag} && $path !~ /custom|altpcc/i ) {
-
-                               $log->notice(
-                                  "$tag already found for $path",
-                                  $pcc_file_name,
-                                  $INPUT_LINE_NUMBER
-                               );
-
-                            } else {
-                               $source_tags{$path}{$tag} = "$tag:$value";
-                            }
-
-                            # For the PCC report
-                            if ( $tag eq 'SOURCELONG' ) {
-                               $SOURCELONG_found = $value;
-                            } elsif ( $tag eq 'SOURCESHORT' ) {
-                               $SOURCESHORT_found = $value;
-                            }
-
-                         } elsif ( $tag eq 'GAMEMODE' ) {
-
-                            # Verify that the GAMEMODEs are valid
-                            # and match the filer.
-                            $GAMEMODE_found = $value;       # The GAMEMODE tag we found
-                            my @modes = split /[|]/, $value;
-
-                            my $gamemode = getOption('gamemode');
-                            my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
-                            my $valid_game_mode = $gamemode ? 0 : 1;
-
-                            # First the filter is applied
-                            for my $mode (@modes) {
-                               if ( $mode =~ $gamemode_regex ) {
-                                  $valid_game_mode = 1;
-                               }
-                            }
-
-                            # Then we check if the game mode is valid only if
-                            # the game modes have not been filtered out
-                            if ($valid_game_mode) {
-                               for my $mode (@modes) {
-                                  if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
-                                     $log->notice(
-                                        qq{Invalid GAMEMODE "$mode" in "$_"},
-                                        $pcc_file_name,
-                                        $INPUT_LINE_NUMBER
-                                     );
-                                  }
-                               }
-                            }
-
-                            if ( !$valid_game_mode ) {
-                               # We set the variables that will kick us out of the
-                               # while loop that read the file and that will
-                               # prevent the file from being written.
-                               $continue               = NO;
-                               $must_write     = NO;
-                            }
-
-                         } elsif ( $tag eq 'BOOKTYPE' || $tag eq 'TYPE' ) {
-
-                            # Found a TYPE tag
-                            $BOOKTYPE_found = YES;
-
-                         } elsif ( $tag eq 'GAME' && LstTidy::Options::isConversionActive('PCC:GAME to GAMEMODE') ) {
-
-                            # [ 707325 ] PCC: GAME is now GAMEMODE
-                            $pcc_lines[-1] = "GAMEMODE:$value";
-                            $log->warning(
-                               qq{Replacing "$tag:$value" by "GAMEMODE:$value"},
-                               $pcc_file_name,
-                               $INPUT_LINE_NUMBER
-                            );
-                            $GAMEMODE_found = $value;
-                            $must_write     = YES;
-                         }
-                      }
-
-                   } elsif ( m/ <html> /xmsi ) {
-                      $log->error(
-                         "HTML file detected. Maybe you had a problem with your CSV checkout.\n",
-                         $pcc_file_name
-                      );
-                      $must_write = NO;
-                      last PCC_LINE;
-                   }
-                }
-
-                close $pcc_fh;
-
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL')
-                        && $found_filetype{'CLASSSPELL'}
-                        && !$found_filetype{'SPELL'} )
-                {
-                        $log->warning(
-                                'No SPELL file found, create one.',
-                                $pcc_file_name
-                        );
-                }
-
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS')
-                        && $found_filetype{'CLASSSKILL'}
-                        && !$found_filetype{'CLASS'} )
-                {
-                        $log->warning(
-                                'No CLASS file found, create one.',
-                                $pcc_file_name
-                        );
-                }
-
-                if ( !$BOOKTYPE_found && $LST_found ) {
-                        $log->notice( 'No BOOKTYPE tag found', $pcc_file_name );
-                }
-
-                if (!$GAMEMODE_found) {
-                        $log->notice( 'No GAMEMODE tag found', $pcc_file_name );
-                }
-
-                if ( $GAMEMODE_found && getOption('exportlist') ) {
-                   LstTidy::Report::printToExportList('PCC', qq{"$SOURCELONG_found","$SOURCESHORT_found","$GAMEMODE_found","$pcc_file_name"\n});
-                }
-
-                # Do we copy the .PCC???
-                if ( getOption('outputpath') && ( $must_write ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
-                        my $new_pcc_file = $pcc_file_name;
-                        my $inputpath  = getOption('inputpath');
-                        my $outputpath = getOption('outputpath');
-                        $new_pcc_file =~ s/${inputpath}/${outputpath}/i;
-
-                        # Create the subdirectory if needed
-                        create_dir( File::Basename::dirname($new_pcc_file), getOption('outputpath') );
-
-                        open my $new_pcc_fh, '>', $new_pcc_file;
-
-                        # We keep track of the files we modify
-                        push @modified_files, $pcc_file_name;
-
-                        for my $line (@pcc_lines) {
-                                print {$new_pcc_fh} "$line\n";
+   ##########################################################
+   # Cross-checking must be activated for the CLASSSPELL
+   # conversion to work
+   if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
+      setOption('xcheck', 1);
+   }
+
+   ##########################################################
+   # Parse all the .pcc file to find the other file to parse
+
+   # First, we list the .pcc files in the directory
+   my @filelist;
+   my %fileListNotPCC;
+   my %fileListMissing;
+
+   # Regular expressions for the files that must be skiped by mywanted.
+   my @filetoskip = (
+      qr(^\.\#),              # Files begining with .# (CVS conflict and deleted files)
+      qr(^custom),            # Customxxx files generated by PCGEN
+      qr(placeholder\.txt$),  # The CMP directories are full of these
+      qr(\.zip$)i,            # Archives present in the directories
+      qr(\.rar$)i,
+      qr(\.jpg$),             # JPEG image files present in the directories
+      qr(\.png$),             # PNG image files present in the directories
+      qr(readme\.txt$),       # Readme files
+      qr(\.bak$),             # Backup files
+      qr(\.java$),            # Java code files
+      qr(\.htm$),             # HTML files
+      qr(\.xml$),
+      qr(\.css$),
+
+      qr(\.DS_Store$),        # Used with Mac OS
+   );
+
+   # Regular expressions for the directory that must be skiped by mywanted
+   my @dirtoskip = (
+      qr(cvs$)i,              # /cvs directories
+      qr([.]svn[/])i,         # All .svn directories
+      qr([.]svn$)i,           # All .svn directories
+      qr([.]git[/])i,         # All .git directories
+      qr([.]git$)i,           # All .git directories
+      qr(customsources$)i,    # /customsources (for files generated by PCGEN)
+      qr(gamemodes)i,         # for the system gameModes directories
+   );
+
+   sub mywanted {
+
+      # We skip the files from directory matching the REGEX in @dirtoskip
+      for my $regex (@dirtoskip) {
+         return if $File::Find::dir =~ $regex;
+      }
+
+      # We also skip the files that match the REGEX in @filetoskip
+      for my $regex (@filetoskip) {
+         return if $_ =~ $regex;
+      }
+
+      # It's not a directory and ends with pcc
+      if ( !-d && m/ [.] pcc \z /xmsi ) {
+         push @filelist, $File::Find::name;
+      }
+
+      # It's not a directory and doesn't with pcc
+      if ( !-d && !/ [.] pcc \z /xmsi ) {
+         $fileListNotPCC{$File::Find::name} = lc $_;
+      }
+   }
+
+   File::Find::find( \&mywanted, getOption('inputpath') );
+
+   $log->header(LstTidy::LogHeader::get('PCC'));
+
+   # Second we parse every .PCC and look for filetypes
+   for my $filename ( sort @filelist ) {
+      open my $pcc_fh, '<', $filename;
+
+      # Needed to find the full path
+      my $currentbasedir = File::Basename::dirname($filename);
+
+      my %found = (
+         'book type'    => NO,
+         'gamemode'     => q{},
+         'header'       => NO,
+         'lst'          => NO,
+         'source long'  => q{},
+         'source short' => q{},
+      );
+
+      my $mustWrite      = NO;
+      my @pccLines       = ();
+      my %foundFileType;
+
+      PCC_LINE:
+      for my $pccLine ( <$pcc_fh> ) {
+
+         chomp $pccLine;
+         $mustWrite += $pccLine =~ s/[\x0d\x0a]//g; # Remove the real and weird CR-LF
+         $mustWrite += $pccLine =~ s/\s+$//;        # Remove any tralling white spaces
+
+         push @pccLines, $pccLine;
+
+         # This is a PCC file, there is only one tag on a line
+         my ($tag, $value) = LstTidy::Parse::extractTag(
+            $pccLine, 
+            'PCC', 
+            $filename, 
+            $INPUT_LINE_NUMBER);
+
+         # If extractTag returns a defined value, no further processing is
+         # neeeded. If value is not defined then the tag that was returned
+         # should be processed further. 
+
+         my $fullTag = (not defined $value) ?  $tag : "$tag:$value" ;
+
+         $tag =  LstTidy::Tag->new(
+            fullTag  => $fullTag,
+            lineType => 'PCC', 
+            file     => $filename, 
+            line     => $INPUT_LINE_NUMBER,
+         );
+
+         if (not defined $value) {
+
+            # All of the individual tag parsing and correcting happens here,
+            # this potentally modifys the tag
+            LstTidy::Parse::parseTag($tag);
+
+            # If the tag has been altered, the the PCC file needs to be
+            # written and the line should be overwritten.
+            if ($tag->origTag ne $tag->fullRealTag) {
+               $mustWrite = 1;
+               $pccLines[-1] = $tag->fullRealTag;
+            }
+         }
+
+         if ($tag->id) {
+            if (LstTidy::Parse::isParseableFileType($tag->id)) {
+
+               # Keep track of the filetypes found
+               $foundFileType{$tag->id}++;
+
+               # Extract the name of the LST file from the tag->value, and
+               # store it back into tag->value
+               $tag->value($tag->value =~ s/^([^|]*).*/$1/r);
+               my $lstFile = find_full_path( $tag->value, $currentbasedir, getOption('basepath') );
+               $filesToParse{$lstFile} = $tag->id;
+
+               # Check to see if the file exists
+               if ( !-e $lstFile ) {
+
+                  $fileListMissing{$lstFile} = [ $filename, $INPUT_LINE_NUMBER ];
+                  delete $filesToParse{$lstFile};
+
+               # Remember some types of file, might need to process them first.
+               } elsif (
+                     $tag->id eq 'ALIGNMENT'
+                  || $tag->id eq 'CLASS' 
+                  || $tag->id eq 'CLASSSKILL'
+                  || $tag->id eq 'CLASSSPELL' 
+                  || $tag->id eq 'DOMAIN' 
+                  || $tag->id eq 'SAVE'     
+                  || $tag->id eq 'SPELL'
+                  || $tag->id eq 'STAT'     
+               ) {
+
+                  $files{$tag->id}{$lstFile} = 1;
+
+                  my $commentOutPCC = 
+                     (isConversionActive('CLASSSPELL conversion to SPELL') && $tag eq 'CLASSSPELL') || 
+                     (isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL');
+
+                  # When doing either of these two conversions, the original
+                  # PCC line must be commented out
+                  if ($commentOutPCC) {
+
+                     push @pccLines, q{#} . pop @pccLines;
+                     $mustWrite = 1;
+
+                     $log->warning(
+                        qq{Commenting out "$pccLines[$#pccLines]"},
+                        $filename,
+                        $INPUT_LINE_NUMBER
+                     );
+                  }
+               }
+
+               delete $fileListNotPCC{$lstFile} if exists $fileListNotPCC{$lstFile};
+               $found{'lst'} = 1;
+
+            } elsif ( $tag->id =~ m/^\#/ ) {
+
+               if ($tag->id =~ $newHeaderPattern) {
+                  $found{'header'} = 1;
+               }
+
+            } elsif (LstTidy::Reformat::isValidTag('PCC', $tag->id)) {
+
+               # All the tags that do not have a file should be caught here
+
+               # Get the SOURCExxx tags for future ref.
+               if (isConversionActive('SOURCE line replacement')
+                  && (  $tag->id eq 'SOURCELONG'
+                     || $tag->id eq 'SOURCESHORT'
+                     || $tag->id eq 'SOURCEWEB'
+                     || $tag->id eq 'SOURCEDATE' ) ) 
+               {
+                  my $path = File::Basename::dirname($filename);
+
+                  if ( exists $source_tags{$path}{$tag->id} && $path !~ /custom|altpcc/i ) {
+
+                     $log->notice(
+                        $tag->id . " already found for $path",
+                        $filename,
+                        $INPUT_LINE_NUMBER
+                     );
+
+                  } else {
+                     $source_tags{$path}{$tag->id} = $tag->fullRealTag;
+                  }
+
+                  # For the PCC report
+                  if ( $tag->id eq 'SOURCELONG' ) {
+                     $found{'source long'} = $tag->value;
+                  } elsif ( $tag->id eq 'SOURCESHORT' ) {
+                     $found{'source short'} = $tag->value;
+                  }
+
+               } elsif ( $tag->id eq 'GAMEMODE' ) {
+
+                  # Verify that the GAMEMODEs are valid
+                  # and match the filer.
+                  $found{'gamemode'} = $tag->value;       # The GAMEMODE tag we found
+                  my @modes = split /[|]/, $tag->value;
+
+                  my $gamemode = getOption('gamemode');
+                  my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
+                  my $valid_game_mode = $gamemode ? 0 : 1;
+
+                  # First the filter is applied
+                  for my $mode (@modes) {
+                     if ( $mode =~ $gamemode_regex ) {
+                        $valid_game_mode = 1;
+                     }
+                  }
+
+                  # Then we check if the game mode is valid only if
+                  # the game modes have not been filtered out
+                  if ($valid_game_mode) {
+                     for my $mode (@modes) {
+                        if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
+                           $log->notice(
+                              qq{Invalid GAMEMODE "$mode" in "$_"},
+                              $filename,
+                              $INPUT_LINE_NUMBER
+                           );
                         }
+                     }
+                  }
 
-                        close $new_pcc_fh;
-                }
-        }
+                  if ( !$valid_game_mode ) {
+                     # We set the variables that will kick us out of the
+                     # while loop that read the file and that will
+                     # prevent the file from being written.
+                     $mustWrite   = NO;
+                     $found{'header'} = NO;
+                     last PCC_LINE;
+                  }
 
-        # Is there anything to parse?
-        if ( !keys %files_to_parse ) {
-                $log->error(
-                        qq{Could not find any .lst file to parse.},
-                        getOption('inputpath')
-                );
-                $log->error(
-                        qq{Is your -inputpath parameter valid? (} . getOption('inputpath') . ")",
-                        getOption('inputpath')
-                );
-                if ( getOption('gamemode') ) {
-                $log->error(
-                        qq{Is your -gamemode parameter valid? (} . getOption('gamemode') . ")",
-                        getOption('inputpath')
-                );
-                exit;
-                }
-        }
+               } elsif ( $tag->id eq 'BOOKTYPE' || $tag->id eq 'TYPE' ) {
 
-        # Missing .lst files must be printed
-        if ( keys %filelist_missing ) {
-           $log->header(LstTidy::LogHeader::get('Missing LST'));
-           for my $lstfile ( sort keys %filelist_missing ) {
-              $log->notice(
-                 "Can't find the file: $lstfile",
-                 $filelist_missing{$lstfile}[0],
-                 $filelist_missing{$lstfile}[1]
-              );
-           }
-        }
+                  # Found a TYPE tag
+                  $found{'book type'} = 1;
 
-        # If the gamemode filter is active, we do not report files not refered to.
-        if ( keys %filelist_notpcc && !getOption('gamemode') ) {
-                $log->header(LstTidy::LogHeader::get('Unreferenced'));
-                for my $file ( sort keys %filelist_notpcc ) {
-                        my $basepath = getOption('basepath');
-                        $file =~ s/${basepath}//i;
-                        $file =~ tr{/}{\\} if $^O eq "MSWin32";
-                        $log->notice(  "$file\n", "" );
-                }
-        }
-}
-else {
-        $files_to_parse{'STDIN'} = getOption('filetype');
+               } elsif ( $tag->id eq 'GAME' && isConversionActive('PCC:GAME to GAMEMODE') ) {
+
+                  $value = $tag->value;
+
+                  # [ 707325 ] PCC: GAME is now GAMEMODE
+                  $pccLines[-1] = "GAMEMODE:$value";
+                  $log->warning(
+                     q{Replacing "} . $tag->fullRealTag . qq{" by "GAMEMODE:$value"},
+                     $filename,
+                     $INPUT_LINE_NUMBER
+                  );
+                  $found{'gamemode'} = $tag->value;
+                  $mustWrite = 1;
+               }
+            }
+
+         } elsif ( $pccLine =~ m/ \A [#] /xms ) {
+
+            if ($pccLine =~ $newHeaderPattern) {
+               $found{'header'} = 1;
+            }
+
+         } elsif ( $pccLine =~ m/ <html> /xmsi ) {
+            $log->error(
+               "HTML file detected. Maybe you had a problem with your CSV checkout.\n",
+               $filename
+            );
+            $mustWrite = NO;
+            last PCC_LINE;
+         }
+      }
+
+      close $pcc_fh;
+
+      if (isConversionActive('CLASSSPELL conversion to SPELL')) {
+
+         if ($foundFileType{'CLASSSPELL'} && !$foundFileType{'SPELL'}) {
+            $log->warning(
+               'No SPELL file found, create one.',
+               $filename
+            );
+         }
+      }
+
+      if (isConversionActive('CLASSSKILL conversion to CLASS')) {
+
+         if ( $foundFileType{'CLASSSKILL'} && !$foundFileType{'CLASS'} ) {
+            $log->warning(
+               'No CLASS file found, create one.',
+               $filename
+            );
+         }
+      }
+
+      if ( !$found{'book type'} && $found{'lst'} ) {
+         $log->notice( 'No BOOKTYPE tag found', $filename );
+      }
+
+      if (!$found{'gamemode'}) {
+         $log->notice( 'No GAMEMODE tag found', $filename );
+      }
+
+      if ( $found{'gamemode'} && getOption('exportlist') ) {
+         LstTidy::Report::printToExportList('PCC', qq{"$found{'source long'}","$found{'source short'}","$found{'gamemode'}","$filename"\n});
+      }
+
+      # Do we copy the .PCC???
+      if ( getOption('outputpath') && ( $mustWrite || !$found{'header'} ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
+         my $new_pcc_file = $filename;
+         my $inputpath  = getOption('inputpath');
+         my $outputpath = getOption('outputpath');
+         $new_pcc_file =~ s/${inputpath}/${outputpath}/i;
+
+         # Create the subdirectory if needed
+         create_dir( File::Basename::dirname($new_pcc_file), getOption('outputpath') );
+
+         open my $new_pcc_fh, '>', $new_pcc_file;
+
+         # We keep track of the files we modify
+         push @nodifiedFiles, $filename;
+
+         if ($pccLines[0] !~ $newHeaderPattern) {
+            print {$new_pcc_fh} "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+         }
+
+         for my $line (@pccLines) {
+            print {$new_pcc_fh} "$line\n";
+         }
+
+         close $new_pcc_fh;
+      }
+   }
+
+   # Is there anything to parse?
+   if ( !keys %filesToParse ) {
+
+      $log->error(
+         qq{Could not find any .lst file to parse.},
+         getOption('inputpath')
+      );
+
+      $log->error(
+         qq{Is your -inputpath parameter valid? (} . getOption('inputpath') . ")",
+         getOption('inputpath')
+      );
+
+      if ( getOption('gamemode') ) {
+         $log->error(
+            qq{Is your -gamemode parameter valid? (} . getOption('gamemode') . ")",
+            getOption('inputpath')
+         );
+         exit;
+      }
+   }
+
+   # Missing .lst files must be printed
+   if ( keys %fileListMissing ) {
+
+      $log->header(LstTidy::LogHeader::get('Missing LST'));
+
+      for my $lstfile ( sort keys %fileListMissing ) {
+         $log->notice(
+            "Can't find the file: $lstfile",
+            $fileListMissing{$lstfile}[0],
+            $fileListMissing{$lstfile}[1]
+         );
+      }
+   }
+
+   # If the gamemode filter is active, we do not report files not refered to.
+   if ( keys %fileListNotPCC && !getOption('gamemode') ) {
+
+      $log->header(LstTidy::LogHeader::get('Unreferenced'));
+
+      my $basepath = getOption('basepath');
+
+      for my $file ( sort keys %fileListNotPCC ) {
+         $file =~ s/${basepath}//i;
+         $file =~ tr{/}{\\} if $^O eq "MSWin32";
+
+         $log->notice("$file\n", "");
+      }
+   }
+
+} else {
+   $filesToParse{'STDIN'} = getOption('filetype');
 }
 
 $log->header(LstTidy::LogHeader::get('LST'));
 
-my @files_to_parse_sorted = ();
-my %temp_files_to_parse   = %files_to_parse;
+my @filesToParse_sorted = ();
+my %temp_filesToParse   = %filesToParse;
 
-if ( LstTidy::Options::isConversionActive('SPELL:Add TYPE tags') ) {
+if ( isConversionActive('SPELL:Add TYPE tags') ) {
 
-        # The CLASS files must be put at the start of the
-        # files_to_parse_sorted array in order for them
-        # to be dealt with before the SPELL files.
+   # The CLASS files must be put at the start of the
+   # filesToParse_sorted array in order for them
+   # to be dealt with before the SPELL files.
 
-        for my $class_file ( sort keys %class_files ) {
-                push @files_to_parse_sorted, $class_file;
-                delete $temp_files_to_parse{$class_file};
-        }
+   for my $class_file ( sort keys %{ $files{CLASS} } ) {
+      push @filesToParse_sorted, $class_file;
+      delete $temp_filesToParse{$class_file};
+   }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
 
-        # The CLASS and DOMAIN files must be put at the start of the
-        # files_to_parse_sorted array in order for them
-        # to be dealt with before the CLASSSPELL files.
-        # The CLASSSPELL needs to be processed before the SPELL files.
+   # The CLASS and DOMAIN files must be put at the start of the
+   # filesToParse_sorted array in order for them
+   # to be dealt with before the CLASSSPELL files.
+   # The CLASSSPELL needs to be processed before the SPELL files.
 
-        # CLASS first
-        for my $filetype (qw(CLASS DOMAIN CLASSSPELL)) {
-                for my $file_name ( sort keys %{ $classspell_files{$filetype} } ) {
-                push @files_to_parse_sorted, $file_name;
-                delete $temp_files_to_parse{$file_name};
-                }
-        }
+   # CLASS first
+   for my $filetype (qw(CLASS DOMAIN CLASSSPELL)) {
+      for my $file_name ( sort keys %{ $files{$filetype} } ) {
+         push @filesToParse_sorted, $file_name;
+         delete $temp_filesToParse{$file_name};
+      }
+   }
 }
 
-if ( keys %Spell_Files ) {
+if ( keys %{ $files{SPELL} } ) {
 
-        # The SPELL file must be loaded before the EQUIPMENT
-        # in order to properly generate the EQMOD tags or do
-        # the Spell.MOD conversion to SPELLLEVEL.
+   # The SPELL file must be loaded before the EQUIPMENT
+   # in order to properly generate the EQMOD tags or do
+   # the Spell.MOD conversion to SPELLLEVEL.
 
-        for my $file_name ( sort keys %Spell_Files ) {
-                push @files_to_parse_sorted, $file_name;
-                delete $temp_files_to_parse{$file_name};
-        }
+   for my $file_name ( sort keys %{ $files{SPELL} } ) {
+      push @filesToParse_sorted, $file_name;
+      delete $temp_filesToParse{$file_name};
+   }
 }
 
-if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
 
-        # The CLASSSKILL files must be put at the start of the
-        # files_to_parse_sorted array in order for them
-        # to be dealt with before the CLASS files
-        for my $file_name ( sort keys %classskill_files ) {
-                push @files_to_parse_sorted, $file_name;
-                delete $temp_files_to_parse{$file_name};
-        }
+   # The CLASSSKILL files must be put at the start of the
+   # filesToParse_sorted array in order for them
+   # to be dealt with before the CLASS files
+   for my $file_name ( sort keys %{ $files{CLASSSKILL} } ) {
+      push @filesToParse_sorted, $file_name;
+      delete $temp_filesToParse{$file_name};
+   }
 }
 
 # We sort the files that need to be parsed.
-push @files_to_parse_sorted, sort keys %temp_files_to_parse;
+push @filesToParse_sorted, sort keys %temp_filesToParse;
 
 FILE_TO_PARSE:
-for my $file (@files_to_parse_sorted) {
-        my $numberofcf = 0;     # Number of extra CF found in the file.
+for my $file (@filesToParse_sorted) {
+   my $numberofcf = 0;     # Number of extra CF found in the file.
 
-        my $filetype = "tab-based";   # can be either 'tab-based' or 'multi-line'
+   my $filetype = "tab-based";   # can be either 'tab-based' or 'multi-line'
 
-        if ( $file eq "STDIN" ) {
+   if ( $file eq "STDIN" ) {
 
-                # We read from STDIN
-                # henkslaaf - Multiline parsing
-                #       1) read all to a buffer (files are not so huge that it is a memory hog)
-                #       2) send the buffer to a method that splits based on the type of file
-                #       3) let the method return split and normalized entries
-                #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
-                local $/ = undef; # read all from buffer
-                my $buffer = <>;
+      # We read from STDIN
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
+      local $/ = undef; # read all from buffer
+      my $buffer = <>;
 
-                (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
-                @lines = @$lines;
+      (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+      @lines = @$lines;
 
-        } else {
+   } else {
 
-                # We read only what we know needs to be processed
-                my $parseable = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
+      # We read only what we know needs to be processed
+      my $parseable = LstTidy::Parse::isParseableFileType($filesToParse{$file});
 
-                next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
+      next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
 
-                # We try to read the file and continue to the next one even if we
-                # encounter problems
-                #
-                # henkslaaf - Multiline parsing
-                #       1) read all to a buffer (files are not so huge that it is a memory hog)
-                #       2) send the buffer to a method that splits based on the type of file
-                #       3) let the method return split and normalized entries
-                #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
+      # We try to read the file and continue to the next one even if we
+      # encounter problems
+      #
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
 
-                eval {
-                        local $/ = undef; # read all from buffer
-                        open my $lst_fh, '<', $file;
-                        my $buffer = <$lst_fh>;
-                        close $lst_fh;
+      eval {
 
-                        (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
-                        @lines = @$lines;
-                };
+         local $/ = undef; # read all from buffer
+         open my $lst_fh, '<', $file;
+         my $buffer = <$lst_fh>;
+         close $lst_fh;
 
-                if ( $EVAL_ERROR ) {
-                # There was an error in the eval
-                $log->error( $EVAL_ERROR, $file );
-                next FILE_TO_PARSE;
-                }
-        }
+         (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+         @lines = @$lines;
+      };
 
-        # If the file is empty, we skip it
-        unless (@lines) {
-                $log->notice(  "Empty file.", $file );
-                next FILE_TO_PARSE;
-        }
+      if ( $EVAL_ERROR ) {
+         # There was an error in the eval
+         $log->error( $EVAL_ERROR, $file );
+         next FILE_TO_PARSE;
+      }
+   }
 
-        # Check to see if we deal with a HTML file
-        if ( grep /<html>/i, @lines ) {
-                $log->error( "HTML file detected. Maybe you had a problem with your CSV checkout.\n", $file );
-                next FILE_TO_PARSE;
-        }
+   # If the file is empty, we skip it
+   unless (@lines) {
+      $log->notice("Empty file.", $file);
+      next FILE_TO_PARSE;
+   }
 
-        # Read the full file into the @lines array
-        chomp(@lines);
+   # Check to see if we are dealing with a HTML file
+   if ( grep /<html>/i, @lines ) {
+      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file );
+      next FILE_TO_PARSE;
+   }
 
-        # Remove and count the abnormal EOL character i.e. anything
-        # that reminds after the chomp
-        for my $line (@lines) {
-                $numberofcf += $line =~ s/[\x0d\x0a]//g;
-        }
+   my $headerRemoved = 0;
 
-        if($numberofcf) {
-                $log->warning( "$numberofcf extra CF found and removed.", $file );
-        }
+   # While the first line is any sort of commant about pretty lst or LstTidy,
+   # we remove it
+   REMOVE_HEADER:
+   while ( $lines[0] =~ $CVSPattern || $lines[0] =~ $newHeaderPattern ) {
+      shift @lines;
+      $headerRemoved++;
+      last REMOVE_HEADER if not defined $lines[0];
+   }
 
-        my $parser = LstTidy::Parse::isParseableFileType($files_to_parse{$file});
+   # The full file is in the @lines array, remove the normal EOL characters
+   chomp(@lines);
 
-        if ( ref($parser) eq "CODE" ) {
+   # Remove and count any abnormal EOL characters i.e. anything that remains
+   # after the chomp
+   for my $line (@lines) { 
+      $numberofcf += $line =~ s/[\x0d\x0a]//g; 
+   }
 
-                #       $file_for_error = $file;
-                my ($newlines_ref) = &{ $parser }(
-                                          $files_to_parse{$file},
-                                          \@lines,
-                                          $file
-                                       );
+   if($numberofcf) {
+      $log->warning( "$numberofcf extra CF found and removed.", $file );
+   }
 
-                # Let's remove the tralling white spaces
-                for my $line (@$newlines_ref) {
-                $line =~ s/\s+$//;
-                }
+   my $parser = LstTidy::Parse::isParseableFileType($filesToParse{$file});
 
-                # henkslaaf - we need to handle this in multi-line object files
-                #       take the multi-line variable and use it to determine
-                #       if we should skip writing this file
+   if ( ref($parser) eq "CODE" ) {
 
-                # Some file types are never written
-                warn "SKIP rewrite for $file because it is a multi-line file" if $filetype eq 'multi-line';
-                next FILE_TO_PARSE if $filetype eq 'multi-line';                # we still need to implement rewriting for multi-line
-                next FILE_TO_PARSE if ! LstTidy::Parse::isWriteableFileType( $files_to_parse{$file} );
+      # The overwhelming majority of checking, correcting and reformatting happens in this operation
+      my ($newlines_ref) = &{ $parser }( $filesToParse{$file}, \@lines, $file);
 
-                # We compare the result with the orginal file.
-                # If there are no modification, we do not create the new files
-                my $same  = NO;
-                my $index = 0;
+      # Let's remove the tralling white spaces
+      for my $line (@$newlines_ref) {
+         $line =~ s/\s+$//;
+      }
 
-                # First, we check if there are obvious resons not to write the new file
-                if (    !$numberofcf                                            # No extra CRLF char. were removed
-                        && scalar(@lines) == scalar(@$newlines_ref)     # Same number of lines
-                ) {
-                        # We assume the arrays are the same ...
-                        $same = YES;
+      # henkslaaf - we need to handle this in multi-line object files
+      #       take the multi-line variable and use it to determine
+      #       if we should skip writing this file
 
-                        # ... but we check every line
-                        $index = -1;
-                        while ( $same && ++$index < scalar(@lines) ) {
-                                if ( $lines[$index] ne $newlines_ref->[$index] ) {
-                                        $same = NO;
-                                }
-                        }
-                }
+      # Some file types are never written
+      if ($filetype eq 'multi-line') {
+         $log->report("SKIP rewrite for $file because it is a multi-line file");
+         next FILE_TO_PARSE;                # we still need to implement rewriting for multi-line
+      }
 
-                next FILE_TO_PARSE if $same;
+      if (!LstTidy::Parse::isWriteableFileType($filesToParse{$file})) {
+         next FILE_TO_PARSE 
+      }
 
-                my $write_fh;
+      # We compare the result with the orginal file.
+      # If there are no modifications, we do not create the new files
+      my $same  = NO;
+      my $index = 0;
 
-                if (getOption('outputpath')) {
-                        my $newfile = $file;
-                        my $inputpath  =~ getOption('inputpath');
-                        my $outputpath =~ getOption('outputpath');
-                        $newfile =~ s/${inputpath}/${outputpath}/i;
+      # First, we check if there are obvious resons not to write the new file
+      # No extra CRLF char. were removed
+      # Same number of lines
+      if (!$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
 
-                        # Create the subdirectory if needed
-                        create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
+         # We assume the arrays are the same ...
+         $same = YES;
 
-                        open $write_fh, '>', $newfile;
+         # ... but we check every line
+         $index = -1;
+         while ( $same && ++$index < scalar(@lines) ) {
+            if ( $lines[$index] ne $newlines_ref->[$index] ) {
+               $same = NO;
+            }
+         }
+      }
 
-                        # We keep track of the files we modify
-                        push @modified_files, $file;
-                }
-                else {
-                        # Output to standard output
-                        $write_fh = *STDOUT;
-                }
+      next FILE_TO_PARSE if $same;
 
-                # The first line of the new file will be a comment line.
-                print {$write_fh} "$today -- reformated by $SCRIPTNAME v$VERSION\n";
+      my $write_fh;
 
-                # We print the result
-                LINE:
-                for my $line ( @{$newlines_ref} ) {
-                        #$line =~ s/\s+$//;
-                        print {$write_fh} "$line\n" if getOption('outputpath');
-                }
+      if (getOption('outputpath')) {
 
-                close $write_fh if getOption('outputpath');
-        }
-        else {
-                warn "Didn't process filetype \"$files_to_parse{$file}\".\n";
-        }
+         my $newfile = $file;
+         my $inputpath  = getOption('inputpath');
+         my $outputpath = getOption('outputpath');
+         $newfile =~ s/${inputpath}/${outputpath}/i;
+
+         # Create the subdirectory if needed
+         create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
+
+         open $write_fh, '>', $newfile;
+
+         # We keep track of the files we modify
+         push @nodifiedFiles, $file;
+
+      } else {
+
+         # Output to standard output
+         $write_fh = *STDOUT;
+      }
+
+      # The first line of the new file will be a comment line.
+      print {$write_fh} $LstTidyHeader;
+
+      # We print the result
+      for my $line ( @{$newlines_ref} ) {
+         print {$write_fh} "$line\n"
+      }
+
+      # If we opened a filehandle, then close it
+      if (getOption('outputpath')) {
+         close $write_fh;
+      }
+
+   } else {
+      warn "Didn't process filetype \"$filesToParse{$file}\".\n";
+   }
 }
 
 ###########################################
 # Generate the new BIOSET files
 
-if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
+if ( isConversionActive('BIOSET:generate the new files') ) {
         print STDERR "\n================================================================\n";
         print STDERR "List of new BIOSET files generated\n";
         print STDERR "----------------------------------------------------------------\n";
@@ -1614,50 +929,39 @@ if ( LstTidy::Options::isConversionActive('BIOSET:generate the new files') ) {
 
 ###########################################
 # Print a report with the modified files
-if ( getOption('outputpath') && scalar(@modified_files) ) {
-        my $outputpath = getOption('outputpath');
-        $outputpath =~ tr{/}{\\} if $^O eq "MSWin32";
+if ( getOption('outputpath') && scalar(@nodifiedFiles) ) {
 
-        $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
+   my $outputpath = getOption('outputpath');
 
-        my $inputpath = getOption('inputpath');
-        for my $file (@modified_files) {
-                $file =~ s{ ${inputpath} }{}xmsi;
-                $file =~ tr{/}{\\} if $^O eq "MSWin32";
-                $log->notice( "$file\n", "" );
-        }
+   if ($^O eq "MSWin32") {
+      $outputpath =~ tr{/}{\\} 
+   }
 
-        print STDERR "================================================================\n";
+   $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
+
+   my $inputpath = getOption('inputpath');
+   for my $file (@nodifiedFiles) {
+      $file =~ s{ ${inputpath} }{}xmsi;
+      $file =~ tr{/}{\\} if $^O eq "MSWin32";
+      $log->notice( "$file\n", "" );
+   }
+
+   print STDERR "================================================================\n";
 }
 
 ###########################################
 # Print a report for the BONUS and PRExxx usage
-if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
 
-        print STDERR "\n================================================================\n";
-        print STDERR "List of BONUS and PRExxx tags by linetype\n";
-        print STDERR "----------------------------------------------------------------\n";
-
-        my $first = 1;
-        for my $line_type ( sort keys %bonus_prexxx_tag_report ) {
-                print STDERR "\n" unless $first;
-                $first = 0;
-                print STDERR "Line Type: $line_type\n";
-
-                for my $tag ( sort keys %{ $bonus_prexxx_tag_report{$line_type} } ) {
-                print STDERR "  $tag\n";
-                }
-        }
-
-        print STDERR "================================================================\n";
+if ( isConversionActive('Generate BONUS and PRExxx report') ) {
+   LstTidy::Report::reportBonus();
 }
 
 if (getOption('report')) {
-   LstTidy::Report::reportValid();
+   LstTidy::Report::report('Valid');
 }
 
 if (LstTidy::Report::foundInvalidTags()) {
-   LstTidy::Report::reportValid();
+   LstTidy::Report::report('Invalid');
 }
 
 if (getOption('xcheck')) {
@@ -1668,16 +972,18 @@ if (getOption('xcheck')) {
 # Close the files that were opened for
 # special conversion
 
-if (LstTidy::Options::isConversionActive('Export lists')) {
+if (isConversionActive('Export lists')) {
    LstTidy::Report::closeExportListFileHandles();
 }
+
+LstTidy::Validate::dumpValidEntities();
 
 #########################################
 # Close the redirected STDERR if needed
 
 if (getOption('outputerror')) {
-        close STDERR;
-        print STDOUT "\cG";                     # An audible indication that PL has finished.
+   close STDERR;
+   print STDOUT "\cG"; # An audible indication that PL has finished.
 }
 
 ###############################################################################
@@ -1727,8 +1033,8 @@ sub FILETYPE_parse {
      
       # Convert the non-ascii character in the line if that conversion is
       # active, otherwise just copy it. 
-      my $new_line = LstTidy::Options::isConversionActive('ALL:Fix Common Extended ASCII')
-                        ? LstTidy::Convert::convertEntities($thisLine)
+      my $new_line = isConversionActive('ALL:Fix Common Extended ASCII')
+                        ? convertEntities($thisLine)
                         : $thisLine;
 
       # Remove spaces at the end of the line
@@ -1786,7 +1092,7 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $log, $file, $line );
+      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $file, $line );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1802,7 +1108,12 @@ sub FILETYPE_parse {
 
       #First, we deal with the tag-less columns
       COLUMN:
-      for my $column ( @{ $column_with_no_tag{$curent_linetype} } ) {
+      for my $column ( getEntityNameTag($curent_linetype) ) {
+
+         # If this line type does not have tagless first entry
+         if (not defined $column) {
+            last COLUMN;
+         }
 
          # If the line has no tokens        
          if ( scalar @tokens == 0 ) {
@@ -1828,7 +1139,8 @@ sub FILETYPE_parse {
          LstTidy::Report::incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            my $exit = LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            last COLUMN if $exit;
          }
       }
 
@@ -1852,7 +1164,7 @@ sub FILETYPE_parse {
             # Potentally modify the tag
             LstTidy::Parse::parseTag( $tag );
 
-            my $key = $tag->readId;
+            my $key = $tag->realId;
 
             if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
                $log->notice(
@@ -1885,12 +1197,12 @@ sub FILETYPE_parse {
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      additionnal_line_parsing(\%line_tokens, $curent_linetype, $file, $line, $newline);
+      parseLine($curent_linetype, \%line_tokens, $file, $line, $newline);
 
       ############################################################
       # Validate the line
       if (getOption('xcheck')) {
-         validate_line(\%line_tokens, $curent_linetype, $file, $line) 
+         validateLine($curent_linetype, \%line_tokens, $file, $line) 
       };
 
       ############################################################
@@ -1903,59 +1215,59 @@ sub FILETYPE_parse {
    }
    continue { $line++ }
 
-        #####################################################
-        #####################################################
-        # We find all the header lines
-        for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
-                my $curent_linetype = $newlines[$line_index][0];
-                my $line_tokens = $newlines[$line_index][1];
-                my $next_linetype;
-                $next_linetype = $newlines[ $line_index + 1 ][0]
-                if $line_index + 1 < @newlines;
+   #####################################################
+   #####################################################
+   # We find all the header lines
+   for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
+      my $curent_linetype = $newlines[$line_index][0];
+      my $line_tokens     = $newlines[$line_index][1];
 
-                # A header line either begins with the curent line_type header
-                # or the next line header.
-                #
-                # Only comment -- $line_token is not a hash --  can be header lines
-                if ( ref($line_tokens) ne 'HASH' ) {
+      my $next_linetype;
+      if ($line_index + 1 < @newlines) {
+         $next_linetype = $newlines[ $line_index + 1 ][0] 
+      }
 
-                        # We are on a comment line, we need to find the
-                        # curent and the next line header.
+      # A header line either begins with the curent line_type header
+      # or the next line header.
+      #
+      # Only comment -- $line_token is not a hash --  can be header lines
+      if ( ref($line_tokens) ne 'HASH' ) {
 
+         # We are on a comment line, we need to find the
+         # curent and the next line header.
 
+         # Curent header
+         my $this_header =
+            $curent_linetype
+               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
+               : "";
 
-                        # Curent header
-                        my $this_header =
-                                $curent_linetype
-                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
-                                : "";
+         # Next line header
+         my $next_header =
+            $next_linetype
+               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
+               : "";
 
-                        # Next line header
-                        my $next_header =
-                                $next_linetype
-                                ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
-                                : "";
+         if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
+            || ( $next_header && index( $line_tokens, $next_header ) == 0 ) )
+         {
 
-                        if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
-                                || ( $next_header && index( $line_tokens, $next_header ) == 0 ) )
-                        {
+            # It is a header, let's tag it as such.
+            $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
+         } else {
 
-                                # It is a header, let's tag it as such.
-                                $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
-                        } else {
-
-                                # It is just a comment, we won't botter with it ever again.
-                                $newlines[$line_index] = $line_tokens;
-                        }
-                }
-        }
+            # It is just a comment, we won't botter with it ever again.
+            $newlines[$line_index] = $line_tokens;
+         }
+      }
+   }
 
 
         #################################################################
         ######################## Conversion #############################
         # We manipulate the tags for the whole file here
 
-        additionnal_file_parsing(\@newlines, $fileType, $file);
+        parseFile(\@newlines, $fileType, $file);
 
         ##################################################
         ##################################################
@@ -1974,10 +1286,9 @@ sub FILETYPE_parse {
                 || $newlines[$line_index][0] eq 'HEADER';
 
                 my $line_ref = $newlines[$line_index];
-                my ($curent_linetype, $line_tokens, $last_main_line,
-                $curent_entity,   $line_info
-                )
-                = @$line_ref;
+
+                my ($curent_linetype, $line_tokens, $last_main_line, $curent_entity, $line_info) = @$line_ref;
+
                 my $newline = "";
 
                 # If the separator is not a tab, with just join the
@@ -2562,1657 +1873,7 @@ sub FILETYPE_parse {
 }
 
 ###############################################################
-# validate_line
-# -------------
-#
-# This function perform validation that must be done on a
-# whole line at a time.
-#
-# Paramter: $line_ref           Ref to a hash containing the tags of the line
-#               $linetype               Type for the current line
-#               $file_for_error   Name of the current file
-#               $line_for_error   Number of the current line
-
-sub validate_line {
-        my ( $line_ref, $linetype, $file_for_error, $line_for_error ) = @_;
-
-        ########################################################
-        # Validation for the line identifier
-        ########################################################
-
-        if ( !($linetype eq 'SOURCE'
-                || $linetype eq 'KIT LANGAUTO'
-                || $linetype eq 'KIT NAME'
-                || $linetype eq 'KIT FEAT'
-                || $file_for_error =~ m{ [.] PCC \z }xmsi
-                || $linetype eq 'COMPANIONMOD') # FOLLOWER:Class1,Class2=level
-        ) {
-
-                # We get the line identifier.
-                my $identifier = $line_ref->{ @{LstTidy::Reformat::getLineTypeOrder($linetype)}[0] }[0];
-
-                # We hunt for the bad comma.
-                if($identifier =~ /,/) {
-                        $log->notice(
-                                qq{"," (comma) should not be used in line identifier name: $identifier},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-        }
-
-        ########################################################
-        # Special validation for specific tags
-        ########################################################
-
-        if ( 0 && $linetype eq 'SPELL' )        # disabled for now.
-        {
-
-                # Either or both CLASSES and DOMAINS tags must be
-                # present in a normal SPELL line
-
-                if (  exists $line_ref->{'000SpellName'}
-                        && $line_ref->{'000SpellName'}[0] !~ /\.MOD$/
-                        && exists $line_ref->{'TYPE'}
-                        && $line_ref->{'TYPE'}[0] ne 'TYPE:Psionic.Attack Mode'
-                        && $line_ref->{'TYPE'}[0] ne 'TYPE:Psionic.Defense Mode' )
-                {
-                        $log->info(
-                                qq(No CLASSES or DOMAINS tag found for SPELL "$line_ref->{'000SpellName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        ) if !( exists $line_ref->{'CLASSES'} || exists $line_ref->{'DOMAINS'} );
-                }
-        }
-        elsif ( $linetype eq "ABILITY" ) {
-
-                # On an ABILITY line type:
-                # 0) MUST contain CATEGORY tag
-                # 1) if it has MULT:YES, it  _has_ to have CHOOSE
-                # 2) if it has CHOOSE, it _has_ to have MULT:YES
-                # 3) if it has STACK:YES, it _has_ to have MULT:YES (and CHOOSE)
-
-                # Find lines that modify or remove Categories of Abilityies without naming the Abilities
-                my $MOD_Line = $line_ref->{'000AbilityName'}[0];
-                study $MOD_Line;
-
-                if ( $MOD_Line =~ /\.(MOD|FORGET|COPY=)/ ) {
-                        # Nothing to see here. Move on.
-                }
-                # Find the Abilities lines without Categories
-                elsif ( !$line_ref->{'CATEGORY'} ) {
-                        $log->warning(
-                                qq(The CATEGORY tag is required in ABILITY "$line_ref->{'000AbilityName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                my ( $hasCHOOSE, $hasMULT, $hasSTACK );
-
-                $hasCHOOSE = 1 if exists $line_ref->{'CHOOSE'};
-                $hasMULT   = 1 if exists $line_ref->{'MULT'} && $line_ref->{'MULT'}[0] =~ /^MULT:Y/i;
-                $hasSTACK  = 1 if exists $line_ref->{'STACK'} && $line_ref->{'STACK'}[0] =~ /^STACK:Y/i;
-
-                if ( $hasMULT && !$hasCHOOSE ) {
-                        $log->info(
-                                qq(The CHOOSE tag is mandantory when MULT:YES is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:SPELLLEVEL/i ) {
-                        # The CHOOSE:SPELLLEVEL is exempted from this particular rule.
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when CHOOSE is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:NUMBER/i ) {
-                        # The CHOOSE:NUMBER is exempted from this particular rule.
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when CHOOSE is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                if ( $hasSTACK && !$hasMULT ) {
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when STACK:YES is present in ABILITY "$line_ref->{'000AbilityName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
-                if ($hasCHOOSE) {
-
-                        # The CHOSE type tells us the type of sub-entities
-                        my $choose      = $line_ref->{'CHOOSE'}[0];
-                        my $ability_name = $line_ref->{'000AbilityName'}[0];
-                        $ability_name =~ s/.MOD$//;
-
-                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = $1;
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'FEAT';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'WEAPONPROF';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SKILL';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SPELL_SCHOOL';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'SPELL';
-                        }
-                        elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/
-                                || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ )
-                        {
-
-                                # Ad-Lib is a special case that means "Don't look for
-                                # anything else".
-                                $valid_sub_entities{'ABILITY'}{$ability_name} = 'Ad-Lib';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
-
-                                # ad-hod/special list of thingy
-                                # It adds to the valid entities instead of the
-                                # valid sub-entities.
-                                # We do this when we find a CHOOSE but we do not
-                                # know what it is for.
-
-                                LstTidy::Validate::splitAndAddToValidEntities('ABILITY', $ability_name, $1);
-                        }
-                }
-        }
-
-        elsif ( $linetype eq "FEAT" ) {
-
-                # [ 1671410 ] xcheck CATEGORY:Feat in Feat object.
-                my $hasCategory = 0;
-                $hasCategory = 1 if exists $line_ref->{'CATEGORY'};
-                if ($hasCategory) {
-                        if ($line_ref->{'CATEGORY'}[0] eq "CATEGORY:Feat" ||
-                            $line_ref->{'CATEGORY'}[0] eq "CATEGORY:Special Ability") {
-                                # Good
-                        }
-                        else {
-                                $log->info(
-                                        qq(The CATEGORY tag must have the value of Feat or Special Ability when present on a FEAT. Remove or replace "$line_ref->{'CATEGORY'}[0]"),
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                }
-
-                # On a FEAT line type:
-                # 1) if it has MULT:YES, it  _has_ to have CHOOSE
-                # 2) if it has CHOOSE, it _has_ to have MULT:YES
-                # 3) if it has STACK:YES, it _has_ to have MULT:YES (and CHOOSE)
-                my ( $hasCHOOSE, $hasMULT, $hasSTACK );
-
-                $hasCHOOSE = 1 if exists $line_ref->{'CHOOSE'};
-                $hasMULT   = 1 if exists $line_ref->{'MULT'} && $line_ref->{'MULT'}[0] =~ /^MULT:Y/i;
-                $hasSTACK  = 1 if exists $line_ref->{'STACK'} && $line_ref->{'STACK'}[0] =~ /^STACK:Y/i;
-
-                if ( $hasMULT && !$hasCHOOSE ) {
-                        $log->info(
-                                qq(The CHOOSE tag is mandatory when MULT:YES is present in FEAT "$line_ref->{'000FeatName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:SPELLLEVEL/i ) {
-
-                        # The CHOOSE:SPELLLEVEL is exampted from this particular rule.
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when CHOOSE is present in FEAT "$line_ref->{'000FeatName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                elsif ( $hasCHOOSE && !$hasMULT && $line_ref->{'CHOOSE'}[0] !~ /CHOOSE:NUMBER/i ) {
-
-                        # The CHOOSE:NUMBER is exampted from this particular rule.
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when CHOOSE is present in FEAT "$line_ref->{'000FeatName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                if ( $hasSTACK && !$hasMULT ) {
-                        $log->info(
-                                qq(The MULT:YES tag is mandatory when STACK:YES is present in FEAT "$line_ref->{'000FeatName'}[0]"),
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
-                if ($hasCHOOSE) {
-
-                        # The CHOSE type tells us the type of sub-entities
-                        my $choose      = $line_ref->{'CHOOSE'}[0];
-                        my $feat_name = $line_ref->{'000FeatName'}[0];
-                        $feat_name =~ s/.MOD$//;
-
-                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = $1;
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'FEAT';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'WEAPONPROF';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SKILL';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SPELL_SCHOOL';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'SPELL';
-                        }
-                        elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/
-                                || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ )
-                        {
-
-                                # Ad-Lib is a special case that means "Don't look for
-                                # anything else".
-                                $valid_sub_entities{'FEAT'}{$feat_name} = 'Ad-Lib';
-                        }
-                        elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
-
-                           LstTidy::Validate::splitAndAddToValidEntities('FEAT', $feat_name, $1);
-                        }
-                }
-        }
-        elsif ( $linetype eq "EQUIPMOD" ) {
-
-                # We keep track of the KEYs for the equipmods.
-                if ( exists $line_ref->{'KEY'} ) {
-
-                        # The KEY tag should only have one value and there should always be only
-                        # one KEY tag by EQUIPMOD line.
-
-                        # We extract the key name
-                        my ($key) = ( $line_ref->{'KEY'}[0] =~ /KEY:(.*)/ );
-
-                        if ($key) {
-                           LstTidy::Validate::setEntityValid("EQUIPMOD Key", $key);
-                        }
-                        else {
-                                $log->warning(
-                                        qq(Could not parse the KEY in "$line_ref->{'KEY'}[0]"),
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                }
-                else {
-                        # [ 1368562 ] .FORGET / .MOD don\'t need KEY entries
-                        my $report_tag = $line_ref->{$column_with_no_tag{'EQUIPMOD'}[0]}[0];
-                        if ($report_tag =~ /.FORGET$|.MOD$/) {
-                        }
-                        else {
-                                $log->info(
-                                qq(No KEY tag found for "$report_tag"),
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-                if ( exists $line_ref->{'CHOOSE'} ) {               # [ 1870825 ] EqMod CHOOSE Changes
-                        my $choose = $line_ref->{'CHOOSE'}[0];
-                        my $eqmod_name = $line_ref->{'000ModifierName'}[0];
-                        $eqmod_name =~ s/.MOD$//;
-                        if ( $choose =~ /^CHOOSE:(NUMBER[^|]*)/ ) {
-                        # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|TITLE=Whatever
-                        # Valid: CHOOSE:NUMBER|1|2|3|4|5|6|7|8|TITLE=Whatever
-                        # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|INCREMENT=5|TITLE=Whatever
-                        # Valid: CHOOSE:NUMBER|MAX=99129342|INCREMENT=5|MIN=1|TITLE=Whatever
-                        # Only testing for TITLE= for now.
-                                # Test for TITLE= and warn if not present.
-                                if ( $choose !~ /(TITLE[=])/ ) {
-                                        $log->info(
-                                        qq(TITLE= is missing in CHOOSE:NUMBER for "$choose"),
-                                        $file_for_error,
-                                        $line_for_error
-                                        );
-                                }
-                        }
-                        # Only CHOOSE:NOCHOICE is Valid
-                        elsif ( $choose =~ /^CHOOSE:NOCHOICE/ ) {
-                        }
-                        # CHOOSE:STRING|Foo|Bar|Monkey|Poo|TITLE=these are choices
-                        elsif ( $choose =~ /^CHOOSE:?(STRING)[^|]*/ ) {
-                                # Test for TITLE= and warn if not present.
-                                if ( $choose !~ /(TITLE[=])/ ) {
-                                        $log->info(
-                                        qq(TITLE= is missing in CHOOSE:STRING for "$choose"),
-                                        $file_for_error,
-                                        $line_for_error
-                                        );
-                                }
-                        }
-                        # CHOOSE:STATBONUS|statname|MIN=2|MAX=5|TITLE=Enhancement Bonus
-                        # Statname is what I'd want to check to verify against the defined stats, but since it is optional....
-                        elsif ( $choose =~ /^CHOOSE:?(STATBONUS)[^|]*/ ) {
-#                               my $checkstat = $choose;
-#                               $checkstat =~ s/(CHOOSE:STATBONUS)// ;
-#                               $checkstat =~ s/[|]MIN=[-]?\d+\|MAX=\d+\|TITLE=.*//;
-                        }
-                        elsif ( $choose =~ /^CHOOSE:?(SKILLBONUS)[^|]*/ ) {
-                        }
-                        elsif ( $choose =~ /^CHOOSE:?(SKILL)[^|]*/ ) {
-                                if ( $choose !~ /(TITLE[=])/ ) {
-                                        $log->info(
-                                        qq(TITLE= is missing in CHOOSE:SKILL for "$choose"),
-                                        $file_for_error,
-                                        $line_for_error
-                                        );
-                                }
-                        }
-                        elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.SPELL)[^|]*/ ) {
-                        }
-                        elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.EQTYPE)[^|]*/ ) {
-                        }
-                        # If not above, invaild CHOOSE for equipmod files.
-                        else {
-                                        $log->warning(
-                                        qq(Invalid CHOOSE for Equipmod spells for "$choose"),
-                                        $file_for_error,
-                                        $line_for_error
-                                        );
-                        }
-                }
-        }
-        elsif ( $linetype eq "CLASS" ) {
-
-                # [ 876536 ] All spell casting classes need CASTERLEVEL
-                #
-                # If SPELLTYPE is present and BONUS:CASTERLEVEL is not present,
-                # we warn the user.
-
-                if ( exists $line_ref->{'SPELLTYPE'} && !exists $line_ref->{'BONUS:CASTERLEVEL'} ) {
-                        $log->info(
-                                qq{Missing BONUS:CASTERLEVEL for "$line_ref->{$column_with_no_tag{'CLASS'}[0]}[0]"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-        }
-                elsif ( $linetype eq "CLASS" ) {
-
-                # [ 876536 ] All spell casting classes need CASTERLEVEL
-                #
-                # If SPELLTYPE is present and BONUS:CASTERLEVEL is not present,
-                # we warn the user.
-
-                if ( exists $line_ref->{'FACT:SPELLTYPE'} && !exists $line_ref->{'BONUS:CASTERLEVEL'} ) {
-                        $log->info(
-                                qq{Missing BONUS:CASTERLEVEL for "$line_ref->{$column_with_no_tag{'CLASS'}[0]}[0]"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-        }
-
-        elsif ( $linetype eq 'SKILL' ) {
-
-                # We must identify the skills that have sub-entity e.g. Speak Language (Infernal)
-
-                if ( exists $line_ref->{'CHOOSE'} ) {
-
-                        # The CHOSE type tells us the type of sub-entities
-                        my $choose      = $line_ref->{'CHOOSE'}[0];
-                        my $skill_name = $line_ref->{'000SkillName'}[0];
-                        $skill_name =~ s/.MOD$//;
-
-                        if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?Language/ ) {
-                                $valid_sub_entities{'SKILL'}{$skill_name} = 'LANGUAGE';
-                        }
-                }
-        }
-}
-
-###############################################################
-# additionnal_line_parsing
-# ------------------------
-#
-# This function does additional parsing on each line once
-# they have been seperated in tags.
-#
-# Most commun use is for addition, conversion or removal of tags.
-#
-# Paramter: $line_ref         Ref to a hash containing the tags of the line
-#           $filetype         Type for the current file
-#           $file_for_error   Name of the current file
-#           $line_for_error   Number of the current line
-#           $line_info        (Optional) structure generated by FILETYPE_parse
-#
-
-BEGIN {
-
-        my $class_name = "";
-
-        sub additionnal_line_parsing {
-                my ( $line_ref, $filetype, $file_for_error, $line_for_error, $line_info ) = @_;
-
-        ##################################################################
-        # [ 1596310 ] xcheck: TYPE:Spellbook for equip w/ NUMPAGES and PAGEUSAGE
-        # Gawaine42 (Richard)
-        # Check to see if the TYPE contains Spellbook, if so, warn if
-        # NUMUSES or PAGEUSAGE aren't there.
-        # Then check to see if NUMPAGES or PAGEUSAGE are there, and if they
-        # are there, but the TYPE doesn't contain Spellbook, warn.
-
-        if ($filetype eq 'EQUIPMENT') {
-                if (exists $line_ref->{'TYPE'}
-                && $line_ref->{'TYPE'}[0] =~ /Spellbook/)
-                {
-                if (exists $line_ref->{'NUMPAGES'}
-                        && exists $line_ref->{'PAGEUSAGE'}) {
-                        #Nothing to see here, move along.
-                }
-                else {
-                        $log->info(
-                        qq{You have a Spellbook defined without providing NUMPAGES or PAGEUSAGE. If you want a spellbook of finite capacity, consider adding these tags.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-                }
-                else {
-
-                if (exists $line_ref->{'NUMPAGES'} )
-                {
-                        $log->warning(
-                        qq{Invalid use of NUMPAGES tag in a non-spellbook. Remove this tag, or correct the TYPE.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-                if  (exists $line_ref->{'PAGEUSAGE'})
-                {
-                        $log->warning(
-                        qq{Invalid use of PAGEUSAGE tag in a non-spellbook. Remove this tag, or correct the TYPE.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-                }
-        #################################################################
-        #  Do the same for Type Container with and without CONTAINS
-                if (exists $line_ref->{'TYPE'}
-                && $line_ref->{'TYPE'}[0] =~ /Container/)
-                {
-                if (exists $line_ref->{'CONTAINS'}) {
-#                       $line_ref =~ s/'CONTAINS:-1'/'CONTAINS:UNLIM'/g;   # [ 1777282 ] CONTAINS Unlimited Weight is UNLIM, not -1
-                }
-                else {
-                        $log->warning(
-                        qq{Any object with TYPE:Container must also have a CONTAINS tag to be activated.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-                }
-                elsif (exists $line_ref->{'CONTAINS'})
-                {
-                $log->warning(
-                        qq{Any object with CONTAINS must also be TYPE:Container for the CONTAINS tag to be activated.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-
-   }
-
-        ##################################################################
-        # [ 1864711 ] Convert ADD:SA to ADD:SAB
-        #
-        # In most files, take ADD:SA and replace with ADD:SAB
-
-        if (   LstTidy::Options::isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
-                && exists $line_ref->{'ADD:SA'}
-        ) {
-                $log->warning(
-                        qq{Change ADD:SA for ADD:SAB in "$line_ref->{'ADD:SA'}[0]"},
-                        $file_for_error,
-                        $line_for_error
-                );
-                my $satag;
-                $satag = $line_ref->{'ADD:SA'}[0];
-                $satag =~ s/ADD:SA/ADD:SAB/;
-                $line_ref->{'ADD:SAB'}[0] = $satag;
-                delete $line_ref->{'ADD:SA'};
-        }
-
-
-
-        ##################################################################
-        # [ 1514765 ] Conversion to remove old defaultmonster tags
-        # Gawaine42 (Richard Bowers)
-        # Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
-        # This should remove the whole tag.
-        if (LstTidy::Options::isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
-                        && $filetype eq "RACE"
-        ) {
-        for my $key ( keys %$line_ref ) {
-                my $ary = $line_ref->{$key};
-                my $iCount = 0;
-                foreach (@$ary) {
-                my $ttag = $$ary[$iCount];
-                if ($ttag =~ /PREDEFAULTMONSTER:Y/) {
-                        $$ary[$iCount] = "";
-                        $log->warning(
-                                qq{Removing "$ttag".},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                }
-                $iCount++;
-                }
-        }
-        }
-
-
-
-        ##################################################################
-        # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
-        #
-        # In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT'
-
-        if (   LstTidy::Options::isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
-                && $filetype eq "EQUIPMENT"
-                && exists $line_ref->{'ALTCRITICAL'}
-        ) {
-        # Throw warning if both ALTCRITICAL and ALTCRITMULT are on the same line,
-        #   then remove ALTCRITICAL.
-        if ( exists $line_ref->{ALTCRITMULT} ) {
-                $log->warning(
-                        qq{Removing ALTCRITICAL, ALTCRITMULT already present on same line.},
-                        $file_for_error,
-                        $line_for_error
-                );
-                delete $line_ref->{'ALTCRITICAL'};
-        } else {
-                $log->warning(
-                        qq{Change ALTCRITICAL for ALTCRITMULT in "$line_ref->{'ALTCRITICAL'}[0]"},
-                        $file_for_error,
-                        $line_for_error
-                );
-                my $ttag;
-                $ttag = $line_ref->{'ALTCRITICAL'}[0];
-                $ttag =~ s/ALTCRITICAL/ALTCRITMULT/;
-                $line_ref->{'ALTCRITMULT'}[0] = $ttag;
-                delete $line_ref->{'ALTCRITICAL'};
-                }
-        }
-
-
-        ##################################################################
-        # [ 1514765 ] Conversion to remove old defaultmonster tags
-        #
-        # In RACE files, remove all MFEAT and HITDICE tags, but only if
-        # there is a MONSTERCLASS present.
-
-        # We remove MFEAT or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
-                && $filetype eq "RACE"
-                && exists $line_ref->{'MFEAT'}
-                ) { if ( exists $line_ref->{'MONSTERCLASS'}
-                        ) { for my $tag ( @{ $line_ref->{'MFEAT'} } ) {
-                                $log->warning(
-                                qq{Removing "$tag".},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                        delete $line_ref->{'MFEAT'};
-                        }
-                else {$log->warning(
-                        qq{MONSTERCLASS missing on same line as MFEAT, need to look at by hand.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-        }
-
-        # We remove HITDICE or warn of missing MONSTERCLASS tag.
-        if (   LstTidy::Options::isConversionActive('RACE:Remove MFEAT and HITDICE')
-                && $filetype eq "RACE"
-                && exists $line_ref->{'HITDICE'}
-                ) { if ( exists $line_ref->{'MONSTERCLASS'}
-                        ) { for my $tag ( @{ $line_ref->{'HITDICE'} } ) {
-                                $log->warning(
-                                qq{Removing "$tag".},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                        delete $line_ref->{'HITDICE'};
-                        }
-                else {$log->warning(
-                        qq{MONSTERCLASS missing on same line as HITDICE, need to look at by hand.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-
-        #######################################################
-        ## [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-        ## Gawaine42
-        ## Note: Makes simplifying assumption that FOLLOWERALIGN
-        ## will occur only once in a given line, although DOMAINS may
-        ## occur multiple times.
-        if ((LstTidy::Options::isConversionActive('DEITY:Followeralign conversion'))
-                && $filetype eq "DEITY"
-                && (exists $line_ref->{'FOLLOWERALIGN'}))
-        {
-                my $followeralign = $line_ref->{'FOLLOWERALIGN'}[0];
-                $followeralign =~ s/^FOLLOWERALIGN://;
-                my $newprealign = "";
-                my $aligncount = 0;
-
-                for my $align (split //, $followeralign) {
-                        # Is it a number?
-                        my $number;
-                        if ( (($number) = ($align =~ / \A (\d+) \z /xms))
-                        && $number >= 0
-                        && $number < scalar @valid_system_alignments)
-                {
-                                my $newalign = $valid_system_alignments[$number];
-                        if ($aligncount > 0) {
-                        $newprealign .= ',';
-                        }
-                        $aligncount++;
-                        $newprealign .= "$newalign";
-                        }
-                else {
-                                $log->notice(
-                                qq{Invalid value "$align" for tag "$line_ref->{'FOLLOWERALIGN'}[0]"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-
-                }
-                }
-                my $dom_count=0;
-
-                if (exists $line_ref->{'DOMAINS'}) {
-                for my $line ($line_ref->{'DOMAINS'})
-                {
-                        $line_ref->{'DOMAINS'}[$dom_count] .= "|PREALIGN:$newprealign";
-                        $dom_count++;
-                }
-                $log->notice(
-                                qq{Adding PREALIGN to domain information and removing "$line_ref->{'FOLLOWERALIGN'}[0]"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-
-                delete $line_ref->{'FOLLOWERALIGN'};
-                }
-        }
-
-                ##################################################################
-                # [ 1353255 ] TYPE to RACETYPE conversion
-                #
-                # Checking race files for TYPE and if no RACETYPE,
-                # convert TYPE to RACETYPE.
-                # if Race file has no TYPE or RACETYPE, report as 'Info'
-
-                # Do this check no matter what - valid any time
-                if ( $filetype eq "RACE"
-                && not ( exists $line_ref->{'RACETYPE'} )
-                && not ( exists $line_ref->{'TYPE'}  )
-                ) {
-                # .MOD / .FORGET / .COPY don't need RACETYPE or TYPE'
-                my $race_name = $line_ref->{'000RaceName'}[0];
-                if ($race_name =~ /\.(FORGET|MOD|COPY=.+)$/) {
-                } else { $log->warning(
-                        qq{Race entry missing both TYPE and RACETYPE.},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                }
-                };
-
-                if (   LstTidy::Options::isConversionActive('RACE:TYPE to RACETYPE')
-                && ( $filetype eq "RACE"
-                        || $filetype eq "TEMPLATE" )
-                && not (exists $line_ref->{'RACETYPE'})
-                && exists $line_ref->{'TYPE'}
-                ) { $log->warning(
-                        qq{Changing TYPE for RACETYPE in "$line_ref->{'TYPE'}[0]".},
-                        $file_for_error,
-                        $line_for_error
-                        );
-                        $line_ref->{'RACETYPE'} = [ "RACE" . $line_ref->{'TYPE'}[0] ];
-                        delete $line_ref->{'TYPE'};
-                };
-
-#                       $line_ref->{'MONCSKILL'} = [ "MON" . $line_ref->{'CSKILL'}[0] ];
-#                       delete $line_ref->{'CSKILL'};
-
-
-                ##################################################################
-                # [ 1444527 ] New SOURCE tag format
-                #
-                # The SOURCELONG tags found on any linetype but the SOURCE line type must
-                # be converted to use tab if | are found.
-
-                if (   LstTidy::Options::isConversionActive('ALL:New SOURCExxx tag format')
-                && exists $line_ref->{'SOURCELONG'} ) {
-                my @new_tags;
-
-                for my $tag ( @{ $line_ref->{'SOURCELONG'} } ) {
-                        if( $tag =~ / [|] /xms ) {
-                                push @new_tags, split '\|', $tag;
-                                $log->warning(
-                                qq{Spliting "$tag"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-
-                if( @new_tags ) {
-                        delete $line_ref->{'SOURCELONG'};
-
-                        for my $new_tag (@new_tags) {
-                                my ($tag_name) = ( $new_tag =~ / ( [^:]* ) [:] /xms );
-                                push @{ $line_ref->{$tag_name} }, $new_tag;
-                        }
-                }
-                }
-
-                ##################################################################
-                # [ 1070084 ] Convert SPELL to SPELLS
-                #
-                # Convert the old SPELL tags to the new SPELLS format.
-                #
-                # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
-                # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
-
-                if ( LstTidy::Options::isConversionActive('ALL:Convert SPELL to SPELLS')
-                && exists $line_ref->{'SPELL'} )
-                {
-                my %spellbooks;
-
-                # We parse all the existing SPELL tags
-                for my $tag ( @{ $line_ref->{'SPELL'} } ) {
-                        my ( $tag_name, $tag_value ) = ( $tag =~ /^([^:]*):(.*)/ );
-                        my @elements = split '\|', $tag_value;
-                        my @pretags;
-
-                        while ( $elements[ +@elements - 1 ] =~ /^!?PRE\w*:/ ) {
-
-                                # We keep the PRE tags separated
-                                unshift @pretags, pop @elements;
-                        }
-
-                        # We classify each triple <spellname>|<nb per day>|<spellbook>
-                        while (@elements) {
-                                if ( +@elements < 3 ) {
-                                $log->warning(
-                                        qq(Wrong number of elements for "$tag_name:$tag_value"),
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-
-                                my $spellname = shift @elements;
-                                my $times       = +@elements ? shift @elements : 99999;
-                                my $pretags   = join '|', @pretags;
-                                $pretags = "NONE" unless $pretags;
-                                my $spellbook = +@elements ? shift @elements : "MISSING SPELLBOOK";
-
-                                push @{ $spellbooks{$spellbook}{$times}{$pretags} }, $spellname;
-                        }
-
-                        $log->warning(
-                                qq{Removing "$tag_name:$tag_value"},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                # We delete the SPELL tags
-                delete $line_ref->{'SPELL'};
-
-                # We add the new SPELLS tags
-                for my $spellbook ( sort keys %spellbooks ) {
-                        for my $times ( sort keys %{ $spellbooks{$spellbook} } ) {
-                                for my $pretags ( sort keys %{ $spellbooks{$spellbook}{$times} } ) {
-                                my $spells = "SPELLS:$spellbook|TIMES=$times";
-
-                                for my $spellname ( sort @{ $spellbooks{$spellbook}{$times}{$pretags} } ) {
-                                        $spells .= "|$spellname";
-                                }
-
-                                $spells .= "|$pretags" unless $pretags eq "NONE";
-
-                                $log->warning( qq{Adding   "$spells"}, $file_for_error, $line_for_error );
-
-                                push @{ $line_ref->{'SPELLS'} }, $spells;
-                                }
-                        }
-                }
-                }
-
-                ##################################################################
-                # We get rid of all the PREALIGN tags.
-                #
-                # This is needed by my good CMP friends.
-
-                if ( LstTidy::Options::isConversionActive('ALL:CMP remove PREALIGN') ) {
-                if ( exists $line_ref->{'PREALIGN'} ) {
-                        my $number = +@{ $line_ref->{'PREALIGN'} };
-                        delete $line_ref->{'PREALIGN'};
-                        $log->warning(
-                                qq{Removing $number PREALIGN tags},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-
-                if ( exists $line_ref->{'!PREALIGN'} ) {
-                        my $number = +@{ $line_ref->{'!PREALIGN'} };
-                        delete $line_ref->{'!PREALIGN'};
-                        $log->warning(
-                                qq{Removing $number !PREALIGN tags},
-                                $file_for_error,
-                                $line_for_error
-                        );
-                }
-                }
-
-                ##################################################################
-                # Need to fix the STR bonus when the monster have only one
-                # Natural Attack (STR bonus is then 1.5 * STR).
-                # We add it if there is only one Melee attack and the
-                # bonus is not already present.
-
-                if ( LstTidy::Options::isConversionActive('ALL:CMP NatAttack fix')
-                && exists $line_ref->{'NATURALATTACKS'} )
-                {
-
-                # First we verify if if there is only one melee attack.
-                if ( @{ $line_ref->{'NATURALATTACKS'} } == 1 ) {
-                        my @NatAttacks = split '\|', $line_ref->{'NATURALATTACKS'}[0];
-                        if ( @NatAttacks == 1 ) {
-                                my ( $NatAttackName, $Types, $NbAttacks, $Damage ) = split ',', $NatAttacks[0];
-                                if ( $NbAttacks eq '*1' && $Damage ) {
-
-                                # Now, at last, we know there is only one Natural Attack
-                                # Is it a Melee attack?
-                                my @Types       = split '\.', $Types;
-                                my $IsMelee  = 0;
-                                my $IsRanged = 0;
-                                for my $type (@Types) {
-                                        $IsMelee  = 1 if uc($type) eq 'MELEE';
-                                        $IsRanged = 1 if uc($type) eq 'RANGED';
-                                }
-
-                                if ( $IsMelee && !$IsRanged ) {
-
-                                        # We have a winner!!!
-                                        ($NatAttackName) = ( $NatAttackName =~ /:(.*)/ );
-
-                                        # Well, maybe the BONUS:WEAPONPROF is already there.
-                                        if ( exists $line_ref->{'BONUS:WEAPONPROF'} ) {
-                                                my $AlreadyThere = 0;
-                                                FIND_BONUS:
-                                                for my $bonus ( @{ $line_ref->{'BONUS:WEAPONPROF'} } ) {
-                                                if ( $bonus eq "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2" )
-                                                {
-                                                        $AlreadyThere = 1;
-                                                        last FIND_BONUS;
-                                                }
-                                                }
-
-                                                unless ($AlreadyThere) {
-                                                push @{ $line_ref->{'BONUS:WEAPONPROF'} },
-                                                        "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2";
-                                                $log->warning(
-                                                        qq{Added "$line_ref->{'BONUS:WEAPONPROF'}[0]"}
-                                                                . qq{ to go with "$line_ref->{'NATURALATTACKS'}[0]"},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );
-                                                }
-                                        }
-                                        else {
-                                                $line_ref->{'BONUS:WEAPONPROF'}
-                                                = ["BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2"];
-                                                $log->warning(
-                                                qq{Added "$line_ref->{'BONUS:WEAPONPROF'}[0]"}
-                                                        . qq{to go with "$line_ref->{'NATURALATTACKS'}[0]"},
-                                                $file_for_error,
-                                                $line_for_error
-                                                );
-                                        }
-                                }
-                                elsif ( $IsMelee && $IsRanged ) {
-                                        $log->warning(
-                                                qq{This natural attack is both Melee and Ranged}
-                                                . qq{"$line_ref->{'NATURALATTACKS'}[0]"},
-                                                $file_for_error,
-                                                $line_for_error
-                                        );
-                                }
-                                }
-                        }
-                }
-                }
-
-                ##################################################################
-                # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-                # No conversion needed. We just have to remove the MOVE tags that
-                # are doing nothing anyway.
-
-                if (   LstTidy::Options::isConversionActive('EQUIP:no more MOVE')
-                && $filetype eq "EQUIPMENT"
-                && exists $line_ref->{'MOVE'} )
-                {
-                $log->warning( qq{Removed MOVE tags}, $file_for_error, $line_for_error );
-                delete $line_ref->{'MOVE'};
-                }
-
-                if (   LstTidy::Options::isConversionActive('CLASS:no more HASSPELLFORMULA')
-                && $filetype eq "CLASS"
-                && exists $line_ref->{'HASSPELLFORMULA'} )
-                {
-                $log->warning( qq{Removed deprecated HASSPELLFORMULA tags}, $file_for_error, $line_for_error );
-                delete $line_ref->{'HASSPELLFORMULA'};
-                }
-
-
-                ##################################################################
-                # Every RACE that has a Climb or a Swim MOVE must have a
-                # BONUS:SKILL|Climb|8|TYPE=Racial. If there is a
-                # BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
-                # removed or lowered by 8.
-
-                if (   LstTidy::Options::isConversionActive('RACE:BONUS SKILL Climb and Swim')
-                && $filetype eq "RACE"
-                && exists $line_ref->{'MOVE'} )
-                {
-                my $swim  = $line_ref->{'MOVE'}[0] =~ /swim/i;
-                my $climb = $line_ref->{'MOVE'}[0] =~ /climb/i;
-
-                if ( $swim || $climb ) {
-                        my $need_swim  = 1;
-                        my $need_climb = 1;
-
-                        # Is there already a BONUS:SKILL|Swim of at least 8 rank?
-                        if ( exists $line_ref->{'BONUS:SKILL'} ) {
-                                for my $skill ( @{ $line_ref->{'BONUS:SKILL'} } ) {
-                                if ( $skill =~ /^BONUS:SKILL\|([^|]*)\|(\d+)\|TYPE=Racial/i ) {
-                                        my $skill_list = $1;
-                                        my $skill_rank = $2;
-
-                                        $need_swim  = 0 if $skill_list =~ /swim/i;
-                                        $need_climb = 0 if $skill_list =~ /climb/i;
-
-                                        if ( $need_swim && $skill_rank == 8 ) {
-                                                $skill_list
-                                                = join( ',', sort( split ( ',', $skill_list ), 'Swim' ) );
-                                                $skill = "BONUS:SKILL|$skill_list|8|TYPE=Racial";
-                                                $log->warning(
-                                                qq{Added Swim to "$skill"},
-                                                $file_for_error,
-                                                $line_for_error
-                                                );
-                                        }
-
-                                        if ( $need_climb && $skill_rank == 8 ) {
-                                                $skill_list
-                                                = join( ',', sort( split ( ',', $skill_list ), 'Climb' ) );
-                                                $skill = "BONUS:SKILL|$skill_list|8|TYPE=Racial";
-                                                $log->warning(
-                                                qq{Added Climb to "$skill"},
-                                                $file_for_error,
-                                                $line_for_error
-                                                );
-                                        }
-
-                                        if ( ( $need_climb || $need_swim ) && $skill_rank != 8 ) {
-                                                $log->info(
-                                                qq{You\'ll have to deal with this one yourself "$skill"},
-                                                $file_for_error,
-                                                $line_for_error
-                                                );
-                                        }
-                                }
-                                }
-                        }
-                        else {
-                                $need_swim  = $swim;
-                                $need_climb = $climb;
-                        }
-
-                        # Is there a BONUS:SKILLRANK to remove?
-                        if ( exists $line_ref->{'BONUS:SKILLRANK'} ) {
-                                for ( my $index = 0; $index < @{ $line_ref->{'BONUS:SKILLRANK'} }; $index++ ) {
-                                my $skillrank = $line_ref->{'BONUS:SKILLRANK'}[$index];
-
-                                if ( $skillrank =~ /^BONUS:SKILLRANK\|(.*)\|(\d+)\|PREDEFAULTMONSTER:Y/ ) {
-                                        my $skill_list = $1;
-                                        my $skill_rank = $2;
-
-                                        if ( $climb && $skill_list =~ /climb/i ) {
-                                                if ( $skill_list eq "Climb" ) {
-                                                $skill_rank -= 8;
-                                                if ($skill_rank) {
-                                                        $skillrank
-                                                                = "BONUS:SKILLRANK|Climb|$skill_rank|PREDEFAULTMONSTER:Y";
-                                                        $log->warning(
-                                                                qq{Lowering skill rank in "$skillrank"},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-                                                }
-                                                else {
-                                                        $log->warning(
-                                                                qq{Removing "$skillrank"},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-                                                        delete $line_ref->{'BONUS:SKILLRANK'}[$index];
-                                                        $index--;
-                                                }
-                                                }
-                                                else {
-                                                $log->info(
-                                                        qq{You\'ll have to deal with this one yourself "$skillrank"},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );;
-                                                }
-                                        }
-
-                                        if ( $swim && $skill_list =~ /swim/i ) {
-                                                if ( $skill_list eq "Swim" ) {
-                                                $skill_rank -= 8;
-                                                if ($skill_rank) {
-                                                        $skillrank
-                                                                = "BONUS:SKILLRANK|Swim|$skill_rank|PREDEFAULTMONSTER:Y";
-                                                        $log->warning(
-                                                                qq{Lowering skill rank in "$skillrank"},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-                                                }
-                                                else {
-                                                        $log->warning(
-                                                                qq{Removing "$skillrank"},
-                                                                $file_for_error,
-                                                                $line_for_error
-                                                        );
-                                                        delete $line_ref->{'BONUS:SKILLRANK'}[$index];
-                                                        $index--;
-                                                }
-                                                }
-                                                else {
-                                                $log->info(
-                                                        qq{You\'ll have to deal with this one yourself "$skillrank"},
-                                                        $file_for_error,
-                                                        $line_for_error
-                                                );
-                                                }
-                                        }
-                                }
-                                }
-
-                                # If there are no more BONUS:SKILLRANK, we remove the tag entry
-                                delete $line_ref->{'BONUS:SKILLRANK'}
-                                unless @{ $line_ref->{'BONUS:SKILLRANK'} };
-                        }
-                }
-                }
-
-                ##################################################################
-                # [ 845853 ] SIZE is no longer valid in the weaponprof files
-                #
-                # The SIZE tag must be removed from all WEAPONPROF files since it
-                # cause loading problems with the latest versio of PCGEN.
-
-                if (   LstTidy::Options::isConversionActive('WEAPONPROF:No more SIZE')
-                && $filetype eq "WEAPONPROF"
-                && exists $line_ref->{'SIZE'} )
-                {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('WEAPONPROF')}[0];
-
-                   $log->warning(
-                      qq{Removing the SIZE tag in line "$line_ref->{$tagLookup}[0]"},
-                      $file_for_error,
-                      $line_for_error
-                   );
-                   delete $line_ref->{'SIZE'};
-                }
-
-                ##################################################################
-                # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-                #
-                # NoProfReq must be added to AUTO:WEAPONPROF if the race has
-                # at least one hand and if NoProfReq is not already there.
-
-                if (   LstTidy::Options::isConversionActive('RACE:NoProfReq')
-                && $filetype eq "RACE" )
-                {
-                my $needNoProfReq = 1;
-
-                # Is NoProfReq already present?
-                if ( exists $line_ref->{'AUTO:WEAPONPROF'} ) {
-                        $needNoProfReq = 0 if $line_ref->{'AUTO:WEAPONPROF'}[0] =~ /NoProfReq/;
-                }
-
-                my $nbHands = 2;        # Default when no HANDS tag is present
-
-                # How many hands?
-                if ( exists $line_ref->{'HANDS'} ) {
-                        if ( $line_ref->{'HANDS'}[0] =~ /HANDS:(\d+)/ ) {
-                                $nbHands = $1;
-                        }
-                        else {
-                                $log->info(
-                                        qq(Invalid value in tag "$line_ref->{'HANDS'}[0]"),
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                $needNoProfReq = 0;
-                        }
-                }
-
-                if ( $needNoProfReq && $nbHands ) {
-                        if ( exists $line_ref->{'AUTO:WEAPONPROF'} ) {
-                                $log->warning(
-                                qq{Adding "TYPE=NoProfReq" to tag "$line_ref->{'AUTO:WEAPONPROF'}[0]"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                                $line_ref->{'AUTO:WEAPONPROF'}[0] .= "|TYPE=NoProfReq";
-                        }
-                        else {
-                                $line_ref->{'AUTO:WEAPONPROF'} = ["AUTO:WEAPONPROF|TYPE=NoProfReq"];
-                                $log->warning(
-                                qq{Creating new tag "AUTO:WEAPONPROF|TYPE=NoProfReq"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-                }
-
-                ##################################################################
-                # [ 831569 ] RACE:CSKILL to MONCSKILL
-                #
-                # In the RACE files, all the CSKILL must be replaced with MONCSKILL
-                # but only if MONSTERCLASS is present and there is not already a
-                # MONCSKILL present.
-
-                if (   LstTidy::Options::isConversionActive('RACE:CSKILL to MONCSKILL')
-                && $filetype eq "RACE"
-                && exists $line_ref->{'CSKILL'}
-                && exists $line_ref->{'MONSTERCLASS'}
-                && !exists $line_ref->{'MONCSKILL'} )
-                {
-                $log->warning(
-                        qq{Change CSKILL for MONSKILL in "$line_ref->{'CSKILL'}[0]"},
-                        $file_for_error,
-                        $line_for_error
-                );
-
-                $line_ref->{'MONCSKILL'} = [ "MON" . $line_ref->{'CSKILL'}[0] ];
-                delete $line_ref->{'CSKILL'};
-                }
-
-                ##################################################################
-                # [ 728038 ] BONUS:VISION must replace VISION:.ADD
-                #
-                # VISION:.ADD must be converted to BONUS:VISION
-                # Some exemple of VISION:.ADD tags:
-                #   VISION:.ADD,Darkvision (60')
-                #   VISION:1,Darkvision (60')
-                #   VISION:.ADD,See Invisibility (120'),See Etheral (120'),Darkvision (120')
-
-                if (   LstTidy::Options::isConversionActive('ALL: , to | in VISION')
-                && exists $line_ref->{'VISION'}
-                && $line_ref->{'VISION'}[0] =~ /(\.ADD,|1,)(.*)/i )
-                {
-                $log->warning(
-                        qq{Removing "$line_ref->{'VISION'}[0]"},
-                        $file_for_error,
-                        $line_for_error
-                );
-
-                my $newvision = "VISION:";
-                my $coma;
-
-                for my $vision_bonus ( split ',', $2 ) {
-                        if ( $vision_bonus =~ /(\w+)\s*\((\d+)\'\)/ ) {
-                                my ( $type, $bonus ) = ( $1, $2 );
-                                push @{ $line_ref->{'BONUS:VISION'} }, "BONUS:VISION|$type|$bonus";
-                                $log->warning(
-                                qq{Adding "BONUS:VISION|$type|$bonus"},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                                $newvision .= "$coma$type (0')";
-                                $coma = ',';
-                        }
-                        else {
-                                $log->error(
-                                qq(Do not know how to convert "VISION:.ADD,$vision_bonus"),
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-
-                $log->warning( qq{Adding "$newvision"}, $file_for_error, $line_for_error );
-
-                $line_ref->{'VISION'} = [$newvision];
-                }
-
-                ##################################################################
-                #
-                #
-                # For items with TYPE:Boot, Glove, Bracer, we must check for plural
-                # form and add a SLOTS:2 tag is the item is plural.
-
-                if (   LstTidy::Options::isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
-                && $filetype            eq 'EQUIPMENT'
-                && $line_info->[0] eq 'EQUIPMENT'
-                && !exists $line_ref->{'SLOTS'} )
-                {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('EQUIPMENT')}[0];
-                   my $equipment_name = $line_ref->{ $tagLookup }[0];
-
-                if ( exists $line_ref->{'TYPE'} ) {
-                        my $type = $line_ref->{'TYPE'}[0];
-                        if ( $type =~ /(Boot|Glove|Bracer)/ ) {
-                                if (   $1 eq 'Boot' && $equipment_name =~ /boots|sandals/i
-                                || $1 eq 'Glove'  && $equipment_name =~ /gloves|gauntlets|straps/i
-                                || $1 eq 'Bracer' && $equipment_name =~ /bracers|bracelets/i )
-                                {
-                                $line_ref->{'SLOTS'} = ['SLOTS:2'];
-                                $log->warning(
-                                        qq{"SLOTS:2" added to "$equipment_name"},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-                                else {
-                                $log->error( qq{"$equipment_name" is a $1}, $file_for_error, $line_for_error );
-                                }
-                        }
-                }
-                else {
-                        $log->warning(
-                                qq{$equipment_name has no TYPE.},
-                                $file_for_error,
-                                $line_for_error
-                        ) unless $equipment_name =~ /.MOD$/i;
-                }
-                }
-
-                ##################################################################
-                # #[ 677962 ] The DMG wands have no charge.
-                #
-                # Any Wand that do not have a EQMOD tag most have one added.
-                #
-                # The syntax for the new tag is
-                # EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]SPELLLEVEL[$spell_level]CASTERLEVEL[$caster_level]CHARGES[50]
-                #
-                # The $spell_level will also be extracted from the CLASSES tag.
-                # The $caster_level will be $spell_level * 2 -1
-
-                if ( LstTidy::Options::isConversionActive('EQUIPMENT: generate EQMOD') ) {
-                if (   $filetype eq 'SPELL'
-                        && $line_info->[0] eq 'SPELL'
-                        && ( exists $line_ref->{'CLASSES'} ) )
-                {
-                        my $spell_name  = $line_ref->{'000SpellName'}[0];
-                        my $spell_level = -1;
-
-                        CLASS:
-                        for ( split '\|', $line_ref->{'CLASSES'}[0] ) {
-                                if ( index( $_, 'Wizard' ) != -1 || index( $_, 'Cleric' ) != -1 ) {
-                                $spell_level = (/=(\d+)$/)[0];
-                                last CLASS;
-                                }
-                        }
-
-                        $Spells_For_EQMOD{$spell_name} = $spell_level
-                                if $spell_level > -1;
-
-                }
-                elsif ($filetype eq 'EQUIPMENT'
-                        && $line_info->[0] eq 'EQUIPMENT'
-                        && ( !exists $line_ref->{'EQMOD'} ) )
-                {
-                        my $equip_name = $line_ref->{'000EquipmentName'}[0];
-                        my $spell_name;
-
-                        if ( $equip_name =~ m{^Wand \((.*)/(\d\d?)(st|rd|th) level caster\)} ) {
-                                $spell_name = $1;
-                                my $caster_level = $2;
-
-                                if ( exists $Spells_For_EQMOD{$spell_name} ) {
-                                my $spell_level = $Spells_For_EQMOD{$spell_name};
-                                my $eqmod_tag   = "EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]"
-                                        . "SPELLLEVEL[$spell_level]"
-                                        . "CASTERLEVEL[$caster_level]CHARGES[50]";
-                                $line_ref->{'EQMOD'}    = [$eqmod_tag];
-                                $line_ref->{'BASEITEM'} = ['BASEITEM:Wand']
-                                        unless exists $line_ref->{'BASEITEM'};
-                                delete $line_ref->{'COST'} if exists $line_ref->{'COST'};
-                                $log->warning(
-                                        qq{$equip_name: removing "COST" and adding "$eqmod_tag"},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-                                else {
-                                $log->warning(
-                                        qq($equip_name: not enough information to add charges),
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-                        }
-                        elsif ( $equip_name =~ /^Wand \((.*)\)/ ) {
-                                $spell_name = $1;
-                                if ( exists $Spells_For_EQMOD{$spell_name} ) {
-                                my $spell_level  = $Spells_For_EQMOD{$spell_name};
-                                my $caster_level = $spell_level * 2 - 1;
-                                my $eqmod_tag   = "EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]"
-                                        . "SPELLLEVEL[$spell_level]"
-                                        . "CASTERLEVEL[$caster_level]CHARGES[50]";
-                                $line_ref->{'EQMOD'} = [$eqmod_tag];
-                                delete $line_ref->{'COST'} if exists $line_ref->{'COST'};
-                                $log->warning(
-                                        qq{$equip_name: removing "COST" and adding "$eqmod_tag"},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-                                else {
-                                $log->warning(
-                                        qq{$equip_name: not enough information to add charges},
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                                }
-                        }
-                        elsif ( $equip_name =~ /^Wand/ ) {
-                                $log->warning(
-                                qq{$equip_name: not enough information to add charges},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-                }
-
-                ##################################################################
-                # [ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
-                #
-                # For each HEIGHT, WEIGHT or AGE tags found in a RACE file,
-                # we must call record_bioset_tags to record the AGE, HEIGHT and
-                # WEIGHT tags.
-
-                if (   LstTidy::Options::isConversionActive('BIOSET:generate the new files')
-                && $filetype            eq 'RACE'
-                && $line_info->[0] eq 'RACE'
-                && (   exists $line_ref->{'AGE'}
-                        || exists $line_ref->{'HEIGHT'}
-                        || exists $line_ref->{'WEIGHT'} )
-                ) {
-                my ( $tagLookup, $dir, $race, $age, $height, $weight );
-
-                   $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('RACE')}[0];
-                   $dir       = File::Basename::dirname($file_for_error);
-                   $race      = $line_ref->{ $tagLookup }[0];
-
-                if ( $line_ref->{'AGE'} ) {
-                        $age = $line_ref->{'AGE'}[0];
-                        $log->warning( qq{Removing "$line_ref->{'AGE'}[0]"}, $file_for_error, $line_for_error );
-                        delete $line_ref->{'AGE'};
-                }
-                if ( $line_ref->{'HEIGHT'} ) {
-                        $height = $line_ref->{'HEIGHT'}[0];
-                        $log->warning( qq{Removing "$line_ref->{'HEIGHT'}[0]"}, $file_for_error, $line_for_error );
-                        delete $line_ref->{'HEIGHT'};
-                }
-                if ( $line_ref->{'WEIGHT'} ) {
-                        $weight = $line_ref->{'WEIGHT'}[0];
-                        $log->warning( qq{Removing "$line_ref->{'WEIGHT'}[0]"}, $file_for_error, $line_for_error );
-                        delete $line_ref->{'WEIGHT'};
-                }
-
-                record_bioset_tags( $dir, $race, $age, $height, $weight, $file_for_error,
-                        $line_for_error );
-                }
-
-                ##################################################################
-                # [ 653596 ] Add a TYPE tag for all SPELLs
-                # .
-
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
-                && exists $line_ref->{'SPELLTYPE'}
-                && $filetype            eq 'CLASS'
-                && $line_info->[0] eq 'CLASS'
-                ) {
-
-                # We must keep a list of all the SPELLTYPE for each class.
-                # It is assumed that SPELLTYPE cannot be found more than once
-                # for the same class. It is also assumed that SPELLTYPE has only
-                # one value. SPELLTYPE:Any is ignored.
-
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
-                my $class_name = $line_ref->{ $tagLookup }[0];
-                SPELLTYPE_TAG:
-                for my $spelltype_tag ( values %{ $line_ref->{'SPELLTYPE'} } ) {
-                        my $spelltype = "";
-                        ($spelltype) = ($spelltype_tag =~ /SPELLTYPE:(.*)/);
-                        next SPELLTYPE_TAG if $spelltype eq "" or uc($spelltype) eq "ANY";
-                        $class_spelltypes{$class_name}{$spelltype}++;
-                }
-                }
-
-                if (   LstTidy::Options::isConversionActive('SPELL:Add TYPE tags')
-                && $filetype                    eq 'SPELL'
-                && $line_info->{Linetype} eq 'SPELL' )
-                {
-
-                # For each SPELL we build the TYPE tag or we add to the
-                # existing one.
-                # The .MOD SPELL are ignored.
-
-                }
-
-                # SOURCE line replacement
-                # =======================
-                # Replace the SOURCELONG:xxx|SOURCESHORT:xxx|SOURCEWEB:xxx
-                # with the values found in the .PCC of the same directory.
-                #
-                # Only the first SOURCE line found is replaced.
-
-                if (   LstTidy::Options::isConversionActive('SOURCE line replacement')
-                && defined $line_info
-                && $line_info->[0] eq 'SOURCE'
-                && $source_curent_file ne $file_for_error )
-                {
-
-                my $inputpath =  getOption('inputpath');
-                # Only the first SOURCE tag is replace.
-                if ( exists $source_tags{ File::Basename::dirname($file_for_error) } ) {
-
-                        # We replace the line with a concatanation of SOURCE tags found in
-                        # the directory .PCC
-                        my %line_tokens;
-                        while ( my ( $tag, $value )
-                                = each %{ $source_tags{ File::Basename::dirname($file_for_error) } } )
-                        {
-                                $line_tokens{$tag} = [$value];
-                                $source_curent_file = $file_for_error;
-                        }
-
-                        $line_info->[1] = \%line_tokens;
-                }
-                elsif ( $file_for_error =~ / \A ${inputpath} /xmsi ) {
-                        # We give this notice only if the curent file is under getOption('inputpath').
-                        # If -basepath is used, there could be files loaded outside of the -inputpath
-                        # without their PCC.
-                        $log->notice( "No PCC source information found", $file_for_error, $line_for_error );
-                }
-                }
-
-                # Extract lists
-                # ====================
-                # Export each file name and log them with the filename and the
-                # line number
-
-                if ( LstTidy::Options::isConversionActive('Export lists') ) {
-                my $filename = $file_for_error;
-                $filename =~ tr{/}{\\};
-
-                if ( $filetype eq 'SPELL' ) {
-
-                        # Get the spell name
-                        my $spellname  = $line_ref->{'000SpellName'}[0];
-                        my $sourcepage = "";
-                        $sourcepage = $line_ref->{'SOURCEPAGE'}[0] if exists $line_ref->{'SOURCEPAGE'};
-
-                        # Write to file
-                        LstTidy::Report::printToExportList('SPELL', qq{"$spellname","$sourcepage","$line_for_error","$filename"\n});
-                }
-                if ( $filetype eq 'CLASS' ) {
-                        my $class = ( $line_ref->{'000ClassName'}[0] =~ /^CLASS:(.*)/ )[0];
-                        if ($class_name ne $class) {
-                           LstTidy::Report::printToExportList('CLASS', qq{"$class","$line_for_error","$filename"\n})
-                        };
-                        $class_name = $class;
-                }
-
-                if ( $filetype eq 'DEITY' ) {
-                   LstTidy::Report::printToExportList('DEITY', qq{"$line_ref->{'000DeityName'}[0]","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'DOMAIN' ) {
-                   LstTidy::Report::printToExportList('DOMAIN', qq{"$line_ref->{'000DomainName'}[0]","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'EQUIPMENT' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $equipname  = $line_ref->{ $tagLookup }[0];
-                        my $outputname = "";
-                        $outputname = substr( $line_ref->{'OUTPUTNAME'}[0], 11 )
-                                if exists $line_ref->{'OUTPUTNAME'};
-                        my $replacementname = $equipname;
-                        if ( $outputname && $equipname =~ /\((.*)\)/ ) {
-                                $replacementname = $1;
-                        }
-                        $outputname =~ s/\[NAME\]/$replacementname/;
-                        LstTidy::Report::printToExportList('EQUIPMENT', qq{"$equipname","$outputname","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'EQUIPMOD' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $equipmodname = $line_ref->{ $tagLookup }[0];
-                        my ( $key, $type ) = ( "", "" );
-                        $key  = substr( $line_ref->{'KEY'}[0],  4 ) if exists $line_ref->{'KEY'};
-                        $type = substr( $line_ref->{'TYPE'}[0], 5 ) if exists $line_ref->{'TYPE'};
-                        LstTidy::Report::printToExportList('EQUIPMOD', qq{"$equipmodname","$key","$type","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'FEAT' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $featname = $line_ref->{ $tagLookup }[0];
-                        LstTidy::Report::printToExportList('FEAT', qq{"$featname","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'KIT STARTPACK' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                   my ($kitname) = ( $line_ref->{ $tagLookup }[0] =~ /\A STARTPACK: (.*) \z/xms );
-                        LstTidy::Report::printToExportList('KIT', qq{"$kitname","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'KIT TABLE' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my ($tablename)
-                                = ( $line_ref->{ $tagLookup }[0] =~ /\A TABLE: (.*) \z/xms );
-                        LstTidy::Report::printToExportList('TABLE', qq{"$tablename","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'LANGUAGE' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $languagename = $line_ref->{ $tagLookup }[0];
-                        LstTidy::Report::printToExportList('LANGUAGE', qq{"$languagename","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'RACE' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $racename            = $line_ref->{ $tagLookup }[0];
-
-                        my $race_type = q{};
-                        $race_type = $line_ref->{'RACETYPE'}[0] if exists $line_ref->{'RACETYPE'};
-                        $race_type =~ s{ \A RACETYPE: }{}xms;
-
-                        my $race_sub_type = q{};
-                        $race_sub_type = $line_ref->{'RACESUBTYPE'}[0] if exists $line_ref->{'RACESUBTYPE'};
-                        $race_sub_type =~ s{ \A RACESUBTYPE: }{}xms;
-
-                        LstTidy::Report::printToExportList('RACE', qq{"$racename","$race_type","$race_sub_type","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'SKILL' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $skillname = $line_ref->{ $tagLookup }[0];
-                        LstTidy::Report::printToExportList('SKILL', qq{"$skillname","$line_for_error","$filename"\n});
-                }
-
-                if ( $filetype eq 'TEMPLATE' ) {
-                   my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder($filetype)}[0];
-                        my $template_name = $line_ref->{ $tagLookup }[0];
-                        LstTidy::Report::printToExportList('TEMPLATE', qq{"$template_name","$line_for_error","$filename"\n});
-                }
-                }
-
-                ############################################################
-                ######################## Conversion ########################
-                # We manipulate the tags for the line here
-
-                if ( LstTidy::Options::isConversionActive('Generate BONUS and PRExxx report') ) {
-                for my $tag_type ( sort keys %$line_ref ) {
-                        if ( $tag_type =~ /^BONUS|^!?PRE/ ) {
-                                $bonus_prexxx_tag_report{$filetype}{$_} = 1 for ( @{ $line_ref->{$tag_type} } );
-                        }
-                }
-                }
-
-                1;
-        }
-
-}       # End of BEGIN
-
-###############################################################
-# additionnal_file_parsing
+# parseFile
 # ------------------------
 #
 # This function does additional parsing on each file once
@@ -4237,18 +1898,19 @@ BEGIN {
 
 {
 
-        my %class_skill;
-        my %class_spell;
-        my %domain_spell;
+   my %class_skill;
+   my %class_spell;
+   my %domain_spell;
 
-        sub additionnal_file_parsing {
-                my ( $lines_ref, $filetype, $filename ) = @_;
+   sub parseFile {
 
-                ##################################################################
-                # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
-                #
+      my ( $lines_ref, $filetype, $filename ) = @_;
 
-#  if(LstTidy::Options::isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
+      ##################################################################
+      # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
+      #
+
+#  if(isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
 #  {
 #       if($filetype eq 'SPELL')
 #       {
@@ -4315,7 +1977,7 @@ BEGIN {
                 # with multiple lines (for clarity) and then want them formatted
                 # properly for submission.
 
-                if ( LstTidy::Options::isConversionActive('ALL:Multiple lines to one') ) {
+                if ( isConversionActive('ALL:Multiple lines to one') ) {
                 my %valid_line_type = (
                         'RACE'  => 1,
                         'TEMPLATE' => 1,
@@ -4441,7 +2103,7 @@ BEGIN {
                 #   '000ClassSpellLevel',
                 #   '001ClassSpells'
 
-                if ( LstTidy::Options::isConversionActive('CLASSSPELL conversion to SPELL') ) {
+                if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
                 if ( $filetype eq 'CLASSSPELL' ) {
 
                         # Here we will put aside all the CLASSSPELL that
@@ -4670,7 +2332,7 @@ BEGIN {
                 #
                 # 2003.07.11: a fourth line was added for the SPELL related tags
 
-                if (   LstTidy::Options::isConversionActive('CLASS:Four lines')
+                if (   isConversionActive('CLASS:Four lines')
                 && $filetype eq 'CLASS' )
                 {
                 my $last_main_line = -1;
@@ -4843,7 +2505,7 @@ BEGIN {
                                 # that have a SPELLTYPE tag except if there is also an
                                 # ITEMCREATE tag present.
 
-                                if (   LstTidy::Options::isConversionActive('CLASS:CASTERLEVEL for all casters')
+                                if (   isConversionActive('CLASS:CASTERLEVEL for all casters')
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
@@ -4924,7 +2586,7 @@ BEGIN {
                 # directory, entries with class name.MOD must be generated
                 # at the end of the first CLASS file in the same directory.
 
-                if ( LstTidy::Options::isConversionActive('CLASSSKILL conversion to CLASS') ) {
+                if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
                 if ( $filetype eq 'CLASSSKILL' ) {
 
                         # Here we will put aside all the CLASSSKILL that
@@ -5050,6 +2712,7 @@ sub mylength {
 
    my $Length  = 0;
    my $last    = pop @list;
+   $last = defined $last ? $last : "";
 
    # All the elements except the last must be rounded to the next tab
    for my $tag ( @list ) {
@@ -5065,102 +2728,109 @@ sub mylength {
 # check_clear_tag_order
 # ---------------------
 #
-# Verify that the .CLEAR tags are put correctly before the
+# Verify that the .CLEAR tags are correctly put before the
 # tags that they clear.
 #
 # Parameter:  $line_ref         : Hash reference to the line
-#                       $file_for_error
-#                       $line_for_error
+#             $file_for_error
+#             $line_for_error
 
 sub check_clear_tag_order {
-        my ( $line_ref, $file_for_error, $line_for_error ) = @_;
 
-        TAG:
-        for my $tag ( keys %$line_ref ) {
+   my ( $line_ref, $file_for_error, $line_for_error ) = @_;
 
-                # if the current value is not an array, there is only one
-                # tag and no order to check.
-                next unless ref( $line_ref->{$tag} );
+   TAG:
+   for my $tag ( keys %$line_ref ) {
 
-                # if only one of a kind, skip the rest
-                next TAG if scalar @{ $line_ref->{$tag} } <= 1;
+      # if the current value is not an array, there is only one
+      # tag and no order to check.
+      next unless ref( $line_ref->{$tag} );
 
-                my %value_found;
+      # if only one of a kind, skip the rest
+      next TAG if scalar @{ $line_ref->{$tag} } <= 1;
 
-                if ( $tag eq "SA" ) {
+      my %value_found;
 
-                # The SA tag is special because it is only checked
-                # up to the first (
-                for ( @{ $line_ref->{$tag} } ) {
-                        if (/:\.?CLEAR.?([^(]*)/) {
+      if ( $tag eq "SA" ) {
 
-                                # clear tag either clear the whole thing,
-                                # in which case it must be the very beginning,
-                                # or it clear a particular value, in which case
-                                # it must be before any such value.
-                                if ( $1 ne "" ) {
+         # The SA tag is special because it is only checked
+         # up to the first (
+         
+         for ( @{ $line_ref->{$tag} } ) {
+            if (/:\.?CLEAR.?([^(]*)/) {
 
-                                # Let's check if the value was found before
-                                $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
-                                        if exists $value_found{$1};
-                                }
-                                else {
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ( $1 ne "" ) {
 
-                                # Let's check if any value was found before
-                                $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
-                                        if keys %value_found;
-                                }
-                        }
-                        elsif ( / : ([^(]*) /xms ) {
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
+                  }
 
-                                # Let's store the value
-                                $value_found{$1} = 1;
-                        }
-                        else {
-                                $log->error(
-                                "Didn't anticipate this tag: $_",
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                }
-                }
-                else {
-                for ( @{ $line_ref->{$tag} } ) {
-                        if (/:\.?CLEAR.?(.*)/) {
+               } else {
 
-                                # clear tag either clear the whole thing,
-                                # in which case it must be the very beginning,
-                                # or it clear a particular value, in which case
-                                # it must be before any such value.
-                                if ( $1 ne "" ) {
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
+                  }
+               }
+            
+            } elsif ( / : ([^(]*) /xms ) {
 
-                                # Let's check if the value was found before
-                                $log->notice( qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
-                                        if exists $value_found{$1};
-                                }
-                                else {
+               # Let's store the value
+               $value_found{$1} = 1;
+            
+            } else {
+               $log->error(
+                  "Didn't anticipate this tag: $_",
+                  $file_for_error,
+                  $line_for_error
+               );
+            }
+         }
 
-                                # Let's check if any value was found before
-                                $log->notice( qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
-                                        if keys %value_found;
-                                }
-                        }
-                        elsif (/:(.*)/) {
+      } else {
 
-                                # Let's store the value
-                                $value_found{$1} = 1;
-                        }
-                        else {
-                                $log->error(
-                                        "Didn't anticipate this tag: $_",
-                                        $file_for_error,
-                                        $line_for_error
-                                );
-                        }
-                }
-                }
-        }
+         for ( @{ $line_ref->{$tag} } ) {
+            if (/:\.?CLEAR.?(.*)/) {
+
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ( $1 ne "" ) {
+
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice( qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
+                  }
+
+               } else {
+
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice( qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
+                  }
+               }
+
+            } elsif (/:(.*)/) {
+
+               # Let's store the value
+               $value_found{$1} = 1;
+
+            } else {
+               $log->error(
+                  "Didn't anticipate this tag: $_",
+                  $file_for_error,
+                  $line_for_error
+               );
+            }
+         }
+      }
+   }
 }
 
 ###############################################################
@@ -5170,30 +2840,30 @@ sub check_clear_tag_order {
 # Change the @ and relative paths found in the .lst for
 # the real thing.
 #
-# Parameters: $file_name                File name
-#                       $current_base_dir       Current directory
-#                       $base_path              Origin for the @ replacement
+# Parameters: $file_name         File name
+#             $current_base_dir  Current directory
+#             $base_path         Origin for the @ replacement
 
 sub find_full_path {
-        my ( $file_name, $current_base_dir, $base_path ) = @_;
+   my ( $file_name, $current_base_dir, $base_path ) = @_;
 
-        # Change all the \ for / in the file name
-        $file_name =~ tr{\\}{/};
+   # Change all the \ for / in the file name
+   $file_name =~ tr{\\}{/};
 
-        # Replace @ by the base dir or add the current base dir to the file name.
-        if( $file_name !~ s{ ^[@] }{$base_path}xmsi )
-        {
-                $file_name = "$current_base_dir/$file_name";
-        }
+   # Replace @ by the base dir or add the current base dir to the file name.
+   if( $file_name !~ s{ ^[@] }{$base_path}xmsi )
+   {
+      $file_name = "$current_base_dir/$file_name";
+   }
 
-        # Remove the /xxx/../ for the directory
-        if ($file_name =~ / [.][.] /xms ) {
-                if( $file_name !~ s{ [/] [^/]+ [/] [.][.] [/] }{/}xmsg ) {
-                die qq{Cannot des with the .. directory in "$file_name"};
-                }
-        }
+   # Remove the /xxx/../ for the directory
+   if ($file_name =~ / [.][.] /xms ) {
+      if( $file_name !~ s{ [/] [^/]+ [/] [.][.] [/] }{/}xmsg ) {
+         die qq{Cannot deal with the .. directory in "$file_name"};
+      }
+   }
 
-        return $file_name;
+   return $file_name;
 }
 
 ###############################################################
@@ -5204,74 +2874,20 @@ sub find_full_path {
 # already there.
 
 sub create_dir {
-        my ( $dir, $outputdir ) = @_;
+   my ( $dir, $outputdir ) = @_;
 
-        # Only if the directory doesn't already exist
-        if ( !-d $dir ) {
-                my $parentdir = File::Basename::dirname($dir);
+   # Only if the directory doesn't already exist
+   if ( !-d $dir ) {
+      my $parentdir = File::Basename::dirname($dir);
 
-                # If the $parentdir doesn't exist, we create it
-                if ( $parentdir ne $outputdir && !-d $parentdir ) {
-                create_dir( $parentdir, $outputdir );
-                }
+      # If the $parentdir doesn't exist, we create it
+      if ( $parentdir ne $outputdir && !-d $parentdir ) {
+         create_dir( $parentdir, $outputdir );
+      }
 
-                # Create the curent level directory
-                mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
-        }
-}
-
-###############################################################
-# embedded_coma_split
-# -------------------
-#
-# split a list using the comma but part of the list may be
-# between brackets and the comma must be ignored there.
-#
-# Parameter: $list      List that need to be splited
-#               $separator      optionnal expression used for the
-#                               split, ',' is the default.
-#
-# Return the splited list.
-
-sub embedded_coma_split {
-
-        # The list may contain other lists between brackets.
-        # We will first change all the , in within brackets
-        # before doing our split.
-        my ( $list, $separator ) = ( @_, ',' );
-
-        return () unless $list;
-
-        my $newlist;
-        my @result;
-
-        BRACE_LIST:
-        while ($list) {
-
-                # We find the next text within ()
-                @result = Text::Balanced::extract_bracketed( $list, '()', qr([^()]*) );
-
-                # If we didn't find any (), it's over
-                if ( !$result[0] ) {
-                $newlist .= $list;
-                last BRACE_LIST;
-                }
-
-                # The prefix is added to $newlist
-                $newlist .= $result[2];
-
-                # We replace every , with &comma;
-                $result[0] =~ s/,/&coma;/xmsg;
-
-                # We add the bracket section
-                $newlist .= $result[0];
-
-                # We start again with what's left
-                $list = $result[1];
-        }
-
-        # Now we can split
-        return map { s/&coma;/,/xmsg; $_ } split $separator, $newlist;
+      # Create the curent level directory
+      mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
+   }
 }
 
 
@@ -5400,7 +3016,7 @@ sub embedded_coma_split {
                 # %RecordedBiosetTags hash.
                 #
                 # The new files will all be named bioset.lst and will required
-                # to be renames and included in the .PCC manualy.
+                # to be renamed and included in the .PCC manualy.
                 #
                 # No parameter
 
@@ -5836,9 +3452,13 @@ Here are the list of the valid conversions so far:
 
 =over 16
 
+=item * [ 1973497 ] HASSPELLFORMULA is deprecated
+
 Use to change a number of conversions needed for stable 6.0
 
-=item * [ 1973497 ] HASSPELLFORMULA is deprecated
+=back
+
+=back
 
 =over 12
 
@@ -5846,11 +3466,11 @@ Use to change a number of conversions needed for stable 6.0
 
 =over 16
 
+=item * [ 1678570 ] Correct PRESPELLTYPE syntax
+
 Use to change a number of conversions for stable 5.12.0.
 
 B<This has a small issue:> if ADD:blah| syntax items that contain ( ) in the elements, it will attempt to convert again.  This has only caused a few problems in the srds, but it is something to be aware of on homebrews.
-
-=item * [ 1678570 ] Correct PRESPELLTYPE syntax
 
 - changes PRESPELLTYPE format from PRESPELLTYPE:<A>,<x>,<y> to standard PRExxx:<x>,<A>=<y>
 
@@ -6151,8 +3771,8 @@ missing/inconsistant values.
 
 =head2 B<-nojep>
 
-Disable the new LstTidy::Parse::parseJep function for the formula. This makes the script use the
-old style formula parser.
+Disable the new LstTidy::Parse::extractVariables function for the formula. This
+makes the script use the old style formula parser.
 
 =head2 B<-noxcheck> or B<-nx>
 
@@ -6316,1052 +3936,3 @@ See L<http://www.perl.com/perl/misc/Artistic.html>.
 
 =back
 
-=head1 VERSION HISTORY
-
-=head2 v1.40 -- -- NOT YET RELEASED
-
-[ 1973497 ] HASSPELLFORMULA is deprecated
-
-[ 1778050 ] MOVECLONE now only has 3 args
-
-[ 1870825 ] EqMod CHOOSE Changes
-
-[ 2946558 ] TEMPLATE can be used in COMPANIONMOD lines
-
-[ 2596967 ] ABILITY not recognized for MASTERBONUSRACE
-
-[ 2946552 ] New SELECTION Kit Tag
-
-[ 2946555 ] BENEFIT can be used more than once per line
-
-[ 2946551 ] New LANGBONUS Kit tag
-
-[ 1864706 ] PROFICIENCY: requires a subtoken
-
-[ 2577370 ] New Token - ABILITYLIST
-
-[ 2387200 ] New Token - PREPROFWITHARMOR
-
-[ 2577310 ] New Token - PREPROFWITHSHIELD
-
-[ 2186450 ] New Ability/Feat Token - ASPECT
-
-[ 2544134 ] New Token - SPELLKNOWN
-
-=head2 v1.39 -- 2000.01.28
-
-[ 2022217 ] UMULT is valid in Abillities
-
-[ 2016715 ] ADD tags are not as globally applied as they should be
-
-[ 2016696 ] PRECAMPAIGN tag for .pcc and lst files
-
-[ 2012989 ] Kit TYPE tag
-
-Added an audible notification {beep} when processing completes
-
-[ 1941853 ] Allow , in Spell Knowledge feat
-
-[ 1998298 ] SPELLS TIMEUNIT checking bug
-
-[ 1997408 ] False positive: TIMEUNIT= parameter is missing
-
-[ 1958876 ] PL not dealing with JEP syntax correctly
-
-[ 1958872 ] trim PREXXX before checking SPELLLEVEL
-
-[ 1995252 ] Header for the Error Log
-
-[ 1994059 ] Convert EQMOD "BIND" to "BLIND"
-
-[ 1938933 ] BONUS:DAMAGE and BONUS:TOHIT should be Deprecated
-
-[ 1905481 ] Deprecate CompanionMod SWITCHRACE
-
-[ 1888288 ] CHOOSE:COUNT= is deprecated
-
-[ 1870482 ] AUTO:SHIELDPROF changes
-
-[ 1864704 ] AUTO:ARMORPROF|TYPE=x is deprecated
-
-[ 1804786 ] Deprecate SA: replace with SAB:
-
-[ 1804780 ] Deprecate CHOOSE:EQBUILDER|1
-
-[ 1992156 ] CHANGEPROF may be used more than once on a line
-
-[ 1991974 ] PL incorectly reports CLEARALL as CLEAR
-
-[ 1991300 ] Allow %LIST as a substitution value on BONUS:CHECKS
-
-[ 1973526 ] DOMAIN is supported on Class line
-
-[ 1973660 ] ADDDOMAINS is supported on Class lines
-
-[ 1956721 ] Add SERVESAS tag to Ability, Class, Feat, Race, Skill files
-
-[ 1956719 ] Add RESIZE tag to Equipment file
-
-[ 1956220 ] REPEATLEVEL not recognized as a ClassLevel line
-
-[ 1956204 ] Check for both TYPE:Container and CONTAINS in Equipment files
-
-[ 1777282 ] CONTAINS Unlimited Weight is UNLIM, not -1
-
-[ 1946006 ] Add BONUS:MISC to Spell
-
-[ 1943226 ] Add UDAM to EQUIPMENT tag list
-
-[ 1942824 ] LANGAUTO .CLEARALL and .CLEAR
-
-[ 1941843 ] Reduce Spellbook warning to info
-
-[ 1941836 ] NONE is valid for SPELLSTAT
-
-[ 1941831 ] PREMULT can be used multiple times
-
-[ 1941829 ] AUTO:FEAT can be used multiple times
-
-[ 1941208 ] Preliminary work toward supporting the processing of the AbilityCategory lst files.
-
-[ 1941207 ] Add the Global tag GENDER to the CLASS, RACE, and TEMPLATE tag lists
-
-[ 1757241 ] CAMPAIGN not a recognized *.pcc tag -- Could not duplicate this issue
-
-Added several new column headers
-
-[ 1937985 ] Add TIMEUNIT=<text> parameter to the SPELLS tag
-
-[ 1937852 ] Kit GENDER Support
-
-[ 1937680 ] KIT FUNDS lines in Kit file
-
-[ 1750238 ] ABILITY warnings
-
-[ 1912505 ] Stop Reporting missing TYPE and RACETYPE in racial .MOD
-
-[ 1729758 ][BUG]DOMAIN tags with PREALIGN cause false positive xcheck
-
-[ 1935376 ] New files: Armorprof and Shieldprof
-
-[ 1774985 ] Exchange cl() with classlevel()
-
-[ 1864711 ] Convert ADD:SA to ADD:SAB
-
-[ 1893278 ] UNENCUMBEREDMOVE is a global tag
-
-[ 1893279 ] HASSPELLFORMULA Class Line tag
-
-[ 1805245 ] NATURALATTACKS allowed more than once in RACE
-
-[ 1776500 ] PREDEITY needs updated
-
-[ 1814797 ] PPCOST needs to be added as valid tag in SPELLS
-
-[ 1786966 ] Global tags throwing false warnings
-
-[ 1784583 ] .MOD .FORGET .COPY race lines don't need RACETYPE or TYPE
-
-[ 1718370 ] SHOWINMENU tag missing for PCC files
-
-[ 1722300 ] ABILITY tag in different locations
-
-[ 1722847 ] AUTO:WEAPONPROF in equipment.lst
-
-=head2 v1.38 -- 2007.04.26
-
-=over 3
-
-=item Additional Conversions:
-
-[ 1678570 ] Correct PRESPELLTYPE syntax
-
-[ 1678577 ] ADD: syntax no longer uses parens
-
-[ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-- Use "Followeralign" as the option to convert to invoke this.
-
-[ 1514765 ] Conversion to remove old defaultmonster tags
-
-[ 1324519 ] ASCII characters
-
-=back
-
-=over 3
-
-=item Additional Warnings and notices:
-
-[ 1671407 ] xcheck PREABILITY tag
-
-[ 1683231 ] CHOOSE:SCHOOLS does not have arguments
-
-[ 1695877 ] KEY tag is global
-
-[ 1596310 ] xcheck: TYPE:Spellbook for equip w/ NUMPAGES and PAGEUSAGE
-
-[ 1368562 ] .FORGET / .MOD don\'t need KEY entries
-
-[ 1671410 ] xcheck CATEGORY:Feat in Feat object.
-
-[ 1690990 ] Add APPEARANCE to Deities LST
-
-[ 1223873 ] WEAPONAUTO is no longer valid
-
-[ 1678573 ] ADD: deprecation
-
-[ 1678576 ] ADD:FEAT supports ALL
-
-[ 1387361 ] No KIT STARTPACK entry for \"KIT:xxx\"
-
-Race entry references with % now produce _much_ fewer errors lines.
-
-=back
-
-=head2 v1.37 -- 2007.03.01
-
-[ 1353255 ] TYPE to RACETYPE conversion
-- Use convert 'racetype' to invoke this.
-
-[ 1672551 ] PCC tag COMPANIONLIST
-
-[ 1672547 ] Support for Substitution Classes
-
-[ 1683839 ] Sort KEY tags next to names
-
-=head2 v1.37 -- 2007.03.01
-
-[ 1623708 ] Invalid value "DEITY" for tag "PREALIGN" - should be allowed
-
-[ 1374892 ] DEITY tag
-
-Ability file now supported, including LEVELABLITY in Kits.  No real checking yet.
-
-[ 1671827 ] PRESRxx enhancement
-
-[ 1666665 ] Add support for ABILITY files
-
-[ 1658571 ] KIT in feats and prettylst
-
-[ 1671364 ] missing valid TEMPLATE tags
-
-[ 1671363 ] missing SPELL line tags
-
-[ 1671361 ] new PCC tag; ISMATURE:<YES/NO>
-
-[ 1671356 ] Missing valid tags for Companion support
-
-[ 1671353 ] add missing BONUS:SLOTS parameters
-
-[ 1326023 ] New tag: BONUS:MONSKILLPTS|LOCKNUMBER|x
-
-[ 1661050 ] New PREAGESET tag
-
-=head2 v1.36 -- 2007.01.26
-
-[ 1637309 ] REACH, FACE & LEGS are now Template tags
-
-[ 1630261 ] Change syntax for QUALIFY tag
-
-[ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT
-
-Add PREREACH tag
-
-[ 1625250 ] New tag REACHMULT:x
-
-=head2 v1.35
-
-[ 1593904 ] KIT lines can have any standard PRE tag
-
-[ 1596402 ] New Kit GEAR tag: LOOKUP
-
-[ 1596400 ] New Kit line_type: TABLE, with VALUES tag
-
-[ 1593894 ] New Kit tag: OPTION
-
-[ 1593885 ] New Kit line_type tag: SELECT
-
-[ 1593872 ] False warning: No SKILL entry for CSKILL:ALL
-
-[ 1594671 ] New tag: equipmod FORMATCAT
-
-[ 1594651 ] New Tag: Feat.lst: DESC:.CLEAR and multiple DESC tags
-
-[ 1593868 ] New equipment tag "QUALITY"
-
-[ 1593879 ] New Kit tag: APPLY
-
-[ 1593907 ] False warning: Invalid value "CSHEET" for tag "VISIBLE"
-
-Moved SOURCExxx tag info into array - all lines use same tag order for SOURCE tags now.
-
-[ 1584007 ] New Tag: SOURCEDATE in PCC
-
-[ 1450980 ] New Spellbook tags
-
-[ 1335912 ] New tag: TEMPLATE:.CLEAR
-
-[ 1580059 ] SKILLLIST tag
-
-[ 1173567 ] Convert old style PREALIGN to new style
-
-[ 1105603 ] New VARs in gameMode files
-
-[ 1117152 ] VFEAT and TEMPLATE use
-
-[ 1119767 ] Invalid value "R" for tag "MODS"
-
-[ 1123650 ] HITDIE tag in class lines
-
-[ 1152687 ] SPELLLEVEL:CLASS in feats.lst
-
-[ 1153255 ] FUMBLERANGE new tag
-
-[ 1156423 ] BONUS:WIELDCATEGORY
-
-[ 1173534 ] .CLEAR syntax issue
-
-[ 1173794 ] BONUS:WEAPONPROF order in race file
-
-Eliminated a lot of false positive with references to SUBCLASS
-
-Psionic is now valid in ADD:SPELLCASTER
-
-Clean up the valid game modes
-
-[ 1326008 ] Add tag: HIDETYPE to the PCC tag list
-
-[ 1326016 ] New tag: PRERULE
-
-[ 1325996 ] Add tag: ADD:EQUIP(y,y)z
-
-[ 1325943 ] ADD:SKILL(Speak Language)1" found in FEAT
-
-[ 1238595 ] New tag: PRECSKILL
-
-[ 1326349 ] Missing TYPE:.CLEAR tag in FEAT
-
-[ 1223873 ] WEAPONAUTO is no longer valid
-
-[ 1326374 ] Add JEP operators
-
-[ 1224428 ] No RACE entry for "SWITCHRACE:xxx"
-
-[ 1282532 ] ClassDefense and Reputation
-
-[ 1292967 ] TITLE and WORSHIPPERS in deity.lst
-
-[ 1327238 ] Add CHANGEPROF to TEMPLATE tag list
-
-[ 1324532 ] Biosettings.lst
-
-[ 1309116 ] LANGAUTO missing in CLASS Level
-
-Removed all the sub prototypes [Perl Best Practices]
-
-mywarn has been completely replaced with ewarn
-
-[ 1324512 ] BONUSSPELLSTAT is not in the CLASS tag list
-
-[ 1355958 ] New tag: SCHOOL:.CLEAR
-
-[ 1353231 ] New tag: RACETYPE
-
-[ 1353233 ] New tag: RACESUBTYPE
-
-[ 1355994 ] KIT file refinements
-
-[ 1356139 ] UDAM missing in FEAT tag list
-
-[ 1356143 ] ADD:Language missing in TEMPLATE tag
-
-[ 1356158 ] SPELL is invalid as value for SPELLSTAT in CLASS
-
-[ 1356999 ] Use of uninitialized value in string eq
-
-[ 1359467 ] .COPY=<name> not used for validation
-
-[ 1361057 ] Missing variables for the Modern game mode
-
-[ 1361066 ] Do not x-check outside the -inputpath
-
-Added system files parsing to find the variables names, game moes, and
-abbreviations for stats and alignments
-
-[ 1362206 ] [CLASS Level]Missing TEMPDESC tag
-
-[ 1362222 ] [RACE]Missing KIT tag
-
-[ 1362223 ] [CLASS Level]Missing BONUS:SLOTS
-
-prettylst.pl no longer tolerate old style formula parser
-
-[ 1364343 ] Multiple PRESPELLCAST tags
-
-PRERACE:<number>,<list of races> is officialy the way to go
-
-PRERACE:<list of races> to PRERACE:1,<list of races> conversion
-
-[ 1367569 ] SYSTEM: Validate BONUS:CHECK with statsandchecks.lst values
-
-[ 1366753 ] [KIT] The tag FREE is missing in the KIT FEAT tag list
-
-[ 1398237 ] ALL: Convert Willpower to Will
-
-Filter out the Subversion system directories
-
-The SOURCExxx tags are now separated by tabs instead of |
-
-The -oldsourcetag option has been added to use | instead of tab in the SOURCExxx lines
-
-Implemented a "fix" for the /../ in directories
-
-[ 1440104 ] Ignore specific hidden files and directories
-
-[ 1444527 ] New SOURCE tag format
-
-[ 1483739 ] [CMP] SOURCEx changes for 5.10 compatibility
-
-[ 1418243 ] RANGE:.CLEAR is missing in SPELL tag list
-
-[ 1461407 ] ITEM: spell tag order
-
-=head2 v1.34 -- 2005.01.19
-
-[ 1028284 ] Verified if , are present in object names
-
-[ 1028919 ] Report with GAMEMODE
-
-[ 1028285 ] Convert old style PRExxx tags to new style
-
-[ 1039028 ] [PCC]New Xcrawl Game Mode
-
-[ 1070084 ] Convert SPELL to SPELLS
-
-[ 1037456 ] Move BONUS:DC on class line to the spellcasting portion
-
-[ 1027589 ] TEMPDESC (tag from 5.5.1) in skills.lst
-
-[ 1066352 ] BONUS:COMBAT|INITIATIVE on MASTERBONUSRACE line
-
-[ 1066355 ] BONUS tags in spells.lst
-
-[ 1066359 ] BONUS:UDAM in class.lst
-
-[ 1048297 ] New Tag: MONNONSKILLHD
-
-[ 1077285 ] ALTCRITRANGE tag
-
-[ 1079504 ] PREWIELD in eqmod file
-
-[ 1083339 ] RATEOFFIRE in equip.lst
-
-[ 1080142 ] natural attacks with TYPE:Natural
-
-[ 1093382 ] Warning for missing param. in SPELLS
-
-Added x-ref check for FOLLOWER and MASTERBONUSRACE in COMPANIONMODE file type
-
-Added x-ref check for RACE with the PRERACE and !PRERACE tags
-
-[ 1093134 ] BONUS:FEAT|POOL|x
-
-[ 1094126 ] Make -xcheck option on by default
-
-[ 1097487 ] MONSKILL in class.lst
-
-[ 1104117 ] BL is a valid variable, like CL
-
-[ 1104126 ] SPELLCASTER.Psionic is valid spellcasting class type
-
-General work on KIT support
-
-Three new file types added to exportlist: DEITY, KIT and TEMPLATE
-
-DEITY, STARTPACK KIT and TEMPLATE are now validated by the x-check code
-
-[ 1355926 ] DESC on equipment files
-
-=head2 v1.33 -- 2004.08.29
-
-[ 876536 ] All spell casting classes need CASTERLEVEL
-
-[ 1003585 ] PCC: The script should not remove INCLUDE and EXCLUDE
-
-The script can no longer read CLASSSPELL and CLASSSKILL files.
-
-The functions CLASS_parse, CLASSSPELL_parse and GENERIC_parse have been removed since
-they were no longer used.
-
-[ 1004050 ] Spycrat is a new valid GAMEMODE
-
-[ 971744 ] 5.7+ TEMPLATE in feats.lst
-
-[ 976475 ] Missing LANGBONUS tag in CLASS Level
-
-[ 1004081 ] Missing global BONUS:CASTERLEVEL
-
-Major code reengeering to allow a better PRExxx tag validation
-
-[ 1004893 ] ADD:SPELLCASTER is valid in RACE
-
-[ 1005363 ] Validate NATURALATTACKS tag
-
-[ 1005651 ] ADD:Language in a feat file
-
-[ 1005653 ] Multiple variable names in a BONUS:VAR tag
-
-[ 1005655 ] BONUS:SLOTS in race files
-
-[ 1005658 ] BONUS:MOVEMULT
-
-[ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
-
-[ 1005661 ] ADD:SPELLCASTER in feat .lst
-
-[ 1006985 ] Spycraft gameMode DEFINEd VARiables
-
-[ 1006371 ] SA tag in Skill .lst
-
-[ 976474 ] DEITY tag is missing from CLASS Level
-
-Added the -gamemode parameter
-
-=head2 v1.32 -- 2004.07.06
-
-[ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
-
-[ 832171 ] AUTO:* needs to be separate tags
-
-Added the -c=skillbonusfix to add BONUS:SKILL|Climb|8|TYPE=Racial if it is not already
-present and the race has a MOVE:Climb entry. Same thing with Swim.
-
-[ 845853 ] SIZE is no longer valid in the weaponprof files
-
-[ 833509 ] All the PRExxx tags missing must be added
-
-[ 849366 ] VFEAT with inline PRExxx
-
-Added the ability to export the LANGUAGE entities when using the -exportlist option
-
-[ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-
-[ 865948 ] Properly check files with same name but different directory
-
-[ 849365 ] CLASSES:ALL
-
-[ 849369 ] SPELLCASTER.Arcane=1
-
-[ 879467 ] AUTO:EQUIP in equipment files
-
-[ 882797 ] SUBCLASS -- NAMEISPI: tag
-
-[ 882799 ] SUBCLASSLEVEL -- add SPELLLEVEL:CLASS tag
-
-[ 892746 ] KEYS entries were changed in the main files
-
-[ 892748 ] Track the EQMOD keys with -x flag
-
-Track the variable names with the -x flag (phase 1)
-
-Put BONUS:CASTERLEVEL on the spell CLASS line
-
-Removed a bunch of old conversion code that is no longer used
-
-[ 971746 ] "PREVARGTEQ" can be used more than once in feats.lst
-
-[ 971778 ] BONUS:UDAM| tag
-
-Implemetend a workaroud for a perl bug => [perl #30058] Perl 5.8.4 chokes on perl -e 'BEGIN { my %x=(); }'
-
-[ 902439 ] PREVISION not in FEAT tag list
-
-[ 975999 ] [tab][space][tab] breaks prettylst
-
-[ 974710 ] AUTO:WEAPONPROF usable multiple times
-
-[ 971782 ] FACE tag in races.lst
-
-Removed a warning message for CHOOSE:SPELLLEVEL
-
-Add the B<-nowarning> option to suppress the warning messages
-
-[ 974693 ] PROHIBITED class tag
-
-=head2 v1.31 -- 2003.10.29
-
-[ 823221 ] SPELL multiple time on equipment
-
-[ 823763 ] BONUS:DC in class level
-
-[ 823764 ] ADD:FEAT in domain list
-
-[ 824975 ] spells.lst - DESCISPI:[YES/NO]
-
-[ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
-
-[ 829329 ] Lines get deleted when the line type is not know
-
-[ 829335 ] New LANGAUTO line type for KIT files
-
-[ 829380 ] New Game Mode
-
-[ 831569 ] RACE:CSKILL to MONCSKILL
-
-[ 832139 ] CLASS Level: missing NATURALATTACKS
-
-=head2 v1.30 -- 2003.10.14
-
-[ 804091 ] ADD:FEAT warning
-
-[ 807329 ] PRESIZE warning (for template.lst)
-
-[ 813333 ] MONCSKILL and MONCCSKILL in race.lst
-
-[ 813334 ] PREMULT
-
-[ 813335 ] ACHECK:DOUBLE
-
-[ 813337 ] BONUS:DC
-
-[ 813504 ] SPELLLEVEL:DOMAIN in domains.lst
-
-[ 814200 ] PRESKILL in SPELL files
-
-[ 817399 ] Tags usable in SUBCLASS
-
-[ 823042 ] not finding files issue
-
-A new B<-baspath> option was added to specify the path that must replace the @ characters in
-the .PCC files when that path is different from B<-inputpath>.
-
-[ 823166 ] Missing PREVARNEQ tag
-
-[ 823194 ] PREBASESIZExxx tags
-
-=head2 v1.29 -- 2003.08.23
-
-New tags were added as a result of the big CMP push.
-
-The script now detect the tags that have no values (with the -x option).
-
-PRECLASS:Spellcaster, Spellcaster.Arcane and Spellcaster.Devine are now understood.
-
-Removed the 4.3.3 dir restructure conversion code.
-
-I've activated the KIT files reformating.
-
-The CLASS lines are now reformated in four lines. A new line with all the spell related
-tags follow the skill tags.
-
-[ 707325 ] PCC: GAME is now GAMEMODE L<https://sourceforge.net/tracker/?func=detail&atid=450221&aid=707325&group_id=36698>
-
-New set_ewarn_header function
-
-New function to take RACE and TEMPLATE that are on multiple lines and bring them back to one line
-
-[ 779821 ] Add quote removal L<https://sourceforge.net/tracker/?func=detail&atid=578825&aid=779821&group_id=36698>
-
-[ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB L<https://sourceforge.net/tracker/?func=detail&atid=450221&aid=784363&group_id=36698>
-
-=head2 v1.28 -- 2003.05.04
-
-New line type MASTERBONUSRACE
-
-New validation for the FEAT line type (CHOSE <=> MULT <=> STACK)
-
-[ 728038 ] BONUS:VISION must replace VISION:.ADD
-
-[ 711565 ] BONUS:MOVE replaced with BONUS:MOVEADD (Not definitive yet)
-
-New validation for PRECLASS (make sure the number is there and the class exists)
-
-[ 731973 ] ALL: new PRECLASS syntax
-
-=head2 v1.27 -- 2003.04.03
-
-The B<-inputpath> option is now mandatory
-
-[ 686169 ] remove ATTACKS: tag
-
-[ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
-
-[ 707325 ] PCC: GAME is now GAMEMODE
-
-[ 699834 ] Incorrect loading of multiple vision types
-
-PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
-
-=head2 v1.26 -- 2002.02.27
-
-[ 677962 ] The DMG wands have no charge
-
-Removed the invalid PREBAB tag
-
-Change the order for the FEAT line type
-
-Dir path conversion for the new SRD files
-
-Upgraded to ActivePerl 635
-
-New EQUIPMENT tag order
-
-Weapon name conversion for PCGEN 4.3.3 for SRD compliance
-
-New B<-convert> parameter
-
-=head2 v1.25 -- 2003.01.27
-
-[ 670554 ] SYNERGY to BONUS:SKILL format
-
-Fixed the CLASSSPELL conversion that was not working with the new parser
-
-Fixed a problem with the Export Lists function (for DOMAIN)
-
-Change the BIOSET conversion code so that the new bioset files are
-generated in the output directory
-
-New SKILL line tags order
-
-=head2 v1.24 -- 2003.01.14
-
-BIOSET generation from the AGE, HEIGHT and WEIGHT tags
-
-Added the BIOSET file definition for FILETYPE_parse
-
-New order for SPELL tags
-
-=head2 v1.23 -- 2003.01.06
-
-I'm removed the useles -debug option
-
-Add a bunch of new tags in the SUBCLASSLEVEL (everything in CLASS Level)
-
-I'm now running Perl Dev Kit 5
-
-=head2 v1.22 -- 2002.12.31
-
-The FEAT validation code now deal with |CHECKMULT properly
-
-The FEAT validation code now ignores , between () for ADD:FEAT and PREFEAT
-
-Fixed remaining tr!/!\\! so that they are used only on MSWin32 systems
-
-The new set_mywan_filename is called after each section header to empty the $previousfile
-variable within the mywarn closure
-
-=head2 v1.21 -- 2002.12.28
-
-FEAT validation added for the tags FEAT, MFEAT, VFEAT, PREFEAT and ADD:FEAT
-
-[ 657059 ] Verify pipe is the only delimiter:VISION
-
-The tr!/!\\! on the file names printed by mywarn is done only for MSWin32 OS
-
-=head2 v1.20 -- 2002.12.19
-
-[ 653596 ] Add a TYPE tag for all SPELLs (first part, change on hold)
-
-Added the -missingheader command line option to list all the header that do not
-have definitions in the %tagheader hash
-
-Only the first SOURCExxx line is replaced when the SOURCE line replacement option
-is active
-
-All the filetypes except CLASSSKILL and CLASSSPELL have been
-migrated to FILETYPE_parse (KIT is only validated for now)
-
-New .CLEAR code (TAG:.CLEAR are all different tags now)
-
-=head2 v1.19 -- 2002.12.12
-
-[ 602874 ] SAVES tag deprecated, replaced by 3 BONUS:CHECKS|BASE.savename|x|PREDEFAULTMONSTER:Y
-
-The CVS files beginning with .# are now ignored by prettylst
-
-Code to correct the BONUS:STAT|WIL typo (should be BONUS:STAT|WIS)
-
-New NAMEISPI tag in every files
-
-New getHeader function
-
-The BONUS:xxx are now considered differents tags (like the ADD:xxx)
-
-[ 609763 ] Convert the old PRECHECKxxx
-
-Added coded to check and standerdize tags with limited possible values
-
-SA:.CLEAR is now a sperate tag than SA: in order to facilitate the sorting
-
-Got rid of the old %validpcctag (replaced by the generic %valid_tags)
-
-[ 619312 ] RACENAME deprecated, convert to OUTPUTNAME
-
-[ 613604 ] CASTAS:name to SPELLLIST:x|name
-
-Added code to standardise the SOURCExxx line in the .lst files
-based of the SOURCExxx tags found in the same directory.
-
-Added code to convert the CLASSSKILL files into CLASS CSKILL
-
-[ 620419 ] Added code to flag and display the SA entries that include ','
-
-[ 624885 ] CLASS: remove AGESET tag
-
-[ 626133 ] Convert CLASS lines into 3 lines
-
-Changed the report sort order so that !PRExxx entries are now sorted
-right after the corresponding PRExxx.
-
-Added code for CSKILL, LANGAUTO and LANGBONUS tag validation
-
-[ 641912 ] Convert CLASSSPELL to SPELL
-
-New FILETYPE_parser
-
-Removed the now useless -taginfixed option.
-
-New ###Block pragma. It forces a new block for the entities that have
-block formatting (FILETYPE_parse only)
-
-Added the KIT filetype
-
-Conversion code for EFFECTS to DESC and EFFECTTYPE to TARGETAREA in the SPELL files
-
-=head2 v1.18 -- 2002.08.31
-
-Conversion of the stat tags in TEMPLATE (STR, DEX, etc.) by BONUS:STAT|...
-
-Removing TYPE=Ability from BONUS:STAT|xxx|y|TYPE=Ability in RACE
-
-Added the COPYRIGHT tags for the PCC files
-
-Conversion of nameCHECK to BONUS:CHECKS|BASE.name in CLASS
-
-Conversion of BAB to BONUS:COMBAT|BAB in CLASS
-
-Remove the GOLD tag from CLASS and TEMPLATE for OGL compliance
-
-New tag MODTOSKILLS
-
-Deprecated INTMODTOSKILLS
-
-Fixed a bug with #EXTRAFILE that was introduced in parseTag
-
-=head2 v1.17 -- 2002.08.17
-
-New file type COMPANIONMOD
-
-New tag INFOTEXT
-
-Added conversion code for the STATADJx tags
-
-Add a few of the missing GLOBAL tags
-
-Removed a few illigal BONUS type
-
-[ 571276 ] "PRESKILL:1,Knowledge %" replace by "PRESKILL:1,TYPE.Knowledge" in the CLASS lines
-
-[ xxx ] "SUBSA:blah" must become "SA:.CLEAR.blah". The new SA tags
-must be put before the existing SA tags.
-
-
-=head2 v1.16 -- 2002.06.28
-
-Add code to correct the conversion mistake and also corrected the conversion matrice
-for the new SKILL tags.
-
-First phase of cross-check validation.
-
-Corrected a bug with the line number.
-
-Add conversion for PRETYPE:Magic to PRETYPE:EQMODTYPE=MagicalEnhancement in the
-EQUIPMOD files.
-
-Add -x option to do x-check validation.
-
-Add validation for the .MOD entries.
-
-Add conversion for SR to SPELLRES in SPELL files.
-
-=head2 v1.15 -- 2002.06.20
-
-New option B<-outputerror> to redirect STDERR in a file
-
-Preserve the leading spaces on the first column when the pragma #prettylst:leadingspaces:ignore
-is used. The pragma #prettylst:leadingspaces:trim restore normal space triming.
-
-Replace the deprecated PREVAR for PREVARGT.
-
-Add new DOMAIN tags
-
-Add new DEITY tags
-
-Add new RACE tags
-
-PCGEN now check to see if existing comment line exists before adding a new one. Existing
-header lines are genereted to reflect the curent TAGs in used.
-
-Add new SKILL tags
-
-Add new SPELL tags
-
-Add new CLASS tags
-
-=head2 v1.14 -- 2002.06.08
-
-The files are now written if there is no other change then the CF corrections
-
-Add the internal WriteLog function
-
-Change the order for the RACE filetype as requested by Andrew McDougall (tir-gwaith)
-
-RACE filetype: convert INIT:xx to BONUS:COMBAT|Initiative|xx and deprecate INIT
-
-CLASS filetype: convert ADD:INIT|xx to BONUS:COMBAT|Initiative|xx and deprecate ADD:INIT
-
-RACE filetype: added code to remove AC and replace it by BONUS:COMBAT|AC|xx|TYPE=NaturalArmor
-when needed
-
-EQUIPMENT filetype: added code to replace all the Cost by COST
-
-Add code to deal with .MOD in all the files except CLASS and CLASSSPELL
-
-=head2 v1.13 -- 2002.05.11
-
-Now parse the BONUS tags.
-
-Change the sort of the CLASS Level lines. Multiple tags on the same type are no
-longer on the same column.
-
-Skip empty files.
-
-=head2 v1.12 -- 2002.03.23
-
-Add code to replace the BONUS:FEAT, BONUS:VFEAT and FEAT in the EQUIPMENT by
-VFEAT.
-
-Remove the empty columns for the CLASS lines.
-
-Added the parseTag function for all the tags.
-
-Deprecate the NATURALARMOR tag and added code to convert to
-BONUS:COMBAT|AC|x|Type=Natural
-
-=head2 v1.11 -- 2002.03.07
-
-Add code to deal with the CR-CR-LF stuff in the .lst files
-
-The comment generated by PCGEN now contains the CVS Revision and Author tags
-
-The CLASS level lines have a new sort order.
-
-Remove CCOST and RREPLACE from tags (these were typos)
-
-Change findfullpath for the new behavior of the @ character in file paths.
-
-Added code to check the GAME and TYPE tags in the .PCC files
-
-Added code to verify the existance of every file for each .PCC
-
-=head2 v1.10 -- 2002.02.27
-
-Bug fixes
-
-=head2 v1.09 -- 2002.02.20
-
-Add a optional check to see if a TAG has been put in a fixed column. If such ':' is
-found in one of the fixed column, a warning is printed.
-
-Check for all file extention to find the unlinked files that are not .lst
-
-Add support fot the E<quot>pragmaE<quot> tag #EXTRAFILE
-
-Add code to convert SKILL to BONUS:SKILL in RACE files
-
-The DEITY tag in the CLASS files was deprecated
-
-=head2 v1.08 -- 2002.02.17
-
-Only write the .pcc files that have an extra 0x0d character or white spaces at the
-end of the line.
-
-Add support for the new SOURCEPAGE, SOURCEWEB, SOURCELONG and SOURCESHORT tags.
-
-Add conversion code that replace the SOURCE:p. tags by SOURCEPAGE:p. tags.
-
-Add conversion code that remove the ROOT tags in the SKILL files and add the
-new format of the TYPE tag.
-
-Remove the ROOT tag from the SKILL filetype. This tag is now deprecate.
-
-Romove any quote found.
-
-=head2 v1.07 -- 2002.02.08
-
-Bug with the WEAPONBONUS tag being there twice for the RACE filetype
-
-Add code to detect if one of the tags is there more then once for
-a particular filetype
-
-The odd end of lines (CR-CR-LF) are striped when the files that get rewriten
-
-Produce a list of files not found in the .PCC files
-
-=head2 v1.06 -- 2002.02.07
-
-Add support for CLASSSPELL
-
-Add support for TEMPLATE
-
-Add support for WEAPONPROF
-
-The script now adds a dummy SOURCE:p. tag in some files when none are found.
-
-=head2 v1.05 -- 2002.02.06
-
-Add support for CLASSSKILL files (OK, this one was not very hard...)
-
-Add support for DIETY files
-
-Add support for DOMAIN files
-
-Add support for FEAT files
-
-Add support for LANGUAGE files
-
-Add support for SKILL files
-
-Add support for SPELL files
-
-Unknown tags are kept (including duplicates)
-
-=head2 v1.04 -- 2002.02.05
-
-Add support for RACE files
-
-Add support for EQUIMOD files
-
-Most files are now parse by a Generic parser
-
-Unknown tags are kept (including duplicates)
-
-=head2 v1.03 -- 2002.02.03
-
-Change the sort order for the additionnal lines
-
-=head2 v1.02 -- 2002.02.03
-
-No more empty white spaces between the columns in for the level advancement lines
-
-
-=head2 v1.01 -- 2002.02.02
-
-Add support for the CLASS files
-
-Check and remove extra space at the end of each tab separated TAG
-
-Add special case for the ADD:adlib tags
-
-=head2 v1.00 -- 2002.01.27
-
-First working version. Only the EQUIPMENT file are supported.
