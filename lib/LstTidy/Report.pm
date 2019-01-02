@@ -8,13 +8,11 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw( 
    add_to_xcheck_tables
+   closeExportListFileHandles
    doXCheck
-   incCountInvalidTags 
-   incCountValidTags 
    openExportListFileHandles
    printToExportList
    registerReferrer
-   registerXCheck
    reportInvalid
    reportValid
    );
@@ -23,24 +21,27 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
-use LstTidy::Parse qw(getHeaderMissingOnLineType getMissingHeaderLineTypes);
-use LstTidy::Validate qw(
+use LstTidy::Data qw(
+   foundInvalidTags
+   getCrossCheckData
+   getHeaderMissingOnLineType
+   getTagCount
    isValidCategory 
    isValidEntity 
    isValidSubEntity 
-   isValidType 
-   validSubEntityExists);
+   isValidType
+   validSubEntityExists
+   );
+
+use LstTidy::LogFactory qw(getLogger);
+use LstTidy::Options qw(getOption isConversionActive);
+# use LstTidy::Validate qw();
 
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
 
 # populated in additional line processing used for a report
 my %bonusAndPreTagReport = ();
-
-# Will hold the number of each tag found (by linetype)
-my %count_tags;
 
 # File handles for the Export Lists
 our %filehandles;
@@ -56,13 +57,6 @@ my %referrer_categories;
 # Will hold the type used by some of the tags to allow validation.
 # Format: push @{$referrer_types{$EntityType}{$typename}}, [ $tags{$column}, $file_for_error, $line_for_error ]
 my %referrer_types;
-
-
-# Will hold the information for the entries that must be added in %referrer or
-# %referrer_types. The array is needed because all the files must have been
-# parsed before processing the information to be added.  The function
-# add_to_xcheck_tables will be called with each line of the array.
-our @xcheck_to_process;  
 
 
 # Variables names that must be skiped for the DEFINE variable section
@@ -123,46 +117,6 @@ sub closeExportListFileHandles {
    for my $line_type ( reverse sort keys %filehandles ) {
       close $filehandles{$line_type};
    }
-}
-
-=head2 foundInvalidTags
-
-   Returns true if any invalid tags were found while processing the lst files.
-
-=cut
-
-sub foundInvalidTags {
-   return exists $count_tags{"Invalid"};
-}
-
-=head2 incCountInvalidTags
-
-   Increment the statistics of invalid tags found, counting both the total and a
-   count of each tag by line type.
-
-=cut
-
-sub incCountInvalidTags {
-
-   my ($lineType, $tag) = @_;
-
-   $count_tags{"Invalid"}{"Total"}{$tag}++;
-   $count_tags{"Invalid"}{$lineType}{$tag}++;
-}
-
-=head2 incCountValidTags
-
-   Increment the statistics of valid tags found, counting both the total and a
-   count of each tag by line type.
-
-=cut
-
-sub incCountValidTags {
-
-   my ($lineType, $tag) = @_;
-
-   $count_tags{"Valid"}{"Total"}{$tag}++;
-   $count_tags{"Valid"}{$lineType}{$tag}++;
 }
 
 
@@ -276,18 +230,6 @@ sub registerReferrer {
    push @{ $referrer{$linetype}{$entity_name} }, [ $token, $file, $line ]
 }
 
-=head2 registerXCheck
-
-   Register this data for later cross checking
-
-=cut
-
-sub registerXCheck {
-   my ($entityType, $tag, $file, $line, @values) = @_;
-   
-   push @xcheck_to_process, [ $entityType, $tag, $file, $line, @values ];
-}
-
 =head2 report
 
    Print a report for the number of invalid tags found.
@@ -298,10 +240,12 @@ sub report {
 
    my ($reportType) = @_;
 
+   my %tagCount = %{getTagCount()};
+
    my $maxNumLength = 0;
-   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
-      if (length($count_tags{$reportType}{"Total"}{$tag}) >= $maxNumLength) {
-         $maxNumLength = length($count_tags{$reportType}{"Total"}{$tag});
+   for my $tag ( sort reportTagSort keys %{ $tagCount{$reportType}{"Total"} } ) {
+      if (length($tagCount{$reportType}{"Total"}{$tag}) >= $maxNumLength) {
+         $maxNumLength = length($tagCount{$reportType}{"Total"}{$tag});
       }
    }
    $maxNumLength++;
@@ -315,16 +259,16 @@ sub report {
 
    my $first = 1;
    LINE_TYPE:
-   for my $lineType ( sort grep {$_ ne 'Total'} keys %{ $count_tags{$reportType} } ) {
+   for my $lineType ( sort grep {$_ ne 'Total'} keys %{ $tagCount{$reportType} } ) {
 
       my $lineHead = $first ? "Line Type: $lineType\n" : "\nLine Type: $lineType\n";
       $log->report($lineHead);
 
-      for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{$lineType} } ) {
+      for my $tag ( sort reportTagSort keys %{ $tagCount{$reportType}{$lineType} } ) {
 
          my $line = "    $tag";
          $line .= ( " " x ( 26 - length($tag) ) );
-         $line .= sprintf $format, $count_tags{$reportType}{$lineType}{$tag};
+         $line .= sprintf $format, $tagCount{$reportType}{$lineType}{$tag};
          $log->report($line);
       }
 
@@ -333,11 +277,11 @@ sub report {
 
    $log->report("\nTotal:\n");
 
-   for my $tag ( sort reportTagSort keys %{ $count_tags{$reportType}{"Total"} } ) {
+   for my $tag ( sort reportTagSort keys %{ $tagCount{$reportType}{"Total"} } ) {
 
       my $line = "    $tag";
       $line .= ( " " x ( 26 - length($tag) ) );
-      $line .= sprintf $format, $count_tags{$reportType}{"Total"}{$tag};
+      $line .= sprintf $format, $tagCount{$reportType}{"Total"}{$tag};
       $log->report($line);
 
    }
@@ -608,7 +552,7 @@ sub add_to_xcheck_tables {
          # We ignore LIST if used within an ADD:FEAT tag
          next ABILITY if $feat eq 'LIST' && $tagName eq 'ADD:ABILITY';
 
-         # We stript the () if any
+         # We strip the () if any
          if ( $feat =~ /(.*?[^ ]) ?\((.*)\)/ ) {
 
             # We check to see if the FEAT is a compond tag
@@ -905,7 +849,7 @@ sub doXCheck {
    #####################################################
    # First we process the information that must be added
    # to the %referrer and %referrer_types;
-   for my $parameter_ref (@xcheck_to_process) {
+   for my $parameter_ref (@{ getCrossCheckData() }) {
       add_to_xcheck_tables( @{$parameter_ref} );
    }
 

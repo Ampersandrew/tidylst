@@ -30,7 +30,7 @@ LstTidy::Options::parseOptions('--noxcheck', '--i=foo\\bar');
 # when parseOptions has been called, these default values should be set
 # unless they were passed as commandline arguments
 my %defaults = (
-   'warninglevel'  => 'info',    
+   'warninglevel'  => 'notice',    
 
    'exportlist'    => 0,         
    'help'          => 0,         
@@ -67,8 +67,8 @@ for my $key ( grep {$_ !~ qr((?:check|(?:base|put)path)$)} keys %defaults ) {
 is(LstTidy::Options::getOption('noxcheck'), 1, "Command line has changed default noxcheck");
 is(LstTidy::Options::getOption('xcheck'), 0, "Command line has changed default xcheck");
 
-is(LstTidy::Options::getOption('basepath'),   qq{foo/bar},   "basepath set as expected");
-is(LstTidy::Options::getOption('inputpath'),  qq{foo/bar},  "inputpath set as expected");
+is(LstTidy::Options::getOption('basepath'),   qq{foo/bar/},   "basepath set as expected");
+is(LstTidy::Options::getOption('inputpath'),  qq{foo/bar/},  "inputpath set as expected");
 is(LstTidy::Options::getOption('outputpath'), qq{}, "outputpath is still default");
 
 

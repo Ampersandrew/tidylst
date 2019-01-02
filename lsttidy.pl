@@ -6,7 +6,7 @@ use Fatal qw( open close );             # Force some built-ins to die on error
 use English qw( -no_match_vars );       # No more funky punctuation variables
 
 my $VERSION        = "1.00.00";
-my $VERSION_DATE   = "2018-12-22";
+my $VERSION_DATE   = "2019-01-01";
 my ($PROGRAM_NAME) = "PCGen LstTidy";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
@@ -25,16 +25,43 @@ use File::Basename ();
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
-                        
+
 use LstTidy::Convert qw(convertEntities);
+use LstTidy::Data qw(
+   addSourceTag
+   addTagsForConversions
+   constructValidTags
+   getEntityFirstTag
+   getEntityNameTag
+   getOrderForLineType
+   getHeader
+   getValidSystemArr
+   incCountValidTags
+   isValidEntity
+   isValidGamemode
+   isValidMultiTag
+   isValidTag
+   seenSourceTag
+   setEntityValid
+   updateValidity
+   );
 use LstTidy::Log;
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::LogHeader;
-use LstTidy::Options qw(getOption setOption isConversionActive);
-use LstTidy::Parse qw(parseLine);
-use LstTidy::Reformat qw(getEntityNameTag);
-use LstTidy::Report;
-use LstTidy::Validate qw(validateLine);
+use LstTidy::Options qw(getOption isConversionActive parseOptions setOption);
+use LstTidy::Parse qw(
+   extractTag
+   isParseableFileType
+   isWriteableFileType
+   matchLineType
+   normaliseFile
+   parseLine
+   parseSystemFiles
+   parseToken
+   process000
+   );
+use LstTidy::Report qw(closeExportListFileHandles openExportListFileHandles);
+use LstTidy::Validate qw(scanForDeprecatedTokens validateLine);
 
 # Subroutines
 sub FILETYPE_parse;
@@ -42,8 +69,6 @@ sub parseFile;
 sub check_clear_tag_order;
 sub find_full_path;
 sub create_dir;
-sub record_bioset_tags;
-sub generate_bioset_files;
 sub generate_css;
 
 # Print version information
@@ -53,25 +78,27 @@ print STDERR "$VERSION_LONG\n";
 # Parameter parsing
 
 # Parse the command line options and set the error message if there are any issues.
-my $errorMessage = "\n" . LstTidy::Options::parseOptions(@ARGV);
+my $errorMessage = "\n" . parseOptions(@ARGV);
+my $dumpValidEntities = 0;
 
 # Test function or display variables or anything else I need.
 if ( getOption('test') ) {
 
-   print "No tests set\n";
-   exit;
+   $dumpValidEntities = 1;
+   # print "No tests set\n";
+   # exit;
 }
 
 # The command line has been processed, if conversions have been requested, make
 # sure the tag validity data in Reformat.pm is updated. In order to convert a
-# tag it must be recognised as valid. 
-LstTidy::Reformat::addTagsForConversions(); 
+# tag it must be recognised as valid.
+addTagsForConversions();
 
 # Create the singleton logging object
 my $log = getLogger();
 
 #######################################################################
-# Redirect STDERR if requeseted  
+# Redirect STDERR if requeseted
 
 if (getOption('outputerror')) {
    open STDERR, '>', getOption('outputerror');
@@ -82,7 +109,7 @@ if (getOption('outputerror')) {
 #######################################################################
 # Path options
 
-if (!getOption('inputpath') && !getOption('filetype') && 
+if (!getOption('inputpath') && !getOption('filetype') &&
    !(getOption('man') || getOption('htmlhelp')))
 {
    $errorMessage .= "\n-inputpath parameter is missing\n";
@@ -109,7 +136,7 @@ if ( getOption('outputpath') && !-d getOption('outputpath') ) {
 
 if ( getOption('help') or $LstTidy::Options::error ) {
    Pod::Usage::pod2usage(
-      {   
+      {
          -msg     => $errorMessage,
          -exitval => 1,
          -output  => \*STDERR
@@ -160,11 +187,11 @@ if ( getOption('htmlhelp') ) {
 # generate the "game mode" variables.
 
 if ( getOption('systempath') ne q{} ) {
-   LstTidy::Parse::parseSystemFiles(getOption('systempath'));
-} 
+   parseSystemFiles(getOption('systempath'));
+}
 
-# For Some tags, validity is based on the system mode variables 
-LstTidy::Parse::updateValidity();
+# For Some tags, validity is based on the system mode variables
+updateValidity();
 
 
 # PCC processing
@@ -198,29 +225,29 @@ use constant YES => 1;
 # Global variables used by the validation code
 
 # Add pre-defined valid entities
-for my $var_name (LstTidy::Parse::getValidSystemArr('vars')) {
-   LstTidy::Validate::setEntityValid('DEFINE Variable', $var_name);
+for my $var_name (getValidSystemArr('vars')) {
+   setEntityValid('DEFINE Variable', $var_name);
 }
 
 # Move these into Parse.pm, or Validate.pm whenever the code using them is moved.
-my @valid_system_stats = LstTidy::Parse::getValidSystemArr('stats');
+my @valid_system_stats = getValidSystemArr('stats');
 
 for my $stat (@valid_system_stats) {
-   LstTidy::Validate::setEntityValid('DEFINE Variable', $stat);
-   LstTidy::Validate::setEntityValid('DEFINE Variable', $stat . 'SCORE');
+   setEntityValid('DEFINE Variable', $stat);
+   setEntityValid('DEFINE Variable', $stat . 'SCORE');
 }
 # Add the magical values 'ATWILL' fot the SPELLS tag's TIMES= component.
-LstTidy::Validate::setEntityValid('DEFINE Variable', 'ATWILL');
+setEntityValid('DEFINE Variable', 'ATWILL');
 
 # Add the magical values 'UNLIM' fot the CONTAINS tag.
-LstTidy::Validate::setEntityValid('DEFINE Variable', 'UNLIM');
+setEntityValid('DEFINE Variable', 'UNLIM');
 
 
 
 # this is a temporary hack until we can move the actual parse routine into LstTidy Parse
 
 INIT {
-   
+
    # At this point everything is compiled, so we can pass a sub ref to
    # a helper module.
 
@@ -246,13 +273,13 @@ my @nodifiedFiles;   # Will hold the name of the modified files
 if (getOption('inputpath')) {
 
    # Construct the valid tags for all file types
-   LstTidy::Reformat::constructValidTags();
+   constructValidTags();
 
    ##########################################################
    # Files that needs to be open for special conversions
 
    if ( isConversionActive('Export lists') ) {
-      LstTidy::Report::openExportListFileHandles();
+      openExportListFileHandles();
    }
 
    ##########################################################
@@ -357,50 +384,50 @@ if (getOption('inputpath')) {
          push @pccLines, $pccLine;
 
          # This is a PCC file, there is only one tag on a line
-         my ($tag, $value) = LstTidy::Parse::extractTag(
-            $pccLine, 
-            'PCC', 
-            $filename, 
+         my ($tag, $value) = extractTag(
+            $pccLine,
+            'PCC',
+            $filename,
             $INPUT_LINE_NUMBER);
 
          # If extractTag returns a defined value, no further processing is
          # neeeded. If value is not defined then the tag that was returned
-         # should be processed further. 
+         # should be processed further.
 
-         my $fullTag = (not defined $value) ?  $tag : "$tag:$value" ;
+         my $fullToken = (not defined $value) ?  $tag : "$tag:$value" ;
 
-         $tag =  LstTidy::Tag->new(
-            fullTag  => $fullTag,
-            lineType => 'PCC', 
-            file     => $filename, 
-            line     => $INPUT_LINE_NUMBER,
+         my $token =  LstTidy::Token->new(
+            fullToken => $fullToken,
+            lineType  => 'PCC',
+            file      => $filename,
+            line      => $INPUT_LINE_NUMBER,
          );
 
          if (not defined $value) {
 
             # All of the individual tag parsing and correcting happens here,
             # this potentally modifys the tag
-            LstTidy::Parse::parseTag($tag);
+            parseToken($token);
 
             # If the tag has been altered, the the PCC file needs to be
             # written and the line should be overwritten.
-            if ($tag->origTag ne $tag->fullRealTag) {
+            if ($token->origToken ne $token->fullRealToken) {
                $mustWrite = 1;
-               $pccLines[-1] = $tag->fullRealTag;
+               $pccLines[-1] = $token->fullRealToken;
             }
          }
 
-         if ($tag->id) {
-            if (LstTidy::Parse::isParseableFileType($tag->id)) {
+         if ($token->tag) {
+            if (isParseableFileType($token->tag)) {
 
                # Keep track of the filetypes found
-               $foundFileType{$tag->id}++;
+               $foundFileType{$token->tag}++;
 
-               # Extract the name of the LST file from the tag->value, and
-               # store it back into tag->value
-               $tag->value($tag->value =~ s/^([^|]*).*/$1/r);
-               my $lstFile = find_full_path( $tag->value, $currentbasedir, getOption('basepath') );
-               $filesToParse{$lstFile} = $tag->id;
+               # Extract the name of the LST file from the token->value, and
+               # store it back into token->value
+               $token->value($token->value =~ s/^([^|]*).*/$1/r);
+               my $lstFile = find_full_path( $token->value, $currentbasedir, getOption('basepath') );
+               $filesToParse{$lstFile} = $token->tag;
 
                # Check to see if the file exists
                if ( !-e $lstFile ) {
@@ -410,20 +437,20 @@ if (getOption('inputpath')) {
 
                # Remember some types of file, might need to process them first.
                } elsif (
-                     $tag->id eq 'ALIGNMENT'
-                  || $tag->id eq 'CLASS' 
-                  || $tag->id eq 'CLASSSKILL'
-                  || $tag->id eq 'CLASSSPELL' 
-                  || $tag->id eq 'DOMAIN' 
-                  || $tag->id eq 'SAVE'     
-                  || $tag->id eq 'SPELL'
-                  || $tag->id eq 'STAT'     
+                     $token->tag eq 'ALIGNMENT'
+                  || $token->tag eq 'CLASS'
+                  || $token->tag eq 'CLASSSKILL'
+                  || $token->tag eq 'CLASSSPELL'
+                  || $token->tag eq 'DOMAIN'
+                  || $token->tag eq 'SAVE'
+                  || $token->tag eq 'SPELL'
+                  || $token->tag eq 'STAT'
                ) {
 
-                  $files{$tag->id}{$lstFile} = 1;
+                  $files{$token->tag}{$lstFile} = 1;
 
-                  my $commentOutPCC = 
-                     (isConversionActive('CLASSSPELL conversion to SPELL') && $tag eq 'CLASSSPELL') || 
+                  my $commentOutPCC =
+                     (isConversionActive('CLASSSPELL conversion to SPELL') && $tag eq 'CLASSSPELL') ||
                      (isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL');
 
                   # When doing either of these two conversions, the original
@@ -444,50 +471,50 @@ if (getOption('inputpath')) {
                delete $fileListNotPCC{$lstFile} if exists $fileListNotPCC{$lstFile};
                $found{'lst'} = 1;
 
-            } elsif ( $tag->id =~ m/^\#/ ) {
+            } elsif ( $token->tag =~ m/^\#/ ) {
 
-               if ($tag->id =~ $newHeaderPattern) {
+               if ($token->tag =~ $newHeaderPattern) {
                   $found{'header'} = 1;
                }
 
-            } elsif (LstTidy::Reformat::isValidTag('PCC', $tag->id)) {
+            } elsif (isValidTag('PCC', $token->tag)) {
 
                # All the tags that do not have a file should be caught here
 
                # Get the SOURCExxx tags for future ref.
                if (isConversionActive('SOURCE line replacement')
-                  && (  $tag->id eq 'SOURCELONG'
-                     || $tag->id eq 'SOURCESHORT'
-                     || $tag->id eq 'SOURCEWEB'
-                     || $tag->id eq 'SOURCEDATE' ) ) 
+                  && (  $token->tag eq 'SOURCELONG'
+                     || $token->tag eq 'SOURCESHORT'
+                     || $token->tag eq 'SOURCEWEB'
+                     || $token->tag eq 'SOURCEDATE' ) )
                {
                   my $path = File::Basename::dirname($filename);
 
-                  if ( exists $source_tags{$path}{$tag->id} && $path !~ /custom|altpcc/i ) {
+                  if ( seenSourceTag($path, $token->tag) && $path !~ /custom|altpcc/i ) {
 
                      $log->notice(
-                        $tag->id . " already found for $path",
+                        $token->tag . " already found for $path",
                         $filename,
                         $INPUT_LINE_NUMBER
                      );
 
                   } else {
-                     $source_tags{$path}{$tag->id} = $tag->fullRealTag;
+                     addSourceTag($path, $token->tag, $token->fullRealToken);
                   }
 
                   # For the PCC report
-                  if ( $tag->id eq 'SOURCELONG' ) {
-                     $found{'source long'} = $tag->value;
-                  } elsif ( $tag->id eq 'SOURCESHORT' ) {
-                     $found{'source short'} = $tag->value;
+                  if ( $token->tag eq 'SOURCELONG' ) {
+                     $found{'source long'} = $token->value;
+                  } elsif ( $token->tag eq 'SOURCESHORT' ) {
+                     $found{'source short'} = $token->value;
                   }
 
-               } elsif ( $tag->id eq 'GAMEMODE' ) {
+               } elsif ( $token->tag eq 'GAMEMODE' ) {
 
                   # Verify that the GAMEMODEs are valid
                   # and match the filer.
-                  $found{'gamemode'} = $tag->value;       # The GAMEMODE tag we found
-                  my @modes = split /[|]/, $tag->value;
+                  $found{'gamemode'} = $token->value;       # The GAMEMODE tag we found
+                  my @modes = split /[|]/, $token->value;
 
                   my $gamemode = getOption('gamemode');
                   my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
@@ -504,7 +531,7 @@ if (getOption('inputpath')) {
                   # the game modes have not been filtered out
                   if ($valid_game_mode) {
                      for my $mode (@modes) {
-                        if ( ! LstTidy::Parse::isValidGamemode($mode) ) {
+                        if ( ! isValidGamemode($mode) ) {
                            $log->notice(
                               qq{Invalid GAMEMODE "$mode" in "$_"},
                               $filename,
@@ -523,23 +550,23 @@ if (getOption('inputpath')) {
                      last PCC_LINE;
                   }
 
-               } elsif ( $tag->id eq 'BOOKTYPE' || $tag->id eq 'TYPE' ) {
+               } elsif ( $token->tag eq 'BOOKTYPE' || $token->tag eq 'TYPE' ) {
 
                   # Found a TYPE tag
                   $found{'book type'} = 1;
 
-               } elsif ( $tag->id eq 'GAME' && isConversionActive('PCC:GAME to GAMEMODE') ) {
+               } elsif ( $token->tag eq 'GAME' && isConversionActive('PCC:GAME to GAMEMODE') ) {
 
-                  $value = $tag->value;
+                  $value = $token->value;
 
                   # [ 707325 ] PCC: GAME is now GAMEMODE
                   $pccLines[-1] = "GAMEMODE:$value";
                   $log->warning(
-                     q{Replacing "} . $tag->fullRealTag . qq{" by "GAMEMODE:$value"},
+                     q{Replacing "} . $token->fullRealToken . qq{" by "GAMEMODE:$value"},
                      $filename,
                      $INPUT_LINE_NUMBER
                   );
-                  $found{'gamemode'} = $tag->value;
+                  $found{'gamemode'} = $token->value;
                   $mustWrite = 1;
                }
             }
@@ -595,7 +622,7 @@ if (getOption('inputpath')) {
       }
 
       # Do we copy the .PCC???
-      if ( getOption('outputpath') && ( $mustWrite || !$found{'header'} ) && LstTidy::Parse::isWriteableFileType("PCC") ) {
+      if ( getOption('outputpath') && ( $mustWrite || !$found{'header'} ) && isWriteableFileType("PCC") ) {
          my $new_pcc_file = $filename;
          my $inputpath  = getOption('inputpath');
          my $outputpath = getOption('outputpath');
@@ -752,13 +779,13 @@ for my $file (@filesToParse_sorted) {
       local $/ = undef; # read all from buffer
       my $buffer = <>;
 
-      (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+      (my $lines, $filetype) = normaliseFile($buffer);
       @lines = @$lines;
 
    } else {
 
       # We read only what we know needs to be processed
-      my $parseable = LstTidy::Parse::isParseableFileType($filesToParse{$file});
+      my $parseable = isParseableFileType($filesToParse{$file});
 
       next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
 
@@ -778,7 +805,7 @@ for my $file (@filesToParse_sorted) {
          my $buffer = <$lst_fh>;
          close $lst_fh;
 
-         (my $lines, $filetype) = LstTidy::Parse::normaliseFile($buffer);
+         (my $lines, $filetype) = normaliseFile($buffer);
          @lines = @$lines;
       };
 
@@ -817,15 +844,15 @@ for my $file (@filesToParse_sorted) {
 
    # Remove and count any abnormal EOL characters i.e. anything that remains
    # after the chomp
-   for my $line (@lines) { 
-      $numberofcf += $line =~ s/[\x0d\x0a]//g; 
+   for my $line (@lines) {
+      $numberofcf += $line =~ s/[\x0d\x0a]//g;
    }
 
    if($numberofcf) {
       $log->warning( "$numberofcf extra CF found and removed.", $file );
    }
 
-   my $parser = LstTidy::Parse::isParseableFileType($filesToParse{$file});
+   my $parser = isParseableFileType($filesToParse{$file});
 
    if ( ref($parser) eq "CODE" ) {
 
@@ -847,8 +874,8 @@ for my $file (@filesToParse_sorted) {
          next FILE_TO_PARSE;                # we still need to implement rewriting for multi-line
       }
 
-      if (!LstTidy::Parse::isWriteableFileType($filesToParse{$file})) {
-         next FILE_TO_PARSE 
+      if (!isWriteableFileType($filesToParse{$file})) {
+         next FILE_TO_PARSE
       }
 
       # We compare the result with the orginal file.
@@ -917,24 +944,13 @@ for my $file (@filesToParse_sorted) {
 }
 
 ###########################################
-# Generate the new BIOSET files
-
-if ( isConversionActive('BIOSET:generate the new files') ) {
-        print STDERR "\n================================================================\n";
-        print STDERR "List of new BIOSET files generated\n";
-        print STDERR "----------------------------------------------------------------\n";
-
-        generate_bioset_files();
-}
-
-###########################################
 # Print a report with the modified files
 if ( getOption('outputpath') && scalar(@nodifiedFiles) ) {
 
    my $outputpath = getOption('outputpath');
 
    if ($^O eq "MSWin32") {
-      $outputpath =~ tr{/}{\\} 
+      $outputpath =~ tr{/}{\\}
    }
 
    $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
@@ -973,10 +989,12 @@ if (getOption('xcheck')) {
 # special conversion
 
 if (isConversionActive('Export lists')) {
-   LstTidy::Report::closeExportListFileHandles();
+   closeExportListFileHandles();
 }
 
-LstTidy::Validate::dumpValidEntities();
+if ($dumpValidEntities) {
+   LstTidy::Data::dumpValidEntities();
+}
 
 #########################################
 # Close the redirected STDERR if needed
@@ -1030,9 +1048,9 @@ sub FILETYPE_parse {
    for my $thisLine (@ {$lines_ref} ) {
 
       my $line_info;
-     
+
       # Convert the non-ascii character in the line if that conversion is
-      # active, otherwise just copy it. 
+      # active, otherwise just copy it.
       my $new_line = isConversionActive('ALL:Fix Common Extended ASCII')
                         ? convertEntities($thisLine)
                         : $thisLine;
@@ -1050,8 +1068,8 @@ sub FILETYPE_parse {
          push @newlines, [ $curent_linetype, $new_line, $last_main_line, undef, undef, ];
          next LINE;
       }
-            
-      ($line_info, $curent_entity) = LstTidy::Parse::matchLineType($new_line, $fileType); 
+
+      ($line_info, $curent_entity) = matchLineType($new_line, $fileType);
 
       # If we didn't find a record with info how to parse this line
       if ( ! defined $line_info ) {
@@ -1092,7 +1110,7 @@ sub FILETYPE_parse {
       }
 
       # Identify the deprecated tags.
-      LstTidy::Validate::scanForDeprecatedTags( $new_line, $curent_linetype, $file, $line );
+      scanForDeprecatedTokens( $new_line, $curent_linetype, $file, $line );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1104,7 +1122,10 @@ sub FILETYPE_parse {
       # (empty tokens are the result of [tab][space][tab] type of chracter
       # sequences).
       # [ 975999 ] [tab][space][tab] breaks prettylst
-      my @tokens = grep { $_ ne q{} } map { s{ \A \s* | \s* \z }{}xmsg; $_ } split $sep, $new_line;
+      my @tokens = 
+         grep { $_ ne q{} } 
+         map { s{ \A \s* | \s* \z }{}xmsg; $_ } 
+         split $sep, $new_line;
 
       #First, we deal with the tag-less columns
       COLUMN:
@@ -1115,12 +1136,12 @@ sub FILETYPE_parse {
             last COLUMN;
          }
 
-         # If the line has no tokens        
+         # If the line has no tokens
          if ( scalar @tokens == 0 ) {
             last COLUMN;
          }
-         
-         # Grab the token from the front of the line 
+
+         # Grab the token from the front of the line
          my $token = shift @tokens;
 
          # We remove the enclosing quotes if any
@@ -1136,37 +1157,37 @@ sub FILETYPE_parse {
          $line_tokens{$column} = [$token];
 
          # Statistic gathering
-         LstTidy::Report::incCountValidTags($curent_linetype, $column);
+         incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = LstTidy::Parse::process000($line_info, $token, $curent_linetype, $file, $line);
+            my $exit = process000($line_info, $token, $curent_linetype, $file, $line);
             last COLUMN if $exit;
          }
       }
 
       #Second, let's parse the regular columns
-      for my $token (@tokens) {
+      for my $rawToken (@tokens) {
 
-         my ( $tag, $value ) = LstTidy::Parse::extractTag($token, $curent_linetype, $file, $line );
+         my ( $extractedToken, $value ) = extractTag($rawToken, $curent_linetype, $file, $line );
 
          # if extractTag returns a defined value, no further processing is
          # neeeded. If tag is defined but value is not, then the tag that was
          # returned is the cleaned token and should be processed further.
-         if ($tag && not defined $value) {
+         if ($extractedToken && not defined $value) {
 
-            my $tag =  LstTidy::Tag->new(
-               fullTag  => $tag,
-               lineType => $curent_linetype,
-               file     => $file,
-               line     => $line,
+            my $token =  LstTidy::Token->new(
+               fullToken => $extractedToken,
+               lineType  => $curent_linetype,
+               file      => $file,
+               line      => $line,
             );
 
             # Potentally modify the tag
-            LstTidy::Parse::parseTag( $tag );
+            parseToken( $token );
 
-            my $key = $tag->realId;
+            my $key = $token->realTag;
 
-            if ( exists $line_tokens{$key} && ! LstTidy::Reformat::isValidMultiTag($curent_linetype, $key) ) {
+            if ( exists $line_tokens{$key} && ! isValidMultiTag($curent_linetype, $key) ) {
                $log->notice(
                   qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
                   $file,
@@ -1174,12 +1195,12 @@ sub FILETYPE_parse {
                );
             }
 
-            $line_tokens{$key} = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $tag->fullRealTag ] : [$tag->fullRealTag];
+            $line_tokens{$key} = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $token->fullRealToken ] : [$token->fullRealToken];
 
          } else {
 
-            $log->warning( "No tags in \"$token\"\n", $file, $line );
-            $line_tokens{$token} = $token;
+            $log->warning( "No tags in \"$rawToken\"\n", $file, $line );
+            $line_tokens{$rawToken} = $rawToken;
          }
       }
 
@@ -1202,7 +1223,7 @@ sub FILETYPE_parse {
       ############################################################
       # Validate the line
       if (getOption('xcheck')) {
-         validateLine($curent_linetype, \%line_tokens, $file, $line) 
+         validateLine($curent_linetype, \%line_tokens, $file, $line)
       };
 
       ############################################################
@@ -1224,7 +1245,7 @@ sub FILETYPE_parse {
 
       my $next_linetype;
       if ($line_index + 1 < @newlines) {
-         $next_linetype = $newlines[ $line_index + 1 ][0] 
+         $next_linetype = $newlines[ $line_index + 1 ][0]
       }
 
       # A header line either begins with the curent line_type header
@@ -1233,31 +1254,33 @@ sub FILETYPE_parse {
       # Only comment -- $line_token is not a hash --  can be header lines
       if ( ref($line_tokens) ne 'HASH' ) {
 
-         # We are on a comment line, we need to find the
-         # curent and the next line header.
+         # We are on a comment line, there are no tokens
+         my $line = $line_tokens;
+
+         # we need to find the curent and the next line header.
 
          # Curent header
          my $this_header =
             $curent_linetype
-               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0], $curent_linetype )
+               ? getHeader(getEntityFirstTag($curent_linetype), $curent_linetype )
                : "";
 
          # Next line header
          my $next_header =
             $next_linetype
-               ? LstTidy::Parse::getHeader( @{LstTidy::Reformat::getLineTypeOrder($next_linetype)}[0], $next_linetype )
+               ? getHeader(getEntityFirstTag($next_linetype), $next_linetype )
                : "";
 
-         if (   ( $this_header && index( $line_tokens, $this_header ) == 0 )
-            || ( $next_header && index( $line_tokens, $next_header ) == 0 ) )
+         if (   ( $this_header && index( $line, $this_header ) == 0 )
+            || ( $next_header && index( $line, $next_header ) == 0 ) )
          {
 
             # It is a header, let's tag it as such.
-            $newlines[$line_index] = [ 'HEADER', $line_tokens, ];
+            $newlines[$line_index] = [ 'HEADER', $line, ];
          } else {
 
             # It is just a comment, we won't botter with it ever again.
-            $newlines[$line_index] = $line_tokens;
+            $newlines[$line_index] = $line;
          }
       }
    }
@@ -1274,7 +1297,7 @@ sub FILETYPE_parse {
         # Phase II - Reformating the lines
 
         # No reformating needed?
-        return $lines_ref unless getOption('outputpath') && LstTidy::Parse::isWriteableFileType($fileType);
+        return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
 
         # Now on to all the non header lines.
         CORE_LINE:
@@ -1297,7 +1320,7 @@ sub FILETYPE_parse {
                 if ( $sep ne "\t" ) {
 
                 # First, the tag known in masterOrder
-                for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
+                for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
                         if ( exists $line_tokens->{$tag} ) {
                                 $newline .= join $sep, @{ $line_tokens->{$tag} };
                                 $newline .= $sep;
@@ -1340,7 +1363,7 @@ sub FILETYPE_parse {
                         # line, we remove it.
 
                         # First, the tag known in masterOrder
-                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
+                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
                                 if ( exists $line_tokens->{$tag} ) {
                                 $newline .= join $sep, @{ $line_tokens->{$tag} };
                                 $newline .= $sep;
@@ -1384,7 +1407,7 @@ sub FILETYPE_parse {
                         # Find the columns order and build the header and
                         # the curent line
                         TAG_NAME:
-                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
+                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
 
                                 # We skip the tag is not present
                                 next TAG_NAME if !exists $col_length{$tag};
@@ -1393,7 +1416,7 @@ sub FILETYPE_parse {
                                 $line_entity = $line_tokens->{$tag}[0] unless $line_entity;
 
                                 # What is the length of the column?
-                                my $header_text   = LstTidy::Parse::getHeader( $tag, $curent_linetype );
+                                my $header_text   = getHeader( $tag, $curent_linetype );
                                 my $header_length = mylength($header_text);
                                 my $col_length    = $header_length > $col_length{$tag}
                                                        ? $header_length
@@ -1421,7 +1444,7 @@ sub FILETYPE_parse {
                         for my $tag ( sort keys %$line_tokens ) {
 
                                 # What is the length of the column?
-                                my $header_text   = LstTidy::Parse::getHeader( $tag, $curent_linetype );
+                                my $header_text   = getHeader( $tag, $curent_linetype );
                                 my $header_length = mylength($header_text);
                                 my $col_length  =
                                         $header_length > $col_length{$tag}
@@ -1528,7 +1551,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( LstTidy::Parse::getHeader( $tag, $fileType ) );
+                                my $length = mylength( getHeader( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -1540,7 +1563,7 @@ sub FILETYPE_parse {
                         my @col_order;
 
                         # First, the columns included in masterOrder
-                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
+                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
                                 push @col_order, $tag if exists $col_length{$tag};
                                 $seen{$tag}++;
                         }
@@ -1609,7 +1632,7 @@ sub FILETYPE_parse {
                                 # Round the col_length up to the next tab
                                 my $col_max_length
                                         = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = LstTidy::Parse::getHeader( $tag, $main_linetype );
+                                my $curent_header = getHeader( $tag, $main_linetype );
                                 my $curent_length = mylength($curent_header);
                                 my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
                                         + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
@@ -1699,7 +1722,7 @@ sub FILETYPE_parse {
 
                                 # We add the length of the headers if needed.
                                 for my $tag ( keys %col_length ) {
-                                my $length = mylength( LstTidy::Parse::getHeader( $tag, $fileType ) );
+                                my $length = mylength( getHeader( $tag, $fileType ) );
 
                                 $col_length{$tag} = $length if $length > $col_length{$tag};
                                 }
@@ -1711,7 +1734,7 @@ sub FILETYPE_parse {
                         my @col_order;
 
                         # First, the columns included in masterOrder
-                        for my $tag ( @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)} ) {
+                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
                                 push @col_order, $tag if exists $col_length{$tag};
                                 $seen{$tag}++;
                         }
@@ -1818,7 +1841,7 @@ sub FILETYPE_parse {
                                 # Round the col_length up to the next tab
                                 my $col_max_length
                                         = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = LstTidy::Parse::getHeader( $tag, $sub_linetype );
+                                my $curent_header = getHeader( $tag, $sub_linetype );
                                 my $curent_length = mylength($curent_header);
                                 my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
                                         + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
@@ -2020,18 +2043,19 @@ sub FILETYPE_parse {
                                         if (   $lines_ref->[$j][0] eq $curent_linetype
                                                 && $entity_name eq $lines_ref->[$j][3] )
                                         {
-                                                $last_line = $j;
-                                                $extra_entity++;
-                                                for ( keys %{ $lines_ref->[$j][1] } ) {
+                                           $last_line = $j;
+                                           $extra_entity++;
+                                           my $entityFirstTag = getEntityFirstTag($curent_linetype);
 
-                                                # We add the tags except for the first one (the entity tag)
-                                                # that is already there.
-                                                push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} }
-                                                        if $_ ne @{LstTidy::Reformat::getLineTypeOrder($curent_linetype)}[0];
-                                                     }
-                                        }
-                                        else {
-                                                last ENTITY_LINE;
+                                           for ( keys %{ $lines_ref->[$j][1] } ) {
+
+                                              # We add the tags except for the first one (the entity tag)
+                                              # that is already there.
+                                              push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} } if $_ ne $entityFirstTag;
+                                           }
+
+                                        } else {
+                                           last ENTITY_LINE;
                                         }
                                 }
 
@@ -2136,10 +2160,10 @@ sub FILETYPE_parse {
                                 # Is it a CLASS or a DOMAIN ?
 
 
-                                if (LstTidy::Validate::isEntityValid('CLASS', $curent_name)) {
+                                if (isValidEntity('CLASS', $curent_name)) {
                                         $curent_type = 0;
                                 }
-                                elsif (LstTidy::Validate::isEntityValid('DOMAIN', $curent_name)) {
+                                elsif (isValidEntity('DOMAIN', $curent_name)) {
                                         $curent_type = 1;
                                 }
                                 else {
@@ -2350,43 +2374,43 @@ sub FILETYPE_parse {
                                 my %new_skill_line;
                                 my %new_spell_line;
                                 my %skill_tags = (
-                                'CSKILL:.CLEAR' => 1,
-                                CCSKILL         => 1,
-                                CSKILL          => 1,
-                                MODTOSKILLS             => 1,   #
-                                MONSKILL                => 1,   # [ 1097487 ] MONSKILL in class.lst
-                                MONNONSKILLHD   => 1,
-                                SKILLLIST                       => 1,   # [ 1580059 ] SKILLLIST tag
-                                STARTSKILLPTS   => 1,
+                                   'CSKILL:.CLEAR' => 1,
+                                   CCSKILL         => 1,
+                                   CSKILL          => 1,
+                                   MODTOSKILLS     => 1,   #
+                                   MONSKILL        => 1,   # [ 1097487 ] MONSKILL in class.lst
+                                   MONNONSKILLHD   => 1,
+                                   SKILLLIST       => 1,   # [ 1580059 ] SKILLLIST tag
+                                   STARTSKILLPTS   => 1,
                                 );
                                 my %spell_tags = (
-                                BONUSSPELLSTAT                  => 1,
-                                'BONUS:CASTERLEVEL'             => 1,
-                                'BONUS:DC'                              => 1,  #[ 1037456 ] Move BONUS:DC on class line to the spellcasting portion
-                                'BONUS:SCHOOL'                  => 1,
-                                'BONUS:SPELL'                   => 1,
-                                'BONUS:SPECIALTYSPELLKNOWN'     => 1,
-                                'BONUS:SPELLCAST'                       => 1,
-                                'BONUS:SPELLCASTMULT'           => 1,
-                                'BONUS:SPELLKNOWN'              => 1,
-                                CASTAS                          => 1,
-                                ITEMCREATE                              => 1,
-                                KNOWNSPELLS                             => 1,
-                                KNOWNSPELLSFROMSPECIALTY        => 1,
-                                MEMORIZE                                => 1,
-                                HASSPELLFORMULA                 => 1, # [ 1893279 ] HASSPELLFORMULA Class Line tag
-                                PROHIBITED                              => 1,
-                                SPELLBOOK                               => 1,
-                                SPELLKNOWN                              => 1,
-                                SPELLLEVEL                              => 1,
-                                SPELLLIST                               => 1,
-                                SPELLSTAT                               => 1,
-                                SPELLTYPE                               => 1,
+                                   BONUSSPELLSTAT              => 1,
+                                   'BONUS:CASTERLEVEL'         => 1,
+                                   'BONUS:DC'                  => 1,  #[ 1037456 ] Move BONUS:DC on class line to the spellcasting portion
+                                   'BONUS:SCHOOL'              => 1,
+                                   'BONUS:SPELL'               => 1,
+                                   'BONUS:SPECIALTYSPELLKNOWN' => 1,
+                                   'BONUS:SPELLCAST'           => 1,
+                                   'BONUS:SPELLCASTMULT'       => 1,
+                                   'BONUS:SPELLKNOWN'          => 1,
+                                   CASTAS                      => 1,
+                                   ITEMCREATE                  => 1,
+                                   KNOWNSPELLS                 => 1,
+                                   KNOWNSPELLSFROMSPECIALTY    => 1,
+                                   MEMORIZE                    => 1,
+                                   HASSPELLFORMULA             => 1, # [ 1893279 ] HASSPELLFORMULA Class Line tag
+                                   PROHIBITED                  => 1,
+                                   SPELLBOOK                   => 1,
+                                   SPELLKNOWN                  => 1,
+                                   SPELLLEVEL                  => 1,
+                                   SPELLLIST                   => 1,
+                                   SPELLSTAT                   => 1,
+                                   SPELLTYPE                   => 1,
                                 );
                                 $last_main_line = $i;
-                                my $class               = $lines_ref->[$i][3];
+                                my $class       = $lines_ref->[$i][3];
                                 my $line_info   = $lines_ref->[$i][4];
-                                my $j                   = $i + 1;
+                                my $j           = $i + 1;
                                 my @new_class_lines;
 
                                 #Find the next line that is not empty or of the same CLASS
@@ -2402,9 +2426,9 @@ sub FILETYPE_parse {
                                 # Is it a CLASS line of the same CLASS?
                                 if ( $lines_ref->[$j][0] eq 'CLASS' && $class eq $lines_ref->[$j][3] ) {
                                         $last_line = $j;
-                                        for ( keys %{ $lines_ref->[$j][1] } ) {
-                                                push @{ $new_class_line{$_} }, @{ $lines_ref->[$j][1]{$_} }
-                                                if $_ ne @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
+                                        my $firstTag = getEntityNameTag('CLASS');
+                                        for my $column ( grep {$_ ne $firstTag} keys %{ $lines_ref->[$j][1] } ) {
+                                           push @{ $new_class_line{$column} }, @{ $lines_ref->[$j][1]{$column} };
                                         }
                                 }
                                 else {
@@ -2457,46 +2481,43 @@ sub FILETYPE_parse {
                                 # The PRExxx line
                                 if ( keys %new_pre_line ) {
 
-                                # Need to tell what CLASS we are dealing with
-                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
-                                $new_pre_line{ $tagLookup }
-                                        = $new_class_line{ $tagLookup };
-                                push @new_class_lines,
-                                        [
-                                        'CLASS',
-                                        \%new_pre_line,
-                                        ++$last_main_line,
-                                        $class,
-                                        $line_info,
-                                        ];
-                                $j++;
+                                   # Need to tell what CLASS we are dealing with
+                                   my $tagLookup = getEntityNameTag('CLASS');
+                                   $new_pre_line{ $tagLookup } = $new_class_line{ $tagLookup };
+                                   push @new_class_lines,
+                                   [
+                                      'CLASS',
+                                      \%new_pre_line,
+                                      ++$last_main_line,
+                                      $class,
+                                      $line_info,
+                                   ];
+                                   $j++;
                                 }
 
                                 # The skills line
                                 if ( keys %new_skill_line ) {
 
-                                # Need to tell what CLASS we are dealing with
-                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
-                                $new_skill_line{ $tagLookup }
-                                        = $new_class_line{ $tagLookup };
-                                push @new_class_lines,
-                                        [
-                                        'CLASS',
-                                        \%new_skill_line,
-                                        ++$last_main_line,
-                                        $class,
-                                        $line_info,
-                                        ];
-                                $j++;
+                                   # Need to tell what CLASS we are dealing with
+                                   my $tagLookup = getEntityNameTag('CLASS');
+                                   $new_skill_line{ $tagLookup } = $new_class_line{ $tagLookup };
+                                   push @new_class_lines,
+                                   [
+                                      'CLASS',
+                                      \%new_skill_line,
+                                      ++$last_main_line,
+                                      $class,
+                                      $line_info,
+                                   ];
+                                   $j++;
                                 }
 
                                 # The spell line
                                 if ( keys %new_spell_line ) {
 
                                 # Need to tell what CLASS we are dealing with
-                                my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
-                                $new_spell_line{ $tagLookup }
-                                        = $new_class_line{ $tagLookup };
+                                my $tagLookup = getEntityNameTag('CLASS');
+                                $new_spell_line{ $tagLookup } = $new_class_line{ $tagLookup };
 
                                 ##################################################################
                                 # [ 876536 ] All spell casting classes need CASTERLEVEL
@@ -2509,28 +2530,26 @@ sub FILETYPE_parse {
                                         && exists $new_spell_line{'SPELLTYPE'}
                                         && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
                                 {
-                                        my $tagLookup = @{LstTidy::Reformat::getLineTypeOrder('CLASS')}[0];
-                                        my $class = $new_spell_line{ $tagLookup }[0];
+                                        my $class = getEntityName('CLASS', \%new_spell_line);
 
                                         if ( exists $new_spell_line{'ITEMCREATE'} ) {
 
-                                                # ITEMCREATE is present, we do not convert but we warn.
-                                                $log->warning(
-                                                        "Can't add BONUS:CASTERLEVEL for class \"$class\", "
-                                                        . "\"$new_spell_line{'ITEMCREATE'}[0]\" was found.",
-                                                        $filename
-                                                );
-                                        }
-                                        else {
+                                           # ITEMCREATE is present, we do not convert but we warn.
+                                           $log->warning(
+                                              "Can't add BONUS:CASTERLEVEL for class \"$class\", "
+                                              . "\"$new_spell_line{'ITEMCREATE'}[0]\" was found.",
+                                              $filename
+                                           );
 
-                                                # We add the missing BONUS:CASTERLEVEL
-                                                $class =~ s/^CLASS:(.*)/$1/;
-                                                $new_spell_line{'BONUS:CASTERLEVEL'}
-                                                = ["BONUS:CASTERLEVEL|$class|CL"];
-                                                $log->warning(
-                                                qq{Adding missing "BONUS:CASTERLEVEL|$class|CL"},
-                                                $filename
-                                                );
+                                        } else {
+
+                                           # We add the missing BONUS:CASTERLEVEL
+                                           $class =~ s/^CLASS:(.*)/$1/;
+                                           $new_spell_line{'BONUS:CASTERLEVEL'} = ["BONUS:CASTERLEVEL|$class|CL"];
+                                           $log->warning(
+                                              qq{Adding missing "BONUS:CASTERLEVEL|$class|CL"},
+                                              $filename
+                                           );
                                         }
                                 }
 
@@ -2755,7 +2774,7 @@ sub check_clear_tag_order {
 
          # The SA tag is special because it is only checked
          # up to the first (
-         
+
          for ( @{ $line_ref->{$tag} } ) {
             if (/:\.?CLEAR.?([^(]*)/) {
 
@@ -2777,12 +2796,12 @@ sub check_clear_tag_order {
                      $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
                   }
                }
-            
+
             } elsif ( / : ([^(]*) /xms ) {
 
                # Let's store the value
                $value_found{$1} = 1;
-            
+
             } else {
                $log->error(
                   "Didn't anticipate this tag: $_",
@@ -2890,267 +2909,6 @@ sub create_dir {
    }
 }
 
-
-
-
-
-###############################################################
-###############################################################
-###
-### Start of closure for BIOSET generation functions
-### [ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
-###
-
-{
-
-        # Moving this out of the BEGIN as a workaround for bug
-        # [perl #30058] Perl 5.8.4 chokes on perl -e 'BEGIN { my %x=(); }'
-
-        my %RecordedBiosetTags;
-
-        BEGIN {
-
-                my %DefaultBioset = (
-
-                # Race          AGE                             HEIGHT                                  WEIGHT
-                'Human' =>      [ 'AGE:15:1:4:1:6:2:6',   'HEIGHT:M:58:2:10:0:F:53:2:10:0',   'WEIGHT:M:120:2:4:F:85:2:4'       ],
-                'Dwarf' =>      [ 'AGE:40:3:6:5:6:7:6',   'HEIGHT:M:45:2:4:0:F:43:2:4:0',       'WEIGHT:M:130:2:6:F:100:2:6'    ],
-                'Elf' =>        [ 'AGE:110:4:6:6:6:10:6', 'HEIGHT:M:53:2:6:0:F:53:2:6:0',       'WEIGHT:M:85:1:6:F:80:1:6'      ],
-                'Gnome' =>      [ 'AGE:40:4:6:6:6:9:6',   'HEIGHT:M:36:2:4:0:F:34:2:4:0',       'WEIGHT:M:40:1:1:F:35:1:1'      ],
-                'Half-Elf' => [ 'AGE:20:1:6:2:6:3:6',   'HEIGHT:M:55:2:8:0:F:53:2:8:0', 'WEIGHT:M:100:2:4:F:80:2:4'     ],
-                'Half-Orc' => [ 'AGE:14:1:4:1:6:2:6',   'HEIGHT:M:58:2:10:0:F:52:2:10:0',   'WEIGHT:M:130:2:4:F:90:2:4' ],
-                'Halfling' => [ 'AGE:20:2:4:3:6:4:6',   'HEIGHT:M:32:2:4:0:F:30:2:4:0', 'WEIGHT:M:30:1:1:F:25:1:1'      ],
-                );
-
-                ###############################################################
-                # record_bioset_tags
-                # ------------------
-                #
-                # This function record the BIOSET information found in the
-                # RACE files so that the BIOSET files can later be generated.
-                #
-                # If the value are equal to the default, they are not generated
-                # since the default apply.
-                #
-                # Parameters: $dir              Directory where the RACE file was found
-                #                       $race           Name of the race
-                #                       $age                    AGE tag
-                #                       $height         HEIGHT tag
-                #                       $weight         WEIGHT tag
-                #                       $file_for_error To use with ewarn
-                #                       $line_for_error To use with ewarn
-
-                sub record_bioset_tags {
-                my ($dir,
-                        $race,
-                        $age,
-                        $height,
-                        $weight,
-                        $file_for_error,
-                        $line_for_error
-                ) = @_;
-
-                # Check to see if default apply
-                RACE:
-                for my $master_race ( keys %DefaultBioset ) {
-                        if ( index( $race, $master_race ) == 0 ) {
-
-                                # The race name is included in the default
-                                # We now verify the values
-                                $age    = "" if $DefaultBioset{$master_race}[0] eq $age;
-                                $height = "" if $DefaultBioset{$master_race}[1] eq $height;
-                                $weight = "" if $DefaultBioset{$master_race}[2] eq $weight;
-                                last RACE;
-                        }
-                }
-
-                # Everything that is not blank must be kept
-                if ($age) {
-                        if ( exists $RecordedBiosetTags{$dir}{$race}{AGE} ) {
-                                $log->notice(
-                                qq{BIOSET generation: There is already a AGE tag recorded}
-                                        . qq{ for a race named "$race" in this directory.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                        else {
-                                $RecordedBiosetTags{$dir}{$race}{AGE} = $age;
-                        }
-                }
-
-                if ($height) {
-                        if ( exists $RecordedBiosetTags{$dir}{$race}{HEIGHT} ) {
-                                $log->notice(
-                                qq{BIOSET generation: There is already a HEIGHT tag recorded}
-                                        . qq{ for a race named "$race" in this directory.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                        else {
-                                $RecordedBiosetTags{$dir}{$race}{HEIGHT} = $height;
-                        }
-                }
-
-                if ($weight) {
-                        if ( exists $RecordedBiosetTags{$dir}{$race}{WEIGHT} ) {
-                                $log->notice(
-                                qq{BIOSET generation: There is already a WEIGHT tag recorded}
-                                        . qq{ for a race named "$race" in this directory.},
-                                $file_for_error,
-                                $line_for_error
-                                );
-                        }
-                        else {
-                                $RecordedBiosetTags{$dir}{$race}{WEIGHT} = $weight;
-                        }
-                }
-                }
-
-                ###############################################################
-                # generate_bioset_files
-                # ---------------------
-                #
-                # Generate the new BIOSET files from the data included in the
-                # %RecordedBiosetTags hash.
-                #
-                # The new files will all be named bioset.lst and will required
-                # to be renamed and included in the .PCC manualy.
-                #
-                # No parameter
-
-                sub generate_bioset_files {
-                for my $dir ( sort keys %RecordedBiosetTags ) {
-                        my $filename = $dir . '/biosettings.lst';
-                        my $inputpath  = getOption('inputpath');
-                        my $outputpath = getOption('outputpath');
-                        $filename =~ s/${inputpath}/${outputpath}/i;
-
-                        open my $bioset_fh, '>', $filename;
-
-                        # Printing the name of the new file generated
-                        print STDERR $filename, "\n";
-
-                        # Header part.
-                        print {$bioset_fh} << "END_OF_HEADER";
-AGESET:0|Adulthood
-END_OF_HEADER
-
-                        # Let's find the longest race name
-                        my $racename_length = 0;
-                        for my $racename ( keys %{ $RecordedBiosetTags{$dir} } ) {
-                                $racename_length = length($racename) if length($racename) > $racename_length;
-                        }
-
-                        # Add the length for RACENAME:
-                        $racename_length += 9;
-
-                        # Bring the length to the next tab
-                        if ( $racename_length % $tablength ) {
-
-                                # We add the remaining spaces to get to the tab
-                                $racename_length += $tablength - ( $racename_length % $tablength );
-                        }
-                        else {
-
-                                # Already on a tab length, we add an extra tab
-                                $racename_length += $tablength;
-                        }
-
-                        # We now format and print the lines for each race
-                        for my $racename ( sort keys %{ $RecordedBiosetTags{$dir} } ) {
-                                my $height_weight_line = "";
-                                my $age_line            = "";
-
-                                if (   exists $RecordedBiosetTags{$dir}{$racename}{HEIGHT}
-                                && exists $RecordedBiosetTags{$dir}{$racename}{WEIGHT} )
-                                {
-                                my $space_to_add = $racename_length - length($racename) - 9;
-                                my $tab_to_add   = int( $space_to_add / $tablength )
-                                        + ( $space_to_add % $tablength ? 1 : 0 );
-                                $height_weight_line = 'RACENAME:' . $racename . "\t" x $tab_to_add;
-
-                                my ($m_ht_min, $m_ht_dice, $m_ht_sides, $m_ht_bonus,
-                                        $f_ht_min, $f_ht_dice, $f_ht_sides, $f_ht_bonus
-                                        )
-                                        = ( split ':', $RecordedBiosetTags{$dir}{$racename}{HEIGHT} )
-                                        [ 2, 3, 4, 5, 7, 8, 9, 10 ];
-
-                                my ($m_wt_min, $m_wt_dice, $m_wt_sides,
-                                        $f_wt_min, $f_wt_dice, $f_wt_sides
-                                        )
-                                        = ( split ':', $RecordedBiosetTags{$dir}{$racename}{WEIGHT} )
-                                                [ 2, 3, 4, 6, 7, 8 ];
-
-# 'HEIGHT:M:58:2:10:0:F:53:2:10:0'
-# 'WEIGHT:M:120:2:4:F:85:2:4'
-#
-# SEX:Male[BASEHT:58|HTDIEROLL:2d10|BASEWT:120|WTDIEROLL:2d4|TOTALWT:BASEWT+(HTDIEROLL*WTDIEROLL)]Female[BASEHT:53|HTDIEROLL:2d10|BASEWT:85|WTDIEROLL:2d4|TOTALWT:BASEWT+(HTDIEROLL*WTDIEROLL)]
-
-                                # Male height caculation
-                                $height_weight_line .= 'SEX:Male[BASEHT:'
-                                        . $m_ht_min
-                                        . '|HTDIEROLL:'
-                                        . $m_ht_dice . 'd'
-                                        . $m_ht_sides;
-                                $height_weight_line .= '+' . $m_ht_bonus if $m_ht_bonus > 0;
-                                $height_weight_line .= $m_ht_bonus              if $m_ht_bonus < 0;
-
-                                # Male weight caculation
-                                $height_weight_line .= '|BASEWT:'
-                                        . $m_wt_min
-                                        . '|WTDIEROLL:'
-                                        . $m_wt_dice . 'd'
-                                        . $m_wt_sides;
-                                $height_weight_line .= '|TOTALWT:BASEWT+(HTDIEROLL*WTDIEROLL)]';
-
-                                # Female height caculation
-                                $height_weight_line .= 'Female[BASEHT:'
-                                        . $f_ht_min
-                                        . '|HTDIEROLL:'
-                                        . $f_ht_dice . 'd'
-                                        . $f_ht_sides;
-                                $height_weight_line .= '+' . $f_ht_bonus if $f_ht_bonus > 0;
-                                $height_weight_line .= $f_ht_bonus              if $f_ht_bonus < 0;
-
-                                # Female weight caculation
-                                $height_weight_line .= '|BASEWT:'
-                                        . $f_wt_min
-                                        . '|WTDIEROLL:'
-                                        . $f_wt_dice . 'd'
-                                        . $f_wt_sides;
-                                $height_weight_line .= '|TOTALWT:BASEWT+(HTDIEROLL*WTDIEROLL)]';
-                                }
-
-                                if ( exists $RecordedBiosetTags{$dir}{$racename}{AGE} ) {
-
-                                # We only generate a comment from the AGE tag
-                                $age_line = '### Old tag for race '
-                                        . $racename . '=> '
-                                        . $RecordedBiosetTags{$dir}{$racename}{AGE};
-                                }
-
-                                print {$bioset_fh} $height_weight_line, "\n" if $height_weight_line;
-                                print {$bioset_fh} $age_line,           "\n" if $age_line;
-
-                                #       print BIOSET "\n";
-                        }
-
-                        close $bioset_fh;
-                }
-                }
-
-        }       # BEGIN
-
-}       # The entra encapsulation is a workaround for the bug
-        # [perl #30058] Perl 5.8.4 chokes on perl -e 'BEGIN { my %x=(); }'
-
-###
-### End of  closure for BIOSET generation funcitons
-###
-###############################################################
-###############################################################
 
 ###############################################################
 # generate_css
@@ -3771,8 +3529,8 @@ missing/inconsistant values.
 
 =head2 B<-nojep>
 
-Disable the new LstTidy::Parse::extractVariables function for the formula. This
-makes the script use the old style formula parser.
+Disable the new extractVariables function for the formula. This makes the
+script use the old style formula parser.
 
 =head2 B<-noxcheck> or B<-nx>
 
