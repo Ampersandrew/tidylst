@@ -17,7 +17,7 @@ use LstTidy::Log;
 
 our (@ISA, @EXPORT_OK);
 
-@EXPORT_OK = qw(getOption setOption isConversionActive);
+@EXPORT_OK = qw(getOption isConversionActive parseOptions setOption);
 
 # Default command line options
 my (%clOptions, %activate, %conversionEnabled);
@@ -62,13 +62,11 @@ my $errorMessage;
 (
    'Generate BONUS and PRExxx report'   => 0,
 
-   'ALL:Find Willpower'                 => 1,    # `Find the tags that use Willpower so that we can plan the conversion to Will
    'ALL:Fix Common Extended ASCII'      => 1,    # [ 1324519 ] ASCII characters
    'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
    'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
    'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
-   'SOURCE line replacement'            => 1,
-                                                 # After PCGEN 2.7.3
+
    'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types # [ 728038 ] BONUS:VISION must replace VISION:
    'ALL: 4.3.3 Weapon name change'      => 0,    # Bunch of name changed for SRD compliance
    'ALL:ADD Syntax Fix'                 => 0,    # [ 1678577 ] ADD: syntax no longer uses parens
@@ -80,6 +78,7 @@ my $errorMessage;
    'ALL:Convert ADD:SA to ADD:SAB'      => 0,    # [ 1864711 ] Convert ADD:SA to ADD:SAB
    'ALL:Convert SPELL to SPELLS'        => 0,    # [ 1070084 ] Convert SPELL to SPELLS
    'ALL:EQMOD has new keys'             => 0,    # [ 892746 ] KEYS entries were changed in the main files
+   'ALL:Find Willpower'                 => 0,    # `Find the tags that use Willpower so that we can plan the conversion to Will
    'ALL:MOVE:nn to MOVE:Walk,nn'        => 0,    # [ 1006285 ] Conversion MOVE:<number> to MOVE:Walk,<Number>
    'ALL:Multiple lines to one'          => 0,    # Reformat multiple lines to one line for RACE and TEMPLATE
    'ALL:PREALIGN conversion'            => 0,    # [ 1173567 ] Convert old style PREALIGN to new style
@@ -89,7 +88,6 @@ my $errorMessage;
    'ALL:PRESTAT needs a ,'              => 0,    # PRESTAT now only accepts the format PRESTAT:1,<stat>=<n>
    'ALL:Weaponauto simple conversion'   => 0,    # [ 1223873 ] WEAPONAUTO is no longer valid
    'ALL:Willpower to Will'              => 0,    # [ 1398237 ] ALL: Convert Willpower to Will
-   'BIOSET:generate the new files'      => 0,    # [ 663491 ] RACE: Convert AGE, HEIGHT and WEIGHT tags
    'CLASS: SPELLLIST from Spell.MOD'    => 0,    # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
    'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
    'CLASS:no more HASSPELLFORMULA'      => 0,    # [ 1973497 ] HASSPELLFORMULA is deprecated
@@ -110,6 +108,7 @@ my $errorMessage;
    'RACE:NoProfReq'                     => 0,    # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
    'RACE:Remove MFEAT and HITDICE'      => 0,    # [ 1514765 ] Conversion to remove old defaultmonster tags
    'RACE:TYPE to RACETYPE'              => 0,    # [ 1353255 ] TYPE to RACETYPE conversion
+   'SOURCE line replacement'            => 0,
    'SPELL:Add TYPE tags'                => 0,    # [ 653596 ] Add a TYPE tag for all SPELLs
    'TEMPLATE:HITDICESIZE to HITDIE'     => 0,    # [ 1070344 ] HITDICESIZE to HITDIE in templates.lst
    'WEAPONPROF:No more SIZE'            => 0,    # [ 845853 ] SIZE is no longer valid in the weaponprof files
@@ -417,7 +416,7 @@ sub _fixPath {
    if (defined $clOptions{$name} ) {
       $clOptions{$name} =~ tr{\\}{/};
 
-      if ($clOptions{$name} !~ qr{/$}) {
+      if ($clOptions{$name} !~ qr{/$} && $clOptions{$name}ne q{}) {
          $clOptions{$name} .= '/';
       }
    }

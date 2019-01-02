@@ -6,13 +6,14 @@ use warnings;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(convertEntities doTagConversions);
+our @EXPORT_OK = qw(convertEntities doTokenConversions);
 
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
+use LstTidy::Data qw(incCountInvalidTags);
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
 
@@ -256,6 +257,29 @@ my %convertWeaponName = (
    q{Warhammer (Dwarven Thrower)}  => q{Dwarven Thrower},
 );
 
+
+my %tokenAddTag = (
+   '.CLEAR'            => 1,
+   'CLASSSKILLS'       => 1,
+   'DOMAIN'            => 1,
+   'EQUIP'             => 1,
+   'FAVOREDCLASS'      => 1,
+   'LANGUAGE'          => 1,
+   'SAB'               => 1,
+   'SPELLCASTER'       => 1,
+   'SKILL'             => 1,
+   'TEMPLATE'          => 1,
+   'WEAPONPROFS'       => 1,
+
+   'FEAT'              => 1,    # Deprecated
+   'FORCEPOINT'        => 1,    # Deprecated - never heard of this!
+   'INIT'              => 1,    # Deprecated
+   'SPECIAL'           => 1,    # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats or Abilities.
+   'VFEAT'             => 1,    # Deprecated
+);
+
+
+
 =head2 addGenericDnDVersion
 
    Add 3e to GAMEMODE:DnD_v30e and 35e to GAMEMODE:DnD_v35e
@@ -264,12 +288,12 @@ my %convertWeaponName = (
 
 sub addGenericDnDVersion {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "GAMEMODE" && $tag->value =~ /DnD_/) {
+   if ($token->tag eq "GAMEMODE" && $token->value =~ /DnD_/) {
       my ( $has_3e, $has_35e, $has_DnD_v30e, $has_DnD_v35e );
 
-      for my $gameMode (split q{\|}, $tag->value) {
+      for my $gameMode (split q{\|}, $token->value) {
          $has_3e       = 1 if $gameMode eq "3e";
          $has_DnD_v30e = 1 if $gameMode eq "DnD_v30e";
          $has_35e      = 1 if $gameMode eq "35e";
@@ -277,64 +301,127 @@ sub addGenericDnDVersion {
       }
 
       if (!$has_3e && $has_DnD_v30e) { 
-         $tag->value($tag->value =~ s/(DnD_v30e)/3e\|$1/r)
+         $token->value($token->value =~ s/(DnD_v30e)/3e\|$1/r)
       }
 
       if (!$has_35e && $has_DnD_v35e) { 
-         $tag->value($tag->value =~ s/(DnD_v35e)/35e\|$1/r) 
+         $token->value($token->value =~ s/(DnD_v35e)/35e\|$1/r) 
       }
 
-      if ($tag->origTag ne $tag->fullRealTag) {
-         reportReplacement($tag);
+      if ($token->origToken ne $token->fullRealToken) {
+         reportReplacement($token);
       }
    }
 }
 
-=head2 convertAddTags
 
-   If the ADD tag parses as valid, the tag object is rewritten in standard
+=head2 categoriseAddToken
+
+   The ADD tag has a very adlib form. It can be many of the
+   ADD:Token define in the master_list but is also can be
+   of the form ADD:Any test whatsoever(...). And there is also
+   the fact that the ':' is used in the name...
+
+   In short, it's a pain.
+
+   The above describes the pre 5.12 syntax
+   For 5.12, the syntax has changed.
+   It is now:
+   ADD:subtoken[|number]|blah
+
+   This function return a list of three elements.
+      The first one is a return code
+      The second one is the effective TAG if any
+      The third one is anything found after the tag if any
+      The fourth one is the count if one is detected
+
+      Return code 0 = no valid ADD tag found,
+                          1 = old format token ADD tag found,
+                          2 = old format adlib ADD tag found.
+                          3 = 5.12 format ADD tag, using known token.
+                          4 = 5.12 format ADD tag, not using known token.
+
+=cut
+
+sub categoriseAddToken {
+
+   my $tag = shift;
+
+   # Old Format
+   if ($tag =~ /\s*ADD:([^\(]+)\((.+)\)(\d*)/) {
+
+      my ($token, $theRest, $numCount) = ($1, $2, $3);
+
+      if (!$numCount) {
+         $numCount = 1;
+      }
+
+      return ( exists $tokenAddTag{$token} ? 1 : 2, "ADD:$token", $theRest, $numCount);
+   }
+
+   # New format ADD tag.
+   if ($tag =~ /\s*ADD:([^\|]+)(\|\d+)?\|(.+)/) {
+
+      my ($token, $numCount, $optionList) = ($1, $2, $3);
+
+      if (!$numCount) {
+         $numCount = 1;
+      }
+
+      return ( exists $tokenAddTag{$token} ? 3 : 4, "ADD:$token", $optionList, $numCount);
+   }
+
+   # Not a good ADD tag.
+   return ( 0, "", undef, 0 );
+}
+
+
+
+=head2 convertAddTokens
+
+   If the ADD token parses as valid, the token object is rewritten in standard
    form.   
 
 =cut
 
-sub convertAddTags {
-   my ($tag) = @_;
+sub convertAddTokens {
+   my ($token) = @_;
 
-   my ($type, $addTag, $theRest, $addCount) = LstTidy::Parse::parseAddTag( $tag->fullTag );
-   # Return code 0 = no valid ADD tag found,
-   #             1 = old format token ADD tag found,
-   #             2 = old format adlib ADD tag found.
-   #             3 = 5.12 format ADD tag, using known token.
-   #             4 = 5.12 format ADD tag, not using token.
+   my ($type, $addToken, $theRest, $addCount) = categoriseAddToken( $token->fullToken );
+   # Return code 0 = no valid ADD token found,
+   #             1 = old format token ADD token found,
+   #             2 = old format adlib ADD token found.
+   #             3 = 5.12 format ADD token, using known token.
+   #             4 = 5.12 format ADD token, not using token.
 
    if ($type) {
 
-      # It's an ADD:token tag
+      # It's an ADD:token token
       if ( $type == 1) {
-         $tag->id($addTag);
-         $tag->value("($theRest)$addCount");
+         $token->tag($addToken);
+         $token->value("($theRest)$addCount");
       }
 
       if (isConversionActive('ALL:ADD Syntax Fix') && ($type == 1 || $type == 2)) {
 
-         $tag->id("ADD:");
-         $addTag =~ s/ADD://;
-         $tag->value("$addTag|$addCount|$theRest");
+         $token->tag("ADD:");
+         $addToken =~ s/ADD://;
+         $token->value("$addToken|$addCount|$theRest");
       }
 
    } else {
 
-      # the tag wasn't recognised as a valid ADD and is not a comment
-      if ( index( $tag->fullTag, '#' ) != 0 ) {
+      # the token wasn't recognised as a valid ADD and is not a comment
+      if ( index( $token->fullToken, '#' ) != 0 ) {
 
          getLogger()->notice(
-            qq{Invalid ADD tag "} . $tag->fullTag . q{" found in } . $tag->lineType,
-            $tag->file,
-            $tag->line
+            qq{Invalid ADD token "} . $token->fullToken . q{" found in } . $token->lineType,
+            $token->file,
+            $token->line
          );
 
-         LstTidy::Report::incCountInvalidTags($tag->lineType, $addTag); 
-         $tag->noMoreErrors(1);
+         incCountInvalidTags($token->lineType, $addToken); 
+         $token->noMoreErrors(1);
       }
    }
 }
@@ -354,65 +441,65 @@ sub convertAddTags {
 
 sub convertBonusCombatBAB {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "BONUS:COMBAT" && $tag->value =~ /^\|(BAB)\|/i) {
+   if ($token->tag eq "BONUS:COMBAT" && $token->value =~ /^\|(BAB)\|/i) {
 
       # Is the BAB in uppercase ?
       if ( $1 ne 'BAB' ) {
-         $tag->value($tag->value =~ s/\|bab\|/\|BAB\|/ir);
-         reportReplacement($tag, " (BAB must be in uppercase)");
+         $token->value($token->value =~ s/\|bab\|/\|BAB\|/ir);
+         reportReplacement($token, " (BAB must be in uppercase)");
       }
 
-      # Is there already a TYPE= in the tag?
-      my $is_type = $tag->value =~ /TYPE=/;
+      # Is there already a TYPE= in the token?
+      my $is_type = $token->value =~ /TYPE=/;
 
       # Is it the good one?
-      my $is_type_base = $is_type && $tag->value =~ /TYPE=Base/;
+      my $is_type_base = $is_type && $token->value =~ /TYPE=Base/;
 
       # Is there a .REPLACE at after the TYPE=Base?
-      my $is_type_replace = $is_type_base && $tag->value =~ /TYPE=Base\.REPLACE/;
+      my $is_type_replace = $is_type_base && $token->value =~ /TYPE=Base\.REPLACE/;
 
-      # Is there a PREDEFAULTMONSTER tag embedded?
-      my $is_predefaultmonster = $tag->value =~ /PREDEFAULTMONSTER/;
+      # Is there a PREDEFAULTMONSTER token embedded?
+      my $is_predefaultmonster = $token->value =~ /PREDEFAULTMONSTER/;
 
       # We must replace the CLASS, CLASS Level, SUBCLASS, SUBCLASSLEVEL and
       # PREDEFAULTMONSTER RACE lines
 
-      if (   $tag->lineType eq 'CLASS'
-         || $tag->lineType eq 'CLASS Level'
-         || $tag->lineType eq 'SUBCLASS'
-         || $tag->lineType eq 'SUBCLASSLEVEL'
-         || ( ( $tag->lineType eq 'RACE' || $tag->lineType eq 'TEMPLATE' ) && $is_predefaultmonster ) ) {
+      if (   $token->lineType eq 'CLASS'
+         || $token->lineType eq 'CLASS Level'
+         || $token->lineType eq 'SUBCLASS'
+         || $token->lineType eq 'SUBCLASSLEVEL'
+         || ( ( $token->lineType eq 'RACE' || $token->lineType eq 'TEMPLATE' ) && $is_predefaultmonster ) ) {
 
          if ( !$is_type ) {
 
             # We add the TYPE= statement at the end
-            $tag->value($tag->value .= '|TYPE=Base.REPLACE');
+            $token->value($token->value .= '|TYPE=Base.REPLACE');
 
             getLogger()->warning(
-               q{Adding "|TYPE=Base.REPLACE" to "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
+               q{Adding "|TYPE=Base.REPLACE" to "} . $token->fullToken . q{"},
+               $token->file,
+               $token->line
             );
 
             # The TYPE is already there but is it the correct one?
          } elsif ( !$is_type_replace && $is_type_base ) {
 
             # We add the .REPLACE part
-            $tag->value($tag->value =~ s/\|TYPE=Base/\|TYPE=Base.REPLACE/r);
+            $token->value($token->value =~ s/\|TYPE=Base/\|TYPE=Base.REPLACE/r);
             getLogger()->warning(
-               qq{Adding ".REPLACE" to "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
+               qq{Adding ".REPLACE" to "} . $token->fullToken . q{"},
+               $token->file,
+               $token->line
             );
 
          } elsif ( !$is_type_base ) {
 
             getLogger()->info(
-               qq{Verify the TYPE of "} . $tag->fullTag . q{"},
-               $tag->file,
-               $tag->line
+               qq{Verify the TYPE of "} . $token->fullToken . q{"},
+               $token->file,
+               $token->line
             );
          }
 
@@ -421,9 +508,9 @@ sub convertBonusCombatBAB {
          # If there is a BONUS:COMBAT elsewhere, we report it for manual
          # inspection.
          getLogger()->info(
-            qq{Verify this tag "} . $tag->origTag . q{"}, 
-            $tag->file, 
-            $tag->line
+            qq{Verify this token "} . $token->origToken . q{"}, 
+            $token->file, 
+            $token->line
          );
       }
    }
@@ -438,19 +525,19 @@ sub convertBonusCombatBAB {
 
 sub convertBonusMove {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
 
-   if ($tag->id eq 'BONUS:MOVE') {
+   if ($token->tag eq 'BONUS:MOVE') {
 
-      if ( $tag->lineType eq "EQUIPMENT" || $tag->lineType eq "EQUIPMOD" ) {
-         $tag->id("BONUS:POSTMOVEADD");
+      if ( $token->lineType eq "EQUIPMENT" || $token->lineType eq "EQUIPMOD" ) {
+         $token->tag("BONUS:POSTMOVEADD");
       }
       else {
-         $tag->id("BONUS:MOVEADD");
+         $token->tag("BONUS:MOVEADD");
       }
 
-      reportReplacement($tag);
+      reportReplacement($token);
    }
 }
 
@@ -464,13 +551,13 @@ sub convertBonusMove {
 
 sub convertCountFeatType {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "DEFINE") {
+   if ($token->tag eq "DEFINE") {
 
-      if ( $tag->value =~ /COUNT\[FEATTYPE=/i ) {
+      if ( $token->value =~ /COUNT\[FEATTYPE=/i ) {
 
-         my $value = $tag->value;
+         my $value = $token->value;
          my $new_value;
 
          while ( $value =~ /(.*?COUNT\[FEATTYPE=)([^\]]*)(\].*)/i ) {
@@ -491,9 +578,9 @@ sub convertCountFeatType {
 
          $new_value .= $value;
 
-         if ( $new_value ne $tag->value ) {
-            $tag->value($new_value);
-            reportReplacement($tag);
+         if ( $new_value ne $token->value ) {
+            $token->value($new_value);
+            reportReplacement($token);
          }
       }
    }
@@ -507,11 +594,11 @@ sub convertCountFeatType {
 
 sub convertDnD {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "GAMEMODE" && $tag->value eq "DnD") {
-      $tag->value("3e");
-      reportReplacement($tag);
+   if ($token->tag eq "GAMEMODE" && $token->value eq "DnD") {
+      $token->value("3e");
+      reportReplacement($token);
    }
 }
 
@@ -554,15 +641,15 @@ sub convertEntities {
 
 sub convertEquipmentAttacks {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
 
-   if ($tag->id eq 'ATTACKS' && $tag->lineType eq 'EQUIPMENT') {
+   if ($token->tag eq 'ATTACKS' && $token->lineType eq 'EQUIPMENT') {
 
-      $tag->id('BONUS:COMBAT');
-      $tag->value('|ATTACKS|' . $tag->value);
+      $token->tag('BONUS:COMBAT');
+      $token->value('|ATTACKS|' . $token->value);
 
-      reportReplacement($tag);
+      reportReplacement($token);
    }
 }
 
@@ -575,20 +662,20 @@ sub convertEquipmentAttacks {
 
 sub convertEqModKeys {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "EQMOD" || $tag->id eq "REPLACES" || ($tag->id eq "PRETYPE" && $tag->value =~ /^(\d+,)?EQMOD/)) {
+   if ($token->tag eq "EQMOD" || $token->tag eq "REPLACES" || ($token->tag eq "PRETYPE" && $token->value =~ /^(\d+,)?EQMOD/)) {
 
       for my $old_key (keys %convertEquipmodKey) {
 
-         if ($tag->value =~ /\Q$old_key\E/) {
+         if ($token->value =~ /\Q$old_key\E/) {
 
-            $tag->value($tag->value =~ s/\Q$old_key\E/$convertEquipmodKey{$old_key}/r);
+            $token->value($token->value =~ s/\Q$old_key\E/$convertEquipmodKey{$old_key}/r);
 
             getLogger()->notice(
-               qq(=> Replacing "$old_key" with "$convertEquipmodKey{$old_key}" in ") . $tag->origTag . q("),
-               $tag->file,
-               $tag->line
+               qq(=> Replacing "$old_key" with "$convertEquipmodKey{$old_key}" in ") . $token->origToken . q("),
+               $token->file,
+               $token->line
             );
          }
       }
@@ -605,13 +692,13 @@ sub convertEqModKeys {
 
 sub convertHitDieSize {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq 'HITDICESIZE' && $tag->lineType eq 'TEMPLATE') {
+   if ($token->tag eq 'HITDICESIZE' && $token->lineType eq 'TEMPLATE') {
 
-      # We just change the tag name, the value remains the same.
-      $tag->id('HITDIE');
-      reportReplacement($tag);
+      # We just change the token name, the value remains the same.
+      $token->tag('HITDIE');
+      reportReplacement($token);
    }
 }
 
@@ -623,12 +710,12 @@ sub convertHitDieSize {
 
 sub convertMove {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq "MOVE" && $tag->value =~ /^(\d+$)/ ) {
+   if ($token->tag eq "MOVE" && $token->value =~ /^(\d+$)/ ) {
 
-      $tag->value("Walk,$1");
-      reportReplacement($tag);
+      $token->value("Walk,$1");
+      reportReplacement($token);
    }
 }
 
@@ -643,37 +730,37 @@ sub convertMove {
 
 sub convertPreAlign {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ( $tag->id eq 'PREALIGN' ) {
+   if ( $token->tag eq 'PREALIGN' ) {
 
-      my $new_value = join ',', map { $convertPreAlign{$_} || $_ } split ',', $tag->value;
+      my $new_value = join ',', map { $convertPreAlign{$_} || $_ } split ',', $token->value;
 
-      if ( $tag->value ne $new_value ) {
-         $tag->value($new_value);
-         reportReplacement($tag);
+      if ( $token->value ne $new_value ) {
+         $token->value($new_value);
+         reportReplacement($token);
       }
 
-   } elsif (index( $tag->id, 'BONUS' ) == 0 || $tag->id eq 'SA' || $tag->id eq 'PREMULT' ) {
+   } elsif (index( $token->tag, 'BONUS' ) == 0 || $token->tag eq 'SA' || $token->tag eq 'PREMULT' ) {
 
       my $changed = 0;
 
-      while ( $tag->value =~ /PREALIGN:([^]|]*)/g ) {
+      while ( $token->value =~ /PREALIGN:([^]|]*)/g ) {
 
          my $old_value = $1;
          my $new_value = join ',', map { $convertPreAlign{$_} || $_ } split ',', $old_value;
 
          if ( $new_value ne $old_value ) {
 
-            $tag->value($new_value);
+            $token->value($new_value);
 
-            $tag->value($tag->value =~ s/PREALIGN:$old_value/PREALIGN:$new_value/r);
+            $token->value($token->value =~ s/PREALIGN:$old_value/PREALIGN:$new_value/r);
             $changed = 1;
          }
       }
 
       if ($changed) {
-         reportReplacement($tag);
+         reportReplacement($token);
       }
    }
 }
@@ -687,25 +774,25 @@ sub convertPreAlign {
 
 sub convertPreClass {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
 
-   if ( $tag->id eq 'PRECLASS' || $tag->id eq '!PRECLASS' ) {
+   if ( $token->tag eq 'PRECLASS' || $token->tag eq '!PRECLASS' ) {
 
-      if ( $tag->value !~ /^\d+,/ ) {
-         $tag->value('1,' . $tag->value);
-         reportReplacement($tag);
+      if ( $token->value !~ /^\d+,/ ) {
+         $token->value('1,' . $token->value);
+         reportReplacement($token);
       }
 
-   } elsif ( (index( $tag->id, 'BONUS' ) == 0 || $tag->id eq 'SA' || $tag->id eq 'PREMULT') && $tag->value =~ /PRECLASS:([^]|]*)/) {
+   } elsif ( (index( $token->tag, 'BONUS' ) == 0 || $token->tag eq 'SA' || $token->tag eq 'PREMULT') && $token->value =~ /PRECLASS:([^]|]*)/) {
 
       my $preclass_value = $1;
 
       if ( $preclass_value !~ /^\d+,/ ) {
 
          # There is no ',', we need to add one
-         $tag->value($tag->value =~ s/PRECLASS:(?!\d)/PRECLASS:1,/gr);
-         reportReplacement($tag);
+         $token->value($token->value =~ s/PRECLASS:(?!\d)/PRECLASS:1,/gr);
+         reportReplacement($token);
 
       }
    }
@@ -719,11 +806,11 @@ sub convertPreClass {
 
 sub convertPreDefaultMonster {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id =~ /BONUS/ && $tag->value =~ /PREDEFAULTMONSTER:N/) {
-      $tag->value($tag->value =~ s/[|]PREDEFAULTMONSTER:N//r);
-      reportReplacement($tag);
+   if ($token->tag =~ /BONUS/ && $token->value =~ /PREDEFAULTMONSTER:N/) {
+      $token->value($token->value =~ s/[|]PREDEFAULTMONSTER:N//r);
+      reportReplacement($token);
    }
 }
 
@@ -738,11 +825,11 @@ sub convertPreDefaultMonster {
 
 sub convertPreSpellType {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq 'PRESPELLTYPE') {
+   if ($token->tag eq 'PRESPELLTYPE') {
 
-      if ($tag->value =~ /^([^\d]+),(\d+),(\d+)/) {
+      if ($token->value =~ /^([^\d]+),(\d+),(\d+)/) {
 
          my ($spelltype, $num_spells, $num_levels) = ($1, $2, $3);
 
@@ -758,27 +845,27 @@ sub convertPreSpellType {
          }
 
          getLogger()->notice(
-            qq{Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:} . $tag->value . qq{" found and converted in } . $tag->lineType,
-            $tag->file,
-            $tag->line
+            qq{Invalid standalone PRESPELLTYPE token "PRESPELLTYPE:} . $token->value . qq{" found and converted in } . $token->lineType,
+            $token->file,
+            $token->line
          );
 
-         $tag->value($value);
+         $token->value($value);
       }
 
       # Continuing the fix - fix it anywhere. This is meant to address PRE tags
       # that are on the end of other tags or in PREMULTS.
       # I'll leave out the pipe-delimited error here, since it's more likely
-      # to end up with confusion when the tag isn't standalone.
+      # to end up with confusion when the token isn't standalone.
 
-   } elsif ($tag->value =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
+   } elsif ($token->value =~ /PRESPELLTYPE:([^\d]+),(\d+),(\d+)/) {
 
-      $tag->value($tag->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
+      $token->value($token->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
       getLogger()->notice(
-         qq{Invalid embedded PRESPELLTYPE tag "} . $tag->fullTag . q{" found and converted } . $tag->lineType . q{.},
-         $tag->file,
-         $tag->line
+         qq{Invalid embedded PRESPELLTYPE token "} . $token->fullToken . q{" found and converted } . $token->lineType . q{.},
+         $token->file,
+         $token->line
       );
    }
 }
@@ -792,12 +879,12 @@ sub convertPreSpellType {
 
 sub convertPreStat {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq 'PRESTAT' && index( $tag->value, ',' ) == -1 ) {
+   if ($token->tag eq 'PRESTAT' && index( $token->value, ',' ) == -1 ) {
       # There is no ',', we need to add one
-      $tag->value('1,' . $tag->value);
-      reportReplacement($tag);
+      $token->value('1,' . $token->value);
+      reportReplacement($token);
    }
 }
 
@@ -809,27 +896,27 @@ sub convertPreStat {
 
 sub convertToSRDName {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
    if (
-          $tag->id eq 'WEAPONBONUS'
-       || $tag->id eq 'WEAPONAUTO'
-       || $tag->id eq 'PROF'
-       || $tag->id eq 'GEAR'
-       || $tag->id eq 'FEAT'
-       || $tag->id eq 'PROFICIENCY'
-       || $tag->id eq 'DEITYWEAP'
-       || $tag->id eq 'MFEAT' 
+          $token->tag eq 'WEAPONBONUS'
+       || $token->tag eq 'WEAPONAUTO'
+       || $token->tag eq 'PROF'
+       || $token->tag eq 'GEAR'
+       || $token->tag eq 'FEAT'
+       || $token->tag eq 'PROFICIENCY'
+       || $token->tag eq 'DEITYWEAP'
+       || $token->tag eq 'MFEAT' 
     ) {
 
        WEAPONNAME:
        for my $name ( keys %convertWeaponName ) {
 
-          my $value = $tag->value;
+          my $value = $token->value;
 
           if ($value =~ s/\Q$name\E/$convertWeaponName{$name}/ig ) {
-             $tag->value($value);
-             reportReplacement($tag);
+             $token->value($value);
+             reportReplacement($token);
              last WEAPONNAME;
           }
        }
@@ -846,15 +933,15 @@ sub convertToSRDName {
 
 sub convertVisionCommas {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id eq 'VISION' && $tag->value !~ /(\.ADD,|1,)/i) {
+   if ($token->tag eq 'VISION' && $token->value !~ /(\.ADD,|1,)/i) {
 
-      my $value = $tag->value;
+      my $value = $token->value;
 
       if ($value =~ tr{,}{|}) {
-         $tag->value($value);
-         reportReplacement($tag);
+         $token->value($value);
+         reportReplacement($token);
       }
    }
 }
@@ -863,27 +950,27 @@ sub convertVisionCommas {
 
    'ALL:Weaponauto simple conversion'
 
-   WEAPONAUTO:Simple tag becomes AUTO:WEAPONPROF|TYPE.Simple etc.
+   WEAPONAUTO:Simple token becomes AUTO:WEAPONPROF|TYPE.Simple etc.
 
 =cut
 
 sub convertWeaponAuto {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->id =~ /WEAPONAUTO/) {
-      $tag->id('AUTO');
+   if ($token->tag =~ /WEAPONAUTO/) {
+      $token->tag('AUTO');
 
-      my $value = $tag->value;
+      my $value = $token->value;
       $value =~ s/Simple/TYPE.Simple/;
       $value =~ s/Martial/TYPE.Martial/;
       $value =~ s/Exotic/TYPE.Exotic/;
       $value =~ s/SIMPLE/TYPE.Simple/;
       $value =~ s/MARTIAL/TYPE.Martial/;
       $value =~ s/EXOTIC/TYPE.Exotic/;
-      $tag->value("WEAPONPROF|$value");
+      $token->value("WEAPONPROF|$value");
 
-      reportReplacement($tag);
+      reportReplacement($token);
    }
 }
 
@@ -891,72 +978,72 @@ sub convertWeaponAuto {
 
    The BONUS:CHECKS and PRECHECKBASE tags must be converted
 
-   BONUS:CHECKS|<list of save types>|<other tag parameters>
+   BONUS:CHECKS|<list of save types>|<other token parameters>
    PRECHECKBASE:<number>,<list of saves>
 
 =cut
 
 sub convertWillpower{
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ( $tag->id eq 'BONUS:CHECKS' ) {
-      # We split the tag parameters
-      my @values = split q{\|}, $tag->value;
+   if ( $token->tag eq 'BONUS:CHECKS' ) {
+      # We split the token parameters
+      my @values = split q{\|}, $token->value;
 
       # The Willpower keyword must be replaced only in parameter 1
       # (parameter 0 is empty since the value begins with | )
       if ( $values[1] =~ s{ \b Willpower \b }{Will}xmsg ) {
-         $tag->value(join q{|}, @values);
-         reportReplacement($tag);
+         $token->value(join q{|}, @values);
+         reportReplacement($token);
       }
 
-   } elsif ( $tag->id eq 'PRECHECKBASE' ) {
+   } elsif ( $token->tag eq 'PRECHECKBASE' ) {
 
       # Since the first parameter is a number, no need to
       # split before replacing.
-      my $value = $tag->value =~ s{ \b Willpower \b }{Will}xmsgr;
+      my $value = $token->value =~ s{ \b Willpower \b }{Will}xmsgr;
 
-      if ( $value ne $tag->value ) {
-         $tag->value($value);
-         reportReplacement($tag);
+      if ( $value ne $token->value ) {
+         $token->value($value);
+         reportReplacement($token);
       }
    }
 }
 
-=head2 doTagConversions
+=head2 doTokenConversions
 
-   This function does tag conversion. It is called on individual tags after they have been separated.
+   This function does token conversion. It is called on individual tags after they have been separated.
  
    Most commun use is for addition, conversion or removal of tags.
 
 =cut
 
-sub doTagConversions {
+sub doTokenConversions {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if (isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($tag)      }
-   if (isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($tag)         }
-   if (isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($tag)    }
-   if (isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($tag)         }
-   if (isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($tag)           }
-   if (isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($tag)     }
-   if (isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($tag)         }
-   if (isConversionActive('ALL:Find Willpower'))                  { reportWillpower($tag)          }
-   if (isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($tag)              }
-   if (isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($tag)          }
-   if (isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($tag)          }
-   if (isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($tag)          }
-   if (isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($tag)      }
-   if (isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($tag)           }
-   if (isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($tag)        }
-   if (isConversionActive('ALL:Willpower to Will') )              { convertWillpower($tag)         }
-   if (isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($tag)  }
-   if (isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($tag)     }
-   if (isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($tag)               }
-   if (isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($tag)         }
-   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($tag) }
-   if (isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($tag)        }
+   if (isConversionActive('ALL: , to | in VISION'))               { convertVisionCommas($token)      }
+   if (isConversionActive('ALL: 4.3.3 Weapon name change'))       { convertToSRDName($token)         }
+   if (isConversionActive('ALL:Add TYPE=Base.REPLACE'))           { convertBonusCombatBAB($token)    }
+   if (isConversionActive('ALL:BONUS:MOVE conversion'))           { convertBonusMove($token)         }
+   if (isConversionActive('ALL:CMP remove PREALIGN'))             { removePreAlign($token)           }
+   if (isConversionActive('ALL:COUNT[FEATTYPE=...'))              { convertCountFeatType($token)     }
+   if (isConversionActive('ALL:EQMOD has new keys'))              { convertEqModKeys($token)         }
+   if (isConversionActive('ALL:Find Willpower'))                  { reportWillpower($token)          }
+   if (isConversionActive('ALL:MOVE:nn to MOVE:Walk,nn'))         { convertMove($token)              }
+   if (isConversionActive('ALL:PREALIGN conversion'))             { convertPreAlign($token)          }
+   if (isConversionActive('ALL:PRECLASS needs a ,'))              { convertPreClass($token)          }
+   if (isConversionActive('ALL:PRERACE needs a ,'))               { reformatPreRace($token)          }
+   if (isConversionActive('ALL:PRESPELLTYPE Syntax'))             { convertPreSpellType($token)      }
+   if (isConversionActive('ALL:PRESTAT needs a ,'))               { convertPreStat($token)           }
+   if (isConversionActive('ALL:Weaponauto simple conversion'))    { convertWeaponAuto($token)        }
+   if (isConversionActive('ALL:Willpower to Will') )              { convertWillpower($token)         }
+   if (isConversionActive('EQUIPMENT: remove ATTACKS'))           { convertEquipmentAttacks($token)  }
+   if (isConversionActive('PCC:GAMEMODE Add to the CMP DnD_'))    { addGenericDnDVersion($token)     }
+   if (isConversionActive('PCC:GAMEMODE DnD to 3e'))              { convertDnD($token)               }
+   if (isConversionActive('RACE:CSKILL to MONCSKILL'))            { reportRaceCSkill($token)         }
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses'))  { convertPreDefaultMonster($token) }
+   if (isConversionActive('TEMPLATE:HITDICESIZE to HITDIE'))      { convertHitDieSize($token)        }
 }
 
 =head2 ensureLeadingDigit
@@ -967,13 +1054,13 @@ sub doTagConversions {
 
 sub ensureLeadingDigit {
 
-   my ($tag, $value) = @_;
+   my ($token, $value) = @_;
 
    if ( $value !~ / \A \d+ [,] /xms ) {
 
       # There is no ',', we need to add one
-      $tag->value($tag->value =~ s/ PRERACE: (?!\d) /PRERACE:1,/xmsgr);
-      reportReplacement($tag);
+      $token->value($token->value =~ s/ PRERACE: (?!\d) /PRERACE:1,/xmsgr);
+      reportReplacement($token);
    }
 }
 
@@ -986,54 +1073,54 @@ sub ensureLeadingDigit {
 
 sub reformatPreRace {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ( $tag->id eq 'PRERACE' || $tag->id eq '!PRERACE' ) {
+   if ( $token->tag eq 'PRERACE' || $token->tag eq '!PRERACE' ) {
 
-      if ( $tag->value !~ / \A \d+ [,], /xms ) {
+      if ( $token->value !~ / \A \d+ [,], /xms ) {
 
-         $tag->value('1,' . $tag->value);
-         reportReplacement($tag);
+         $token->value('1,' . $token->value);
+         reportReplacement($token);
       }
 
-   } elsif ( index( $tag->id, 'BONUS' ) == 0 && $tag->value =~ /PRERACE:([^]|]*)/ ) {
-      ensureLeadingDigit($tag, $1);
-   } elsif ( ( $tag->id eq 'SA' || $tag->id eq 'PREMULT' ) && $tag->value =~ / PRERACE: ( [^]|]* ) /xms) {
-      ensureLeadingDigit($tag, $1);
+   } elsif ( index( $token->tag, 'BONUS' ) == 0 && $token->value =~ /PRERACE:([^]|]*)/ ) {
+      ensureLeadingDigit($token, $1);
+   } elsif ( ( $token->tag eq 'SA' || $token->tag eq 'PREMULT' ) && $token->value =~ / PRERACE: ( [^]|]* ) /xms) {
+      ensureLeadingDigit($token, $1);
    }
 }
 
 =head2 removePreAlign
 
-   Remove all the PREALIGN tag from within BONUS, SA and VFEAT tags.
+   Remove all the PREALIGN token from within BONUS, SA and VFEAT tags.
 
 =cut
 
 sub removePreAlign {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ( $tag->value =~ /PREALIGN/ ) {
+   if ( $token->value =~ /PREALIGN/ ) {
 
-      if ( $tag->value =~ /PREMULT/ ) {
+      if ( $token->value =~ /PREMULT/ ) {
          getLogger()->warning(
-            qq(PREALIGN found in PREMULT, you will have to remove it yourself ") . $tag->origTag . q("),
-            $tag->file,
-            $tag->line
+            qq(PREALIGN found in PREMULT, you will have to remove it yourself ") . $token->origToken . q("),
+            $token->file,
+            $token->line
          );
 
-      } elsif ($tag->id =~ /^BONUS/ || $tag->id eq 'SA' || $tag->id eq 'VFEAT' ) {
+      } elsif ($token->tag =~ /^BONUS/ || $token->tag eq 'SA' || $token->tag eq 'VFEAT' ) {
 
-         # Remove all the PREALIGN tag from within BONUS, SA and VFEAT tags.
-         $tag->value(join '|', grep { !/^(!?)PREALIGN/ } split '\|', $tag->value);
-         reportReplacement($tag);
+         # Remove all the PREALIGN token from within BONUS, SA and VFEAT tags.
+         $token->value(join '|', grep { !/^(!?)PREALIGN/ } split '\|', $token->value);
+         reportReplacement($token);
 
       } else {
 
          getLogger()->warning(
-            qq(Found PREALIGN where I was not expecting it ") . $tag->origTag . q("),
-            $tag->file,
-            $tag->line
+            qq(Found PREALIGN where I was not expecting it ") . $token->origToken . q("),
+            $token->file,
+            $token->line
          );
       }
    }
@@ -1048,13 +1135,13 @@ sub removePreAlign {
 
 sub reportRaceCSkill {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->lineType eq "RACE" && $tag->id eq "CSKILL") {
+   if ($token->lineType eq "RACE" && $token->tag eq "CSKILL") {
       getLogger()->warning(
          qq{Found CSKILL in RACE file},
-         $tag->file,
-         $tag->line
+         $token->file,
+         $token->line
       );
    }
 }
@@ -1067,11 +1154,11 @@ sub reportRaceCSkill {
 
 sub reportReplacement {
 
-   my ($tag, $suffix) = @_;
-   my $output = (defined $suffix) ? qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . qq(" $suffix)
-                                  : qq(Replacing ") . $tag->origTag  . q(" with ") . $tag->fullTag . q(");
+   my ($token, $suffix) = @_;
+   my $output = (defined $suffix) ? qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . qq(" $suffix)
+                                  : qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . q(");
 
-   getLogger()->warning($output, $tag->file, $tag->line);
+   getLogger()->warning($output, $token->file, $token->line);
 }
 
 =head2 reportWillpower
@@ -1082,12 +1169,12 @@ sub reportReplacement {
 
 sub reportWillpower {
 
-   my ($tag) = @_;
+   my ($token) = @_;
 
-   if ($tag->value =~ m{ \b Willpower \b }xmsi && getOption('exportlist')) {
+   if ($token->value =~ m{ \b Willpower \b }xmsi && getOption('exportlist')) {
 
-      # Write the tag and related information to the willpower.csv file
-      my $output = q{"} . $tag->fullTag . q{","} . $tag->line . q{","} . $tag->file . qq{"\n};
+      # Write the token and related information to the willpower.csv file
+      my $output = q{"} . $token->fullToken . q{","} . $token->line . q{","} . $token->file . qq{"\n};
 
       LstTidy::Report::printToExportList($output);
    }
