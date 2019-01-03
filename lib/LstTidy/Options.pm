@@ -128,27 +128,28 @@ sub parseOptions {
    local @ARGV = @_;
 
    # Set up the defaults for each of the options
-   my $basePath       = q{};     # Base path for the @ replacement
-   my $convert        = q{};     # Activate a standard conversion
-   my $exportList     = 0;       # Export lists of object in CVS format
-   my $fileType       = q{};     # File type to use if no PCC are read
-   my $gamemode       = q{};     # GAMEMODE filter for the PCC files
-   my $help           = 0;       # Need help? Display the usage
-   my $htmlHelp       = 0;       # Generate the HTML doc
-   my $inputPath      = q{};     # Path for the input directory
-   my $man            = 0;       # Display the complete doc (man page)
-   my $missingHeader  = 0;       # Report the tags that have no defined header.
-   my $noJEP          = 0;       # Do not use the new parse_jep function
-   my $noWarning      = 0;       # Do not display warning messages in the report
-   my $noXCheck       = 0;       # Disable the x-check validations
-   my $oldSourceTag   = 0;       # Use | instead of \t for the SOURCExxx line
-   my $outputError    = q{};     # Path and file name of the error log
-   my $outputPath     = q{};     # Path for the ouput directory
-   my $report         = 0;       # Generate tag usage report
-   my $systemPath     = q{};     # Path to the system (game mode) files
-   my $test           = 0;       # Internal; for tests only
-   my $warningLevel   = 'notice';  # Warning level for error output
-   my $xCheck         = 1;       # Perform cross-check validation
+   my $basePath       = q{};        # Base path for the @ replacement
+   my $convert        = q{};        # Activate a standard conversion
+   my $exportList     = 0;          # Export lists of object in CVS format
+   my $fileType       = q{};        # File type to use if no PCC are read
+   my $gamemode       = q{};        # GAMEMODE filter for the PCC files
+   my $help           = 0;          # Need help? Display the usage
+   my $htmlHelp       = 0;          # Generate the HTML doc
+   my $inputPath      = q{};        # Path for the input directory
+   my $man            = 0;          # Display the complete doc (man page)
+   my $missingHeader  = 0;          # Report the tags that have no defined header.
+   my $noJEP          = 0;          # Do not use the new parse_jep function
+   my $noWarning      = 0;          # Do not display warning messages in the report
+   my $noXCheck       = 0;          # Disable the x-check validations
+   my $oldSourceTag   = 0;          # Use | instead of \t for the SOURCExxx line
+   my $outputError    = q{};        # Path and file name of the error log
+   my $outputPath     = q{};        # Path for the ouput directory
+   my $report         = 0;          # Generate tag usage report
+   my $systemPath     = q{};        # Path to the system (game mode) files
+   my $test           = 0;          # Internal; for tests only
+   my $vendorPath     = q{};        # Path for the vendor directory
+   my $warningLevel   = 'notice';   # Warning level for error output
+   my $xCheck         = 1;          # Perform cross-check validation
 
    $errorMessage = "";
 
@@ -174,6 +175,7 @@ sub parseOptions {
          'report|r'          =>  \$report,
          'systempath|s=s'    =>  \$systemPath,
          'test'              =>  \$test,
+         'vendorpath|v=s'    =>  \$vendorPath,
          'warninglevel|wl=s' =>  \$warningLevel,
          'xcheck|x'          =>  \$xCheck);
 
@@ -197,6 +199,7 @@ sub parseOptions {
          'report'          =>  $report,
          'systempath'      =>  $systemPath,
          'test'            =>  $test,
+         'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
          'xcheck'          =>  $xCheck);
 
@@ -468,6 +471,7 @@ sub _processOptions {
    _fixPath('basepath');
    _fixPath('inputpath');
    _fixPath('outputpath');
+   _fixPath('vendorpath');
 };
 
 

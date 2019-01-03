@@ -535,7 +535,7 @@ our %masterOrder = (
       'VISION:.CLEAR',
       'VISION:*',
       'SR',
-      'DR',
+      'DR:*',
       'REP',
       'COST',
       'KIT',
@@ -926,6 +926,7 @@ our %masterOrder = (
       'FACT:Title',
       'FACT:Worshippers',
       'FACT:Appearance',
+      'FACT:*',
       'FACTSET:Race',
       'FACTSET:*',
       'SYMBOL',                        # Deprecated 6.05.01
@@ -984,7 +985,7 @@ our %masterOrder = (
       'DESC:.CLEAR',
       'DESC:*',
       'SPELLKNOWN:DOMAIN:*',
-      'SPELLLEVEL:DOMAIN',
+      'SPELLLEVEL:DOMAIN:*',
       'UNENCUMBEREDMOVE',
       'FEAT:*',                        # Deprecated 6.05.01
       'VFEAT:*',                       # Deprecated 6.05.01
@@ -1068,6 +1069,7 @@ our %masterOrder = (
       'BONUS:EQMWEAPON:*',
       'BONUS:ESIZE:*',
       'BONUS:ITEMCOST:*',
+      'BONUS:LOADMULT:*',
       'BONUS:WEAPON:*',
       @QUALITY_Tags,
       'SPROP:.CLEAR',
@@ -1085,6 +1087,10 @@ our %masterOrder = (
       'DESC:*',
       'DESCISPI',
       'INFO:*',
+      'SPELLKNOWN:DOMAIN:*',
+      'SPELLLEVEL:DOMAIN',
+      'SPELLKNOWN:CLASS:*',
+      'SPELLLEVEL:CLASS',
       'TEMPBONUS:*',
       'TEMPDESC',
       'UNENCUMBEREDMOVE',
@@ -1132,7 +1138,7 @@ our %masterOrder = (
       'BONUS:ITEMCOST:*',
       'BONUS:WEAPON:*',
       'SPROP:*',
-      'ABILITY',
+      'ABILITY:*',
       'FUMBLERANGE',
       'SAB:.CLEAR',
       'SAB:*',
@@ -1149,6 +1155,7 @@ our %masterOrder = (
       'SPELL',
       'SPELLS:*',
       'AUTO:EQUIP:*',
+      'AUTO:WEAPONPROF:*',
       'UNENCUMBEREDMOVE',
 
       'RATEOFFIRE',                    #  Deprecated 6.05.01
@@ -1252,6 +1259,11 @@ our %masterOrder = (
    'GLOBALMODIFIER' => [
       '000GlobalmonName',
       'EXPLANATION',
+   ],
+
+   'KIT AGE' => [
+      'AGE',
+      @PreTags,
    ],
 
    'KIT ALIGN' => [
@@ -1381,6 +1393,7 @@ our %masterOrder = (
 
    'KIT STARTPACK' => [
       'STARTPACK',
+      'NAMEISPI',
       'TYPE',
       'VISIBLE',
       'APPLY',
@@ -1423,6 +1436,7 @@ our %masterOrder = (
    'MASTERBONUSRACE' => [
       '000MasterBonusRace',
       'TYPE',
+      'DEFINE:*',
       'BONUS:ABILITYPOOL:*',
       'BONUS:CASTERLEVEL:*',
       'BONUS:CHECKS:*',
@@ -1692,7 +1706,7 @@ our %masterOrder = (
       'CHOOSE',
       'SELECT',
       'SITUATION',
-      'DEFINE',
+      'DEFINE:*',
       'DEFINESTAT:*',
       'AUTO:EQUIP:*',
       'AUTO:LANG:*',
@@ -1796,6 +1810,7 @@ our %masterOrder = (
       'TEMPDESC',
       'TEMPBONUS:*',
       'TEMPVALUE',
+      'FACTSET:*',
    ],
 
    'STAT' => [
@@ -1994,7 +2009,7 @@ our %masterOrder = (
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
-      'PREVAREQ:*',
+      @PreTags,
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -2181,7 +2196,7 @@ our %masterOrder = (
       'DESC:.CLEAR',
       'DESC:*',
       'TEMPDESC',
-      'TEMPBONUS',
+      'TEMPBONUS:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -2904,6 +2919,10 @@ my %tokenHeader = (
    'KIT STARTPACK' => {
       'STARTPACK'                => '# Kit Name',
       'APPLY'                    => 'Apply method to char',
+   },
+
+   'KIT AGE' => {
+      'AGE'                      => '# Age',
    },
 
    'KIT CLASS' => {

@@ -57,7 +57,6 @@ use LstTidy::Parse qw(
    normaliseFile
    parseLine
    parseSystemFiles
-   parseToken
    process000
    );
 use LstTidy::Report qw(closeExportListFileHandles openExportListFileHandles);
@@ -407,7 +406,7 @@ if (getOption('inputpath')) {
 
             # All of the individual tag parsing and correcting happens here,
             # this potentally modifys the tag
-            parseToken($token);
+            $token->process();
 
             # If the tag has been altered, the the PCC file needs to be
             # written and the line should be overwritten.
@@ -426,7 +425,8 @@ if (getOption('inputpath')) {
                # Extract the name of the LST file from the token->value, and
                # store it back into token->value
                $token->value($token->value =~ s/^([^|]*).*/$1/r);
-               my $lstFile = find_full_path( $token->value, $currentbasedir, getOption('basepath') );
+
+               my $lstFile = find_full_path($token->value, $currentbasedir);
                $filesToParse{$lstFile} = $token->tag;
 
                # Check to see if the file exists
@@ -1049,11 +1049,8 @@ sub FILETYPE_parse {
 
       my $line_info;
 
-      # Convert the non-ascii character in the line if that conversion is
-      # active, otherwise just copy it.
-      my $new_line = isConversionActive('ALL:Fix Common Extended ASCII')
-                        ? convertEntities($thisLine)
-                        : $thisLine;
+      # Convert the non-ascii character in the line
+      my $new_line = convertEntities($thisLine);
 
       # Remove spaces at the end of the line
       $new_line =~ s/\s+$//;
@@ -1183,7 +1180,7 @@ sub FILETYPE_parse {
             );
 
             # Potentally modify the tag
-            parseToken( $token );
+            $token->process();
 
             my $key = $token->realTag;
 
@@ -1905,18 +1902,19 @@ sub FILETYPE_parse {
 # Most commun use is for addition, conversion or removal of tags.
 #
 # Paramter: $lines_ref  Ref to an array containing lines of tags
-#               $filetype   Type for the current file
-#               $filename   Name of the current file
+#           $filetype   Type for the current file
+#           $filename   Name of the current file
 #
-#               The $line_ref entries may now be in a new format, we need to find out
-#               before using it. ref($line_ref) eq 'ARRAY'means new format.
+#           The $line_ref entries may now be in a new format, we need to find out
+#           before using it. ref($line_ref) eq 'ARRAY'means new format.
 #
-#               The format is: [ $curent_linetype,
-#                                       \%line_tokens,
-#                                       $last_main_line,
-#                                       $curent_entity,
-#                                       $line_info,
-#                                       ];
+#           The format is: [ 
+#                            $curent_linetype,
+#                            \%line_tokens,
+#                            $last_main_line,
+#                            $curent_entity,
+#                            $line_info,
+#                          ];
 #
 
 {
@@ -1929,186 +1927,119 @@ sub FILETYPE_parse {
 
       my ( $lines_ref, $filetype, $filename ) = @_;
 
-      ##################################################################
-      # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
+      ###############################################################
+      # Reformat multiple lines to one line for RACE and TEMPLATE.
       #
+      # This is only useful for those who like to start new entries
+      # with multiple lines (for clarity) and then want them formatted
+      # properly for submission.
 
-#  if(isConversionActive('CLASS: SPELLLIST from Spell.MOD'))
-#  {
-#       if($filetype eq 'SPELL')
-#       {
-#       # All the Spell Name.MOD entries must be parsed to find the
-#       # CLASSES and DOMAINS tags.
-#       #
-#       # The .MOD lines that have no other tags then CLASSES or DOMAINS
-#       # will be removed entirely.
-#
-#       my ($directory,$spellfile) = File::Basename::dirname($filename);
-#
-#       for(my $i = 0; $i < @$lines_ref; $i++)
-#       {
-#               # Is this a .MOD line?
-#               next unless ref($lines_ref->[$i]) eq 'ARRAY' &&
-#                               $lines_ref->[$i][0] eq 'SPELL';
-#
-#               my $is_mod = $lines_ref->[$i][3] =~ /(.*)\.MOD$/;
-#               my $spellname = $is_mod ? $1 : $lines_ref->[$i][3];
-#
-#               # Is there a CLASSES tag?
-#               if(exists $lines_ref->[$i][1]{'CLASSES'})
-#               {
-#               my $tag = substr($lines_ref->[$i][1]{'CLASSES'}[0],8);
-#
-#               # We find each group of classes of the same level
-#               for (split /\|/, $tag)
-#               {
-#               if(/(.*)=(\d+)$/)
-#               {
-#                       my $level = $2;
-#                       my $classes = $1;
-#
-#                       for my $class (split /,/, $classes)
-#                       {
-#                       #push @{$class_spell{
-#                       }
-#               }
-#               else
-#               {
-#                       ewarn( NOTICE,  qq(!! No level were given for "$_" found in "$lines_ref->[$i][1]{'CLASSES'}[0]"),
-#                       $filename,$i );
-#               }
-#               }
-#
-##              ewarn( NOTICE,  qq(**** $spellname: $_),$filename,$i for @classes_by_level );
-                #               }
-                #
-                #               if(exists $lines_ref->[$i][1]{'DOMAINS'})
-                #               {
-                #               my $tag = substr($lines_ref->[$i][1]{'DOMAINS'}[0],8);
-                #               my @domains_by_level = split /\|/, $tag;
-                #
-                #               ewarn( NOTICE,  qq(**** $spellname: $_),$filename,$i for @domains_by_level );
-                #               }
-                #       }
-                #       }
-                #  }
+      if ( isConversionActive('ALL:Multiple lines to one') ) {
+         my %valid_line_type = (
+            'RACE'  => 1,
+            'TEMPLATE' => 1,
+         );
 
-                ###############################################################
-                # Reformat multiple lines to one line for RACE and TEMPLATE.
-                #
-                # This is only useful for those who like to start new entries
-                # with multiple lines (for clarity) and then want them formatted
-                # properly for submission.
+         if ( exists $valid_line_type{$filetype} ) {
+            my $last_main_line = -1;
 
-                if ( isConversionActive('ALL:Multiple lines to one') ) {
-                my %valid_line_type = (
-                        'RACE'  => 1,
-                        'TEMPLATE' => 1,
-                );
+            # Find all the lines with the same identifier
+            ENTITY:
+            for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
 
-                if ( exists $valid_line_type{$filetype} ) {
-                        my $last_main_line = -1;
+               # Is this a linetype we are interested in?
+               if ( ref $lines_ref->[$i] eq 'ARRAY' && exists $valid_line_type{ $lines_ref->[$i][0] } )
+               {
+                  my $first_line = $i;
+                  my $last_line  = $i;
+                  my $old_length;
+                  my $curent_linetype = $lines_ref->[$i][0];
+                  my %new_line        = %{ $lines_ref->[$i][1] };
+                     $last_main_line  = $i;
+                  my $entity_name     = $lines_ref->[$i][3];
+                  my $line_info       = $lines_ref->[$i][4];
+                  my $j               = $i + 1;
+                  my $extra_entity    = 0;
+                  my @new_lines;
 
-                        # Find all the lines with the same identifier
-                        ENTITY:
-                        for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
+                  #Find all the line with the same entity name
+                  ENTITY_LINE:
+                  for ( ; $j < @{$lines_ref}; $j++ ) {
 
-                                # Is this a linetype we are interested in?
-                                if ( ref $lines_ref->[$i] eq 'ARRAY'
-                                && exists $valid_line_type{ $lines_ref->[$i][0] } )
-                                {
-                                my $first_line = $i;
-                                my $last_line  = $i;
-                                my $old_length;
-                                my $curent_linetype = $lines_ref->[$i][0];
-                                my %new_line            = %{ $lines_ref->[$i][1] };
-                                $last_main_line = $i;
-                                my $entity_name  = $lines_ref->[$i][3];
-                                my $line_info   = $lines_ref->[$i][4];
-                                my $j           = $i + 1;
-                                my $extra_entity = 0;
-                                my @new_lines;
+                     # Skip empty and comment lines
+                     if (ref( $lines_ref->[$j] ) ne 'ARRAY' || $lines_ref->[$j][0] eq 'HEADER' || ref( $lines_ref->[$j][1] ) ne 'HASH') {
+                        next ENTITY_LINE 
+                     }
 
-                                #Find all the line with the same entity name
-                                ENTITY_LINE:
-                                for ( ; $j < @{$lines_ref}; $j++ ) {
+                     # Is it an entity of the same name?
+                     if ($lines_ref->[$j][0] eq $curent_linetype && $entity_name eq $lines_ref->[$j][3]) {
 
-                                        # Skip empty and comment lines
-                                        next ENTITY_LINE
-                                                if ref( $lines_ref->[$j] ) ne 'ARRAY'
-                                                || $lines_ref->[$j][0] eq 'HEADER'
-                                                || ref( $lines_ref->[$j][1] ) ne 'HASH';
+                        $last_line = $j;
+                        $extra_entity++;
+                        my $entityFirstTag = getEntityFirstTag($curent_linetype);
 
-                                        # Is it an entity of the same name?
-                                        if (   $lines_ref->[$j][0] eq $curent_linetype
-                                                && $entity_name eq $lines_ref->[$j][3] )
-                                        {
-                                           $last_line = $j;
-                                           $extra_entity++;
-                                           my $entityFirstTag = getEntityFirstTag($curent_linetype);
+                        for ( keys %{ $lines_ref->[$j][1] } ) {
 
-                                           for ( keys %{ $lines_ref->[$j][1] } ) {
-
-                                              # We add the tags except for the first one (the entity tag)
-                                              # that is already there.
-                                              push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} } if $_ ne $entityFirstTag;
-                                           }
-
-                                        } else {
-                                           last ENTITY_LINE;
-                                        }
-                                }
-
-                                # If there was only one line for the entity, we do nothing
-                                next ENTITY if !$extra_entity;
-
-                                # Number of lines included in the CLASS
-                                $old_length = $last_line - $first_line + 1;
-
-                                # We prepare the replacement lines
-                                $j = 0;
-
-                                # The main line
-                                if ( keys %new_line > 1 ) {
-                                        push @new_lines,
-                                                [
-                                                $curent_linetype,
-                                                \%new_line,
-                                                $last_main_line,
-                                                $entity_name,
-                                                $line_info,
-                                                ];
-                                        $j++;
-                                }
-
-                                # We splice the new class lines in place
-                                splice @$lines_ref, $first_line, $old_length, @new_lines;
-
-                                # Continue with the rest
-                                $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
-                                }
-                                elsif (ref $lines_ref->[$i] eq 'ARRAY'
-                                && $lines_ref->[$i][0] ne 'HEADER'
-                                && defined $lines_ref->[$i][4]
-                                && $lines_ref->[$i][4]{Mode} == SUB )
-                                {
-
-                                # We must replace the last_main_line with the correct value
-                                $lines_ref->[$i][2] = $last_main_line;
-                                }
-                                elsif (ref $lines_ref->[$i] eq 'ARRAY'
-                                && $lines_ref->[$i][0] ne 'HEADER'
-                                && defined $lines_ref->[$i][4]
-                                && $lines_ref->[$i][4]{Mode} == MAIN )
-                                {
-
-                                # We update the last_main_line value and
-                                # put the correct value in the curent line
-                                $lines_ref->[$i][2] = $last_main_line = $i;
-                                }
+                           # We add the tags except for the first one (the entity tag)
+                           # that is already there.
+                           push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} } if $_ ne $entityFirstTag;
                         }
-                }
-                }
+
+                     } else {
+                        last ENTITY_LINE;
+                     }
+                  }
+
+                  # If there was only one line for the entity, we do nothing
+                  next ENTITY if !$extra_entity;
+
+                  # Number of lines included in the CLASS
+                  $old_length = $last_line - $first_line + 1;
+
+                  # We prepare the replacement lines
+                  $j = 0;
+
+                  # The main line
+                  if ( keys %new_line > 1 ) {
+                     push @new_lines,
+                     [
+                        $curent_linetype,
+                        \%new_line,
+                        $last_main_line,
+                        $entity_name,
+                        $line_info,
+                     ];
+                     $j++;
+                  }
+
+                  # We splice the new class lines in place
+                  splice @$lines_ref, $first_line, $old_length, @new_lines;
+
+                  # Continue with the rest
+                  $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
+
+               } elsif (
+                  ref $lines_ref->[$i] eq 'ARRAY'
+                  && $lines_ref->[$i][0] ne 'HEADER'
+                  && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == SUB )
+               {
+
+                  # We must replace the last_main_line with the correct value
+                  $lines_ref->[$i][2] = $last_main_line;
+
+               } elsif (
+                  ref $lines_ref->[$i] eq 'ARRAY'
+                  && $lines_ref->[$i][0] ne 'HEADER'
+                  && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == MAIN )
+               {
+
+                  # We update the last_main_line value and
+                  # put the correct value in the curent line
+                  $lines_ref->[$i][2] = $last_main_line = $i;
+               }
+            }
+         }
+      }
 
                 ###############################################################
                 # [ 641912 ] Convert CLASSSPELL to SPELL
@@ -2859,30 +2790,47 @@ sub check_clear_tag_order {
 # Change the @ and relative paths found in the .lst for
 # the real thing.
 #
-# Parameters: $file_name         File name
+# Parameters: $fileName         File name
 #             $current_base_dir  Current directory
-#             $base_path         Origin for the @ replacement
 
 sub find_full_path {
-   my ( $file_name, $current_base_dir, $base_path ) = @_;
+   my ($fileName, $currentBaseDir) = @_;
+
+   my $base_path  = getOption('basepath');
 
    # Change all the \ for / in the file name
-   $file_name =~ tr{\\}{/};
+   $fileName =~ tr{\\}{/};
+
+   # See if the vendor path replacement is necessary   
+   if( $fileName =~ m{ ^[*] }xmsi) {
+
+      # Remove the leading * and / if present
+      $fileName =~ s{ ^[*] [/]? }{}xmsi;
+
+      my $vendorFile = getOption('vendorpath') . $fileName;
+
+      if ( -e $vendorFile ) {
+         $fileName = $vendorFile; 
+      } else {
+         $fileName = '@' . $fileName; 
+      }
+
+   }
 
    # Replace @ by the base dir or add the current base dir to the file name.
-   if( $file_name !~ s{ ^[@] }{$base_path}xmsi )
+   if( $fileName !~ s{ ^[@] }{$base_path}xmsi )
    {
-      $file_name = "$current_base_dir/$file_name";
+      $fileName = "$currentBaseDir/$fileName";
    }
 
    # Remove the /xxx/../ for the directory
-   if ($file_name =~ / [.][.] /xms ) {
-      if( $file_name !~ s{ [/] [^/]+ [/] [.][.] [/] }{/}xmsg ) {
-         die qq{Cannot deal with the .. directory in "$file_name"};
+   if ($fileName =~ / [.][.] /xms ) {
+      if( $fileName !~ s{ [/] [^/]+ [/] [.][.] [/] }{/}xmsg ) {
+         die qq{Cannot deal with the .. directory in "$fileName"};
       }
    }
 
-   return $file_name;
+   return $fileName;
 }
 
 ###############################################################

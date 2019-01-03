@@ -6,7 +6,7 @@ use warnings;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(convertEntities doTokenConversions);
+our @EXPORT_OK = qw(convertAddTokens convertEntities doTokenConversions);
 
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
