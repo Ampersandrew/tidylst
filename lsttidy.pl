@@ -2609,14 +2609,8 @@ sub mylength {
 
    my @list = ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_;
 
-   # if ( ref( $_[0] ) eq 'ARRAY' ) {
-   #    @list = @{ $_[0] };
-   # } else {
-   #    @list = @_;
-   # }
-
-   my $Length  = 0;
-   my $last    = pop @list;
+   my $Length = 0;
+   my $last   = pop @list;
    $last = defined $last ? $last : "";
 
    # All the elements except the last must be rounded to the next tab
