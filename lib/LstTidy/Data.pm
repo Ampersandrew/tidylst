@@ -11,8 +11,13 @@ use Carp;
 require Exporter;
 
 our @ISA = qw(Exporter);
+our @EXPORT = qw(
+   BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
+   NO NO_HEADER SINGLE SUB TABSIZE YES
+);
+
 our @EXPORT_OK = qw(
-   addSourceTag 
+   addSourceTag
    addTagsForConversions
    addToValidTypes
    addValidCategory
@@ -23,15 +28,15 @@ our @EXPORT_OK = qw(
    getCrossCheckData
    getDirSourceTags
    getEntityFirstTag
-   getEntityName 
+   getEntityName
    getEntityNameTag
    getHeader
-   getHeaderMissingOnLineType 
-   getMissingHeaderLineTypes 
+   getHeaderMissingOnLineType
+   getMissingHeaderLineTypes
    getOrderForLineType
    getTagCount
    getValidLineTypes
-   getValidSystemArr 
+   getValidSystemArr
    incCountInvalidTags
    incCountValidTags
    isValidCategory
@@ -41,7 +46,7 @@ our @EXPORT_OK = qw(
    isValidGamemode
    isValidMultiTag
    isValidPreTag
-   isValidSubEntity 
+   isValidSubEntity
    isValidTag
    isValidType
    mungKey
@@ -62,6 +67,35 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use LstTidy::Options qw(getOption isConversionActive);
+
+# Constants for the master_line_type
+use constant {
+   # Line importance (Mode)
+   MAIN           => 1, # Main line type for the file
+   SUB            => 2, # Sub line type, must be linked to a MAIN
+   SINGLE         => 3, # Idependant line type
+   COMMENT        => 4, # Comment or empty line.
+
+   # Line formatting option (Format)
+   LINE           => 1, # Every line formatted by itself
+   BLOCK          => 2, # Lines formatted as a block
+   FIRST_COLUMN   => 3, # Only the first column of the block gets aligned
+
+   # Line header option (Header)
+   NO_HEADER      => 1, # No header
+   LINE_HEADER    => 2, # One header before each line
+   BLOCK_HEADER   => 3, # One header for the block
+
+   # Standard YES NO constants
+   NO             => 0,
+   YES            => 1,
+
+   # The defined (non-standard) size of a tab
+   TABSIZE        => 6,
+};
+
+
+
 
 
 my %columnWithNoTag = (
@@ -3998,6 +4032,25 @@ sub updateValidity {
    while (my ($key, $value) = each %extraFixValue) {
       $tagFixValue{$key} = $value;
    }
+
+   ##############################################
+   # Global variables used by the validation code
+
+   # Add pre-defined valid entities
+   for my $var_name (getValidSystemArr('vars')) {
+      setEntityValid('DEFINE Variable', $var_name);
+   }
+
+   for my $stat (getValidSystemArr('stats')) {
+      setEntityValid('DEFINE Variable', $stat);
+      setEntityValid('DEFINE Variable', $stat . 'SCORE');
+   }
+
+   # Add the magical values 'ATWILL' fot the SPELLS tag's TIMES= component.
+   setEntityValid('DEFINE Variable', 'ATWILL');
+
+   # Add the magical values 'UNLIM' fot the CONTAINS tag.
+   setEntityValid('DEFINE Variable', 'UNLIM');
 
 };
 

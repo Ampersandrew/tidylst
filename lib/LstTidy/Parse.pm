@@ -15,7 +15,6 @@ our @EXPORT_OK = qw(
    normaliseFile
    parseLine
    parseSystemFiles
-   parseToken
    process000
    );
 
@@ -29,6 +28,8 @@ use lib dirname(dirname abs_path $0);
 
 use LstTidy::Convert qw(convertAddTokens doTokenConversions);
 use LstTidy::Data qw(
+   BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
+   NO NO_HEADER SINGLE SUB TABSIZE YES
    dirHasSourceTags
    getDirSourceTags
    getEntityName 
@@ -42,32 +43,6 @@ use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
 use LstTidy::Token;
 use LstTidy::Variable;
-
-# Constants for the master_line_type
-use constant {
-   # Line importance (Mode)
-   MAIN           => 1, # Main line type for the file
-   SUB            => 2, # Sub line type, must be linked to a MAIN
-   SINGLE         => 3, # Idependant line type
-   COMMENT        => 4, # Comment or empty line.
-
-   # Line formatting option (Format)
-   LINE           => 1, # Every line formatted by itself
-   BLOCK          => 2, # Lines formatted as a block
-   FIRST_COLUMN   => 3, # Only the first column of the block gets aligned
-
-   # Line header option (Header)
-   NO_HEADER      => 1, # No header
-   LINE_HEADER    => 2, # One header before each line
-   BLOCK_HEADER   => 3, # One header for the block
-
-   # Standard YES NO constants
-   NO             => 0,
-   YES            => 1,
-
-   # The defined (non-standard) size of a tab
-   TABSIZE        => 6,
-};
 
 my $className         = "";
 my $sourceCurrentFile = "";
@@ -752,8 +727,8 @@ our %parseControl = (
 =head2 getParseControl
 
    Get the Parse control record where the lineType field of the record matches
-   the key used to look it up. This ensure we get the main record for the line
-   type as lines can multiple linetype records.
+   the key used to look it up. This ensures we get an appropriate record for the line
+   type as files can contain multiple line types.
 
 =cut
 
