@@ -5,7 +5,6 @@ use warnings;
 
 use Mouse;
 use Carp;
-use Scalar::Util;
 use Text::Balanced ();
 
 use File::Basename qw(dirname);
@@ -3261,7 +3260,7 @@ sub _spells {
 # verify flag is set and they aren't added to valid_entities, each Kit will
 # cause a spurious error. I've added them to valid entities to prevent that.
 
-sub _startpack {
+sub _startPack {
 
    my ($self) = @_;
 
