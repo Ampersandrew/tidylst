@@ -116,7 +116,7 @@ my $errorMessage;
 
 =head2 parseOptions
 
-   Paarse a passed array for the command line arguments.
+   Parse a passed array for the command line arguments.
 
    Options are parsed into clOption and accessed via the getOption and
    setOperation routines.
@@ -146,6 +146,7 @@ sub parseOptions {
    my $outputPath     = q{};        # Path for the ouput directory
    my $report         = 0;          # Generate tag usage report
    my $systemPath     = q{};        # Path to the system (game mode) files
+   my $tabLength      = 6;          # The default length of tabs for reformatting
    my $test           = 0;          # Internal; for tests only
    my $vendorPath     = q{};        # Path for the vendor directory
    my $warningLevel   = 'notice';   # Warning level for error output
@@ -174,6 +175,7 @@ sub parseOptions {
          'outputpath|o=s'    =>  \$outputPath,
          'report|r'          =>  \$report,
          'systempath|s=s'    =>  \$systemPath,
+         'tabLength|t=i'     =>  \$tabLength,
          'test'              =>  \$test,
          'vendorpath|v=s'    =>  \$vendorPath,
          'warninglevel|wl=s' =>  \$warningLevel,
@@ -198,6 +200,7 @@ sub parseOptions {
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,
          'systempath'      =>  $systemPath,
+         'tabLength'       =>  $tabLength,
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
@@ -243,7 +246,9 @@ sub parseOptions {
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,
          'systempath'      =>  $systemPath,
+         'tabLength'       =>  $tabLength,
          'test'            =>  $test,
+         'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
          'xcheck'          =>  $xCheck);
    }
