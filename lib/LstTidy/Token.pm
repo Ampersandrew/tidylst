@@ -5,17 +5,19 @@ use warnings;
 
 use Mouse;
 use Carp;
-use Scalar::Util;
 use Text::Balanced ();
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
+use LstTidy::Convert qw(doTokenConversions);
 use LstTidy::Data qw(
    addToValidTypes 
    addValidCategory
    getValidSystemArr
+   incCountInvalidTags 
+   incCountValidTags 
    isValidCheck
    isValidEntity 
    isValidFixedValue 
@@ -25,6 +27,7 @@ use LstTidy::Data qw(
    registerXCheck 
    searchRace
    setEntityValid
+   tagTakesFixedValues
    );
 
 use LstTidy::Log;
@@ -175,31 +178,113 @@ sub clone {
 }
 
 
-=head2 extractVariables
 
-   Parse an expression and return a list of variables found.
+# These operations convert the id of tags with subTags to contain the embeded :
+my %tagProcessor = (
+   AUTO        => \&_auto,
+   BONUS       => \&_sub,
+   FACT        => \&_protean,
+   FACTSET     => \&_protean,
+   INFO        => \&_protean,
+   PROFICIENCY => \&_sub,
+   QUALIFY     => \&_sub,
+   QUALITY     => \&_protean,
+   SPELLKNOWN  => \&_sub,
+   SPELLLEVEL  => \&_sub,
+);
 
-   Parameter:  $formula : String containing the formula
+
+=head2 process
+
+   This operation does all the validation and manipulation that is done at the
+   token level.
 
 =cut
 
-sub extractVariables {
+sub process {
 
-   # We absolutely need to be called in array context.
-   if (!wantarray) {
-      croak q{extractVariables must be called in list context}
+   my ($token) = @_;
+
+   my $log = getLogger();
+
+   # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
+   # have two colons). Anything without a token value is an anomaly. The only
+   # exception to this rule is LICENSE that can be used without a value to
+   # display an empty line.
+
+   if ( (!defined $token->value || $token->value eq q{}) && $token->fullToken ne 'LICENSE:') {
+      $log->warning(
+         qq(The tag "} . $token->fullToken . q{" is missing a value (or you forgot a : somewhere)),
+         $token->file,
+         $token->line
+      );
+
+      # We set the value to prevent further errors
+      $token->value(q{});
+   }
+
+   if ($token->tag eq 'ADD') {
+      LstTidy::Convert::convertAddTokens($token);
+   }
+
+   # Special cases like BONUS:..., FACT:..., etc.
+   #
+   # These are converted from e.g. FACT  BaseSize|M  to  FACT:BaseSize  |M
+   
+   if (exists $tagProcessor{$token->tag}) {
+
+      my $processor = $tagProcessor{$token->tag};
+
+      if ( ref ($processor) eq "CODE" ) {
+         &{ $processor }($token);
+      }
+   }
+
+   if ( defined $token->value && $token->value =~ /^.CLEAR/i ) {
+      $token->_clear();
+   }
+
+   # The tag is invalid and it's not a commnet.
+   if ( ! isValidTag($token->lineType, $token->tag) && index( $token->fullToken, '#' ) != 0 ) {
+
+      $token->_invalid();
+
+   } elsif (isValidTag($token->lineType, $token->tag)) {
+
+      # Statistic gathering
+      incCountValidTags($token->lineType, $token->realTag);
+   }
+
+   # Check and reformat the values for the tags with only a limited number of
+   # values.
+   if (tagTakesFixedValues($token->tag)) {
+      $token->_limited();
+   }
+
+   ############################################################
+   ######################## Conversion ########################
+   # We manipulate the tag here
+   doTokenConversions($token);
+
+   ############################################################
+   # We call the validating function if needed
+   if (getOption('xcheck')) {
+      $token->_validate()
    };
 
-   my ($self, $toParse) = @_;
-
-   # If the -nojep command line option was used, we
-   # call the old parser
-   if ( getOption('nojep') ) {
-      return oldExtractVariables($toParse, $self->fullRealToken, $self->file, $self->line);
-   } else {
-      return parseJepFormula($toParse, $self->fullRealToken, $self->file, $self->line, 0);
-   }
+   if ($token->value eq q{}) {
+      $log->debug(qq{process: } . $token->fullToken, $token->file, $token->line)
+   };
 }
+
+
+
+#################################################################################################
+# Nothing below this should be called from outside the object (probably)
+
+# Will hold the portions of a race that have been matched with wildcards.
+# For example, if Elf% has been matched (given no default Elf races).
+our %racePartialMatch;
 
 
 my %nonPCCOperations = (
@@ -263,55 +348,44 @@ my %standardOperations = (
    'TYPE'               => \&_types,
 );
 
-=head2 validate
+# List of types that are valid in BONUS:SLOTS
+my %validBonusSlots = map { $_ => 1 } (
+   'Amulet',
+   'Armor',
+   'Belt',
+   'Boot',
+   'Bracer',
+   'Cape',
+   'Clothing',
+   'Eyegear',
+   'Glove',
+   'Hands',
+   'Headgear',
+   'Legs',
+   'Psionictattoo',
+   'Ring',
+   'Robe',
+   'Shield',
+   'Shirt',
+   'Suit',
+   'Tattoo',
+   'Transportation',
+   'Vehicle',
+   'Weapon',
 
-   This function stores data for later validation. It also checks
-   the syntax of certain tags and detects common errors and
-   deprecations.
+   # These are the proper Pathfinder slots
+   'Body',
+   'Chest',
+   'Feet',
+   'Head',
+   'Headband',
+   'Neck',
+   'Shoulders',
+   'Wrists',
 
-   The %referrer hash must be populated following this format
-   $referrer{$lintype}{$name} = [ $err_desc, $file, $line ]
-
-=cut
-
-sub validate {
-
-   my ($token) = @_;
-
-   my $valOp;
-
-   if ($token->tag =~ qr/^\!?PRE/) {
-      $token->_preToken("");
-
-   } elsif ($token->tag =~ qr/^BONUS/) {
-      $valOp = \&_bonusTag;
-   } 
-   
-   if ($token->lineType eq 'SPELL' && not defined $valOp) {
-      $valOp = $spellOperations{$token->tag};
-   }
-   
-   if ($token->lineType ne 'PCC' && not defined $valOp) {
-      $valOp = $nonPCCOperations{$token->tag};
-   }
-
-   if (not defined $valOp) {
-      $valOp = $standardOperations{$token->tag};
-   }
-
-   if (defined $valOp) {
-      $valOp->($token);
-   }
-}
-
-
-
-#################################################################################################
-# Nothing below this should be called from outside the object (probably)
-
-# Will hold the portions of a race that have been matched with wildcards.
-# For example, if Elf% has been matched (given no default Elf races).
-our %racePartialMatch;
+   # Special value for the CHOOSE tag
+   'LIST',
+);
 
 
 my %validNaturalAttacksType = map { $_ => 1 } (
@@ -351,6 +425,147 @@ my %validNaturalAttacksType = map { $_ => 1 } (
    'ShipWeapon',
 );
 
+
+my %validSubTags = (
+   AUTO => {
+      'ARMORPROF'             => 1,
+      'EQUIP'                 => 1,
+      'LANG'                  => 1,
+      'SHIELDPROF'            => 1,
+      'WEAPONPROF'            => 1,
+
+      'FEAT'                  => 1,    # Deprecated
+   },
+
+   BONUS => {
+      'ABILITYPOOL'           => 1,
+      'CASTERLEVEL'           => 1,
+      'COMBAT'                => 1,
+      'CONCENTRATION'         => 1,
+      'DC'                    => 1,
+      'DOMAIN'                => 1,
+      'DR'                    => 1,
+      'EQM'                   => 1,
+      'EQMARMOR'              => 1,
+      'EQMWEAPON'             => 1,
+      'FOLLOWERS'             => 1,
+      'HD'                    => 1,
+      'HP'                    => 1,
+      'ITEMCOST'              => 1,
+      'LOADMULT'              => 1,
+      'MISC'                  => 1,
+      'MONSKILLPTS'           => 1,
+      'MOVEADD'               => 1,
+      'MOVEMULT'              => 1,
+      'POSTRANGEADD'          => 1,
+      'POSTMOVEADD'           => 1,
+      'PCLEVEL'               => 1,
+      'RANGEADD'              => 1,
+      'RANGEMULT'             => 1,
+      'SIZEMOD'               => 1,
+      'SAVE'                  => 1,
+      'SKILL'                 => 1,
+      'SITUATION'             => 1,
+      'SKILLPOINTS'           => 1,
+      'SKILLPOOL'             => 1,
+      'SKILLRANK'             => 1,
+      'SLOTS'                 => 1,
+      'SPELL'                 => 1,
+      'SPECIALTYSPELLKNOWN'   => 1,
+      'SPELLCAST'             => 1,
+      'SPELLCASTMULT'         => 1,
+      'SPELLKNOWN'            => 1,
+      'VISION'                => 1,
+      'STAT'                  => 1,
+      'UDAM'                  => 1,
+      'VAR'                   => 1,
+      'WEAPON'                => 1,
+      'WEAPONPROF'            => 1,
+      'WIELDCATEGORY'         => 1,
+
+      'CHECKS'                => 1,    # Deprecated
+      'DAMAGE'                => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
+      'ESIZE'                 => 1,    # Not listed in the Docs
+      'FEAT'                  => 1,    # Deprecated
+      'LANGUAGES'             => 1,    # Not listed in the Docs
+      'MOVE'                  => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
+      'REPUTATION'            => 1,    # Not listed in the Docs
+      'TOHIT'                 => 1,    # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
+   },
+
+   FACT => {
+      'Abb'                   => 1,
+      'Appearance'            => 1,
+      'AppliedName'           => 1,
+      'Article'               => 1,
+      'BaseSize'              => 1,
+      'ClassType'             => 1,
+      'CompMaterial'          => 1,
+      'IsPC'                  => 1,
+      'RateOfFire'            => 1,
+      'SpellType'             => 1,
+      'Symbol'                => 1,
+      'Title'                 => 1,
+      'Worshipers'            => 1,
+   },
+
+   FACTSET => {
+      'Pantheon'              => 1,
+      'Race'                  => 1,
+      'Worshipers'            => 1,
+   },
+
+   INFO => {
+      'Prerequisite'          => 1,
+      'Normal'                => 1,
+      'Special'               => 1,
+   },
+
+   PROFICIENCY => {
+      'WEAPON'                => 1,
+      'ARMOR'                 => 1,
+      'SHIELD'                => 1,
+   },
+
+   QUALIFY => {
+      'ABILITY'               => 1,
+      'CLASS'                 => 1,
+      'DEITY'                 => 1,
+      'DOMAIN'                => 1,
+      'EQUIPMENT'             => 1,
+      'EQMOD'                 => 1,
+      'RACE'                  => 1,
+      'SPELL'                 => 1,
+      'SKILL'                 => 1,
+      'TEMPLATE'              => 1,
+      'WEAPONPROF'            => 1,
+
+      'FEAT'                  => 1,    # Deprecated
+   },
+
+   QUALITY => {
+      'Aura'                        => 1,
+      'Capacity'                    => 1,
+      'Caster Level'                => 1,
+      'Construction Cost'           => 1,
+      'Construction Craft DC'       => 1,
+      'Construction Requirements'   => 1,
+      'Slot'                        => 1,
+      'Usage'                       => 1,
+   },
+
+   SPELLLEVEL => {
+      CLASS                   => 1,
+      DOMAIN                  => 1,
+   },
+
+   SPELLKNOWN => {
+      CLASS                   => 1,
+      DOMAIN                  => 1,
+   },
+);
+
+
 my %validWieldCategory = map { $_ => 1 } (
 
    # From miscinfo.lst 35e
@@ -364,46 +579,6 @@ my %validWieldCategory = map { $_ => 1 } (
 
    # Hardcoded
    'ALL',
-);
-
-# List of types that are valid in BONUS:SLOTS
-# 
-my %validBonusSlots = map { $_ => 1 } (
-   'Amulet',
-   'Armor',
-   'Belt',
-   'Boot',
-   'Bracer',
-   'Cape',
-   'Clothing',
-   'Eyegear',
-   'Glove',
-   'Hands',
-   'Headgear',
-   'Legs',
-   'Psionictattoo',
-   'Ring',
-   'Robe',
-   'Shield',
-   'Shirt',
-   'Suit',
-   'Tattoo',
-   'Transportation',
-   'Vehicle',
-   'Weapon',
-
-   # These are the proper Pathfinder slots
-   'Body',
-   'Chest',
-   'Feet',
-   'Head',
-   'Headband',
-   'Neck',
-   'Shoulders',
-   'Wrists',
-
-   # Special value for the CHOOSE tag
-   'LIST',
 );
 
 
@@ -457,7 +632,7 @@ sub _addEquip {
          qq{@@" from "$formula" in "} . $self->fullToken, 
          $self->file, 
          $self->line, 
-         $self->extractVariables($formula) );
+         $self->_variables($formula) );
 
    } else {
       getLogger()->notice(
@@ -518,7 +693,7 @@ sub _addSkill {
          qq{@@" from "$formula" in "} . $self->fullToken, 
          $self->file, 
          $self->line, 
-         $self->extractVariables($formula) );
+         $self->_variables($formula) );
 
    } else {
       getLogger()->notice(
@@ -557,7 +732,7 @@ sub _addSpellcaster {
          qq{@@" from "$formula" in "} . $self->fullToken,
          $self->file,
          $self->line,
-         $self->extractVariables($formula) );
+         $self->_variables($formula) );
 
    } else {
 
@@ -566,6 +741,57 @@ sub _addSpellcaster {
          $self->file,
          $self->line
       );
+   }
+}
+
+
+# Check that the Auto token is valid and adjust it if necessary.
+
+sub _auto {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+
+   my $foundAutoType;
+
+   AUTO_TYPE:
+   for my $autoType ( sort { length($b) <=> length($a) || $a cmp $b } keys %{ $validSubTags{'AUTO'} } ) {
+
+      if ( $self->value =~ m/^$autoType/ ) {
+         # We found what we were looking for
+         $self->value($self->value =~ s/^$autoType//r);
+         $foundAutoType = $autoType;
+         last AUTO_TYPE;
+      }
+   }
+
+   if ($foundAutoType) {
+
+      $self->tag($self->tag . ':' . $foundAutoType);
+
+   } elsif ( $self->value =~ /^([^=:|]+)/ ) {
+
+      my $potentialAddTag = $self->tag . ':' . $1;
+
+      incCountInvalidTags($self->lineType, $potentialAddTag);
+      $log->notice(
+         qq{Invalid token "$potentialAddTag" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+      $self->noMoreErrors(1);
+
+   } else {
+
+      incCountInvalidTags($self->lineType, "AUTO");
+      $log->notice(
+         qq{Invalid ADD token "} . $self->origToken . q{" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+      $self->noMoreErrors(1);
+
    }
 }
 
@@ -629,7 +855,7 @@ sub _bonusChecks {
       qq{@@" in "} . $self->fullToken, 
       $self->file, 
       $self->line, 
-      $self->extractVariables($formula) );
+      $self->_variables($formula) );
 }
 
 
@@ -664,7 +890,7 @@ sub _bonusFeat {
       qq{@@" in "} . $self->fullToken, 
       $self->file, 
       $self->line, 
-      $self->extractVariables(shift @list_of_param) );
+      $self->_variables(shift @list_of_param) );
 
    # For the rest, we need to check if it is a PRExxx tag or a TYPE=
    my $type_present = 0;
@@ -742,7 +968,7 @@ sub _bonusMove {
       qq{@@" in "} . $self->fullToken,
       $self->file,
       $self->line,
-      $self->extractVariables($formula) );
+      $self->_variables($formula) );
 }
 
 
@@ -776,7 +1002,7 @@ sub _bonusSlots {
       qq{@@" in "} . $self->fullToken,
       $self->file,
       $self->line,
-      $self->extractVariables($formula) );
+      $self->_variables($formula) );
 }
 
 
@@ -879,7 +1105,7 @@ sub _bonusVar {
          qq{@@" in "} . $self->fullToken, 
          $self->file, 
          $self->line, 
-         $self->extractVariables($formula) );
+         $self->_variables($formula) );
    }
 }
 
@@ -916,7 +1142,7 @@ sub _bonusWeildCategory {
       qq{@@" in "} . $self->fullToken, 
       $self->file, 
       $self->line, 
-      $self->extractVariables($formula) );
+      $self->_variables($formula) );
 }
 
 
@@ -1197,7 +1423,7 @@ sub _define {
          qq{@@" in "} . $self->fullToken, 
          $self->file, 
          $self->line, 
-         $self->extractVariables($formula) );
+         $self->_variables($formula) );
    }
 }
 
@@ -1356,7 +1582,7 @@ sub _embededCasterLevel {
                qq{@@" in "} . $self->fullToken,
                $self->file,
                $self->line,
-               $self->extractVariables($result) );
+               $self->_variables($result) );
          }
 
       } else {
@@ -1518,7 +1744,7 @@ sub _extractFeatList {
                qq{@@" in "} . $self->fullToken, 
                $self->file, 
                $self->line, 
-               $self->extractVariables($formula))
+               $self->_variables($formula))
          }
 
       } elsif ($self->value) {
@@ -1611,6 +1837,38 @@ sub _ignores {
       $self->file, 
       $self->line, 
       split ',', $self->value );
+}
+
+
+# After modifying the tag to account for sub tags, it is still invalid, check
+# if it might be a valid ADD tag, if not log it (if allowed) and count it.
+
+sub _invalid {
+
+   my ($token) = @_;
+
+   my $invalidTag = 1;
+
+   # See if it might be a valid ADD tag.
+   if ($token->fullToken =~ /^ADD:([^\(\|]+)[\|\(]+/) {
+      my $subTag = ($1);
+      if (isValidTag($token->lineType, "ADD:$subTag")) {
+         $invalidTag = 0;
+      }
+   }
+
+   if ($invalidTag && !$token->noMoreErrors) {
+
+      getLogger()->notice(
+         qq{The tag "} . $token->tag . q{" from "} . $token->origToken 
+         . q{" is not in the } . $token->lineType . q{ tag list\n},
+         $token->file,
+         $token->line
+      );
+
+      # If no more errors is set, we have already counted the invalid tag.
+      incCountInvalidTags($token->lineType, $token->realTag);
+   }
 }
 
 
@@ -1714,6 +1972,118 @@ sub _language {
       $self->file, 
       $self->line, 
       grep { $_ ne 'ALL' } split ',', $self->value );
+}
+
+
+# Certain tokens can only have a specific set of fixed values. This operation is
+# used to ensure their values are in the valid set.
+#
+# ALIGN and PREALIGN can both take multiples of a specific set of tokens, they
+# are handled separately.
+
+sub _limited {
+
+   my ($self) = @_;
+
+   # Special treament for the ALIGN and PREALIGN tokens
+   if ($self->tag eq 'ALIGN' || $self->tag eq 'PREALIGN') {
+
+      $self->_limitedAlign();
+
+   } else {
+
+      $self->_limitedNonAlign();
+   }
+}
+
+
+# It is possible for the ALIGN and PREALIGN tags to have more then one value,
+# make sure they are all valid. Convert them from number to text if necessary.
+
+sub _limitedAlign {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+      
+   # Most of the limited values are uppercase except TIMEUNITS and the alignment value 'Deity'
+   my $newvalue = $self->value;
+      
+   my $is_valid = 1;
+
+   # ALIGN uses | for separator, PREALIGN uses ,
+   my $splitPatern = $self->tag eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
+
+   for my $value (split $splitPatern, $newvalue) {
+
+      my $align = mungKey($self->tag , $value);
+
+      # Is it a number?
+      my ($number) = $align =~ / \A (\d+) \z /xms;
+
+      if ( defined $number && $number >= 0 && $number < scalar @{getValidSystemArr('alignments')}) {
+         $align = ${getValidSystemArr('alignments')}[$number];
+         $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
+      }
+
+      # Is it not a valid alignment?
+      if (!isValidFixedValue($self->tag, $align)) {
+         $log->notice(
+            qq{Invalid alignment "$align" for tag "} . $self->realTag . q{"},
+            $self->file,
+            $self->line
+         );
+         $is_valid = 0;
+      }
+   }
+
+   # Was the tag changed ?
+   if ( $is_valid && $self->value ne $newvalue) {
+
+      $self->value($newvalue);
+
+      $log->warning(
+         qq{Replaced "} . $self->origToken . q{" with "} . $self->fullRealToken . qq{"},
+         $self->file,
+         $self->line
+      );
+   }
+}
+
+
+# Any tag that has limited values but is not an ALIGN or PREALIGN can only
+# have one value.  The value should be uppercase, Check for validity and if
+# necessary change the value.
+
+sub _limitedNonAlign {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+
+   # Convert the key if possible to make the lookup work
+   my $value = mungKey($self->tag, $self->value);
+
+   # Warn if it's not a proper value
+   if ( !isValidFixedValue($self->tag, $value) ) {
+
+      $log->notice(
+         qq{Invalid value "} . $self->value . q{" for tag "} . $self->realTag . q{"},
+         $self->file,
+         $self->line
+      );
+
+   # If we had to modify the lookup, change the data
+   } elsif ($self->value ne $value) {
+
+      $self->value = $value;
+
+      $log->warning(
+         qq{Replaced "} . $self->origToken . q{" by "} . $self->fullRealToken . qq{"},
+         $self->file,
+         $self->line
+      );
+   }
 }
 
 
@@ -1910,7 +2280,7 @@ sub _nonKitSpells {
                qq{@@" in "} . $self->fullToken,
                $self->file,
                $self->line,
-               $self->extractVariables($2) );
+               $self->_variables($2) );
 
          } elsif ( $1 eq 'TIMEUNIT' ) {
 
@@ -1934,7 +2304,7 @@ sub _nonKitSpells {
                qq{@@" in "} . $self->fullToken, 
                $self->file, 
                $self->line, 
-               $self->extractVariables($2) );
+               $self->_variables($2) );
          }
 
          # Embeded PRExxx tags
@@ -1957,7 +2327,7 @@ sub _nonKitSpells {
                qq{@@" in "} . $self->fullToken, 
                $self->file, 
                $self->line, 
-               $self->extractVariables($dc) );
+               $self->_variables($dc) );
 
          } else {
 
@@ -2056,7 +2426,7 @@ sub _numeric {
       qq{@@" in "} . $self->fullToken,
       $self->file,
       $self->line,
-      $self->extractVariables($self->value) );
+      $self->_variables($self->value) );
 }
 
 
@@ -2476,7 +2846,6 @@ sub _preToken {
 }
 
 
-
 # Queue up the embeded variables for cross checking.
 
 sub _prevar {
@@ -2493,13 +2862,61 @@ sub _prevar {
       $varName,);
 
    for my $formula (@formulae) {
-      my @values = $self->extractVariables($formula);
+      my @values = $self->_variables($formula);
       registerXCheck(
          'DEFINE Variable', 
          qq{@@" in "} . $self->fullRealToken, 
          $self->file, 
          $self->line, 
          @values);
+   }
+}
+
+
+# Parse the sub set of tokens where data can freely define sub tokens.  Such
+# as FACT or QUALITY.
+
+# Some of these are standard and become tags with embeded colons (Similar to
+# ADD). Others are accepted as valid as is, no token munging is done.
+
+sub _protean {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+
+   # If this is s a subTag, the subTag is currently on the front of the value.
+   my ($subTag) = ($self->value =~ /^([^=:|]+)/ );
+
+   my $potentialTag = $self->tag . ':' . $subTag;
+
+   if ($subTag && exists $validSubTags{$self->tag}{$subTag}) {
+
+      $self->tag($potentialTag);
+      $self->value($self->value =~ s/^$subTag(.*)/$1/r);
+
+   } elsif ($subTag) {
+     
+      # Give a really low priority note that we saw this. Mostly we don't care,
+      # the data team can freely define these and they don't want to hear that
+      # they've done that.
+      $log->info(
+         qq{Non-standard } . $self->tag . qq{ tag $potentialTag in "} 
+         . $self->origToken . q{" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+
+   } else {
+
+      incCountInvalidTags($self->lineType, $self->tag);
+      $log->notice(
+         q{Invalid } . $self->tag . q{ tag "} . $self->origToken 
+         . q{" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+      $self->noMoreErrors(1);
    }
 }
 
@@ -2638,7 +3055,7 @@ sub _sa {
             qq{@@" in "} . $self->fullToken, 
             $self->file, 
             $self->line, 
-            $self->extractVariables($formula) );
+            $self->_variables($formula) );
       }
    }
 }
@@ -2839,14 +3256,17 @@ sub _spells {
 }
 
 
-# Add KIT data to the validity data.
+# STARTPACK lines in Kit files weren't getting added to $valid_entities. If the
+# verify flag is set and they aren't added to valid_entities, each Kit will
+# cause a spurious error. I've added them to valid entities to prevent that.
 
 sub _startPack {
 
    my ($self) = @_;
 
-   setEntityValid('KIT STARTPACK', "KIT:" . $self->value);
-   setEntityValid('KIT', "KIT:" . $self->value);
+   my $value = $self->value;
+   setEntityValid('KIT STARTPACK', "KIT:$value");
+   setEntityValid('KIT STARTPACK', "$value");
 }
 
 
@@ -2905,6 +3325,48 @@ sub _stat {
 }
 
 
+# Check that the sub token is valid and adjust the $tag if appropraite.
+
+sub _sub {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+
+   # If this is s a subTag, the subTag is currently on the front of the value.
+   my ($subTag) = ($self->value =~ /^([^=:|]+)/ );
+
+   my $potentialTag = $self->tag . ':' . $subTag;
+
+   if ($subTag && exists $validSubTags{$self->tag}{$subTag}) {
+
+      $self->tag($potentialTag);
+      $self->value($self->value =~ s/^$subTag(.*)/$1/r);
+
+   } elsif ($subTag) {
+
+      # No valid type found
+      incCountInvalidTags($self->lineType, $potentialTag);
+      $log->notice(
+         qq{Invalid $potentialTag tag "} . $self->origToken . q{" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+      $self->noMoreErrors(1);
+
+   } else {
+
+      incCountInvalidTags($self->lineType, $self->tag);
+      $log->notice(
+         q{Invalid } . $self->tag . q{ tag "} . $self->origToken . q{" found in } . $self->lineType,
+         $self->file,
+         $self->line
+      );
+      $self->noMoreErrors(1);
+   }
+}
+
+
 # Queue up the RaceType for cross checking.
 
 sub _switchRace {
@@ -2947,6 +3409,64 @@ sub _types {
 
    for my $type ( split '\.', $self->value ) {
       addToValidTypes($self->lineType, $type);
+   }
+}
+
+
+# This function stores data for later validation. It also checks the syntax of
+# certain tags and detects common errors and deprecations.
+
+# The %referrer hash must be populated following this format
+# $referrer{$lintype}{$name} = [ $err_desc, $file, $line ]
+
+sub _validate {
+
+   my ($token) = @_;
+
+   my $valOp;
+
+   if ($token->tag =~ qr/^\!?PRE/) {
+      $token->_preToken("");
+
+   } elsif ($token->tag =~ qr/^BONUS/) {
+      $valOp = \&_bonusTag;
+   } 
+   
+   if ($token->lineType eq 'SPELL' && not defined $valOp) {
+      $valOp = $spellOperations{$token->tag};
+   }
+   
+   if ($token->lineType ne 'PCC' && not defined $valOp) {
+      $valOp = $nonPCCOperations{$token->tag};
+   }
+
+   if (not defined $valOp) {
+      $valOp = $standardOperations{$token->tag};
+   }
+
+   if (defined $valOp) {
+      $valOp->($token);
+   }
+}
+
+
+# Parse an expression and return a list of variables found.
+
+sub _variables {
+
+   my ($self, $toParse) = @_;
+
+   # We absolutely need to be called in array context.
+   if (!wantarray) {
+      croak q{_variables must be called in list context}
+   };
+
+   # If the -nojep command line option was used, we
+   # call the old parser
+   if ( getOption('nojep') ) {
+      return oldExtractVariables($toParse, $self->fullRealToken, $self->file, $self->line);
+   } else {
+      return parseJepFormula($toParse, $self->fullRealToken, $self->file, $self->line, 0);
    }
 }
 

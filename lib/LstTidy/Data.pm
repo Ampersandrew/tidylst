@@ -11,8 +11,13 @@ use Carp;
 require Exporter;
 
 our @ISA = qw(Exporter);
+our @EXPORT = qw(
+   BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
+   NO NO_HEADER SINGLE SUB TABSIZE YES
+);
+
 our @EXPORT_OK = qw(
-   addSourceTag 
+   addSourceTag
    addTagsForConversions
    addToValidTypes
    addValidCategory
@@ -23,15 +28,15 @@ our @EXPORT_OK = qw(
    getCrossCheckData
    getDirSourceTags
    getEntityFirstTag
-   getEntityName 
+   getEntityName
    getEntityNameTag
    getHeader
-   getHeaderMissingOnLineType 
-   getMissingHeaderLineTypes 
+   getHeaderMissingOnLineType
+   getMissingHeaderLineTypes
    getOrderForLineType
    getTagCount
    getValidLineTypes
-   getValidSystemArr 
+   getValidSystemArr
    incCountInvalidTags
    incCountValidTags
    isValidCategory
@@ -41,7 +46,7 @@ our @EXPORT_OK = qw(
    isValidGamemode
    isValidMultiTag
    isValidPreTag
-   isValidSubEntity 
+   isValidSubEntity
    isValidTag
    isValidType
    mungKey
@@ -62,6 +67,35 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use LstTidy::Options qw(getOption isConversionActive);
+
+# Constants for the master_line_type
+use constant {
+   # Line importance (Mode)
+   MAIN           => 1, # Main line type for the file
+   SUB            => 2, # Sub line type, must be linked to a MAIN
+   SINGLE         => 3, # Idependant line type
+   COMMENT        => 4, # Comment or empty line.
+
+   # Line formatting option (Format)
+   LINE           => 1, # Every line formatted by itself
+   BLOCK          => 2, # Lines formatted as a block
+   FIRST_COLUMN   => 3, # Only the first column of the block gets aligned
+
+   # Line header option (Header)
+   NO_HEADER      => 1, # No header
+   LINE_HEADER    => 2, # One header before each line
+   BLOCK_HEADER   => 3, # One header for the block
+
+   # Standard YES NO constants
+   NO             => 0,
+   YES            => 1,
+
+   # The defined (non-standard) size of a tab
+   TABSIZE        => 6,
+};
+
+
+
 
 
 my %columnWithNoTag = (
@@ -535,7 +569,7 @@ our %masterOrder = (
       'VISION:.CLEAR',
       'VISION:*',
       'SR',
-      'DR',
+      'DR:*',
       'REP',
       'COST',
       'KIT',
@@ -926,6 +960,7 @@ our %masterOrder = (
       'FACT:Title',
       'FACT:Worshippers',
       'FACT:Appearance',
+      'FACT:*',
       'FACTSET:Race',
       'FACTSET:*',
       'SYMBOL',                        # Deprecated 6.05.01
@@ -984,7 +1019,7 @@ our %masterOrder = (
       'DESC:.CLEAR',
       'DESC:*',
       'SPELLKNOWN:DOMAIN:*',
-      'SPELLLEVEL:DOMAIN',
+      'SPELLLEVEL:DOMAIN:*',
       'UNENCUMBEREDMOVE',
       'FEAT:*',                        # Deprecated 6.05.01
       'VFEAT:*',                       # Deprecated 6.05.01
@@ -1068,6 +1103,7 @@ our %masterOrder = (
       'BONUS:EQMWEAPON:*',
       'BONUS:ESIZE:*',
       'BONUS:ITEMCOST:*',
+      'BONUS:LOADMULT:*',
       'BONUS:WEAPON:*',
       @QUALITY_Tags,
       'SPROP:.CLEAR',
@@ -1085,6 +1121,10 @@ our %masterOrder = (
       'DESC:*',
       'DESCISPI',
       'INFO:*',
+      'SPELLKNOWN:DOMAIN:*',
+      'SPELLLEVEL:DOMAIN',
+      'SPELLKNOWN:CLASS:*',
+      'SPELLLEVEL:CLASS',
       'TEMPBONUS:*',
       'TEMPDESC',
       'UNENCUMBEREDMOVE',
@@ -1132,7 +1172,7 @@ our %masterOrder = (
       'BONUS:ITEMCOST:*',
       'BONUS:WEAPON:*',
       'SPROP:*',
-      'ABILITY',
+      'ABILITY:*',
       'FUMBLERANGE',
       'SAB:.CLEAR',
       'SAB:*',
@@ -1149,6 +1189,7 @@ our %masterOrder = (
       'SPELL',
       'SPELLS:*',
       'AUTO:EQUIP:*',
+      'AUTO:WEAPONPROF:*',
       'UNENCUMBEREDMOVE',
 
       'RATEOFFIRE',                    #  Deprecated 6.05.01
@@ -1252,6 +1293,11 @@ our %masterOrder = (
    'GLOBALMODIFIER' => [
       '000GlobalmonName',
       'EXPLANATION',
+   ],
+
+   'KIT AGE' => [
+      'AGE',
+      @PreTags,
    ],
 
    'KIT ALIGN' => [
@@ -1381,6 +1427,7 @@ our %masterOrder = (
 
    'KIT STARTPACK' => [
       'STARTPACK',
+      'NAMEISPI',
       'TYPE',
       'VISIBLE',
       'APPLY',
@@ -1423,6 +1470,7 @@ our %masterOrder = (
    'MASTERBONUSRACE' => [
       '000MasterBonusRace',
       'TYPE',
+      'DEFINE:*',
       'BONUS:ABILITYPOOL:*',
       'BONUS:CASTERLEVEL:*',
       'BONUS:CHECKS:*',
@@ -1692,7 +1740,7 @@ our %masterOrder = (
       'CHOOSE',
       'SELECT',
       'SITUATION',
-      'DEFINE',
+      'DEFINE:*',
       'DEFINESTAT:*',
       'AUTO:EQUIP:*',
       'AUTO:LANG:*',
@@ -1796,6 +1844,7 @@ our %masterOrder = (
       'TEMPDESC',
       'TEMPBONUS:*',
       'TEMPVALUE',
+      'FACTSET:*',
    ],
 
    'STAT' => [
@@ -1994,7 +2043,7 @@ our %masterOrder = (
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
-      'PREVAREQ:*',
+      @PreTags,
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -2181,7 +2230,7 @@ our %masterOrder = (
       'DESC:.CLEAR',
       'DESC:*',
       'TEMPDESC',
-      'TEMPBONUS',
+      'TEMPBONUS:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -2904,6 +2953,10 @@ my %tokenHeader = (
    'KIT STARTPACK' => {
       'STARTPACK'                => '# Kit Name',
       'APPLY'                    => 'Apply method to char',
+   },
+
+   'KIT AGE' => {
+      'AGE'                      => '# Age',
    },
 
    'KIT CLASS' => {
@@ -3979,6 +4032,25 @@ sub updateValidity {
    while (my ($key, $value) = each %extraFixValue) {
       $tagFixValue{$key} = $value;
    }
+
+   ##############################################
+   # Global variables used by the validation code
+
+   # Add pre-defined valid entities
+   for my $var_name (getValidSystemArr('vars')) {
+      setEntityValid('DEFINE Variable', $var_name);
+   }
+
+   for my $stat (getValidSystemArr('stats')) {
+      setEntityValid('DEFINE Variable', $stat);
+      setEntityValid('DEFINE Variable', $stat . 'SCORE');
+   }
+
+   # Add the magical values 'ATWILL' fot the SPELLS tag's TIMES= component.
+   setEntityValid('DEFINE Variable', 'ATWILL');
+
+   # Add the magical values 'UNLIM' fot the CONTAINS tag.
+   setEntityValid('DEFINE Variable', 'UNLIM');
 
 };
 

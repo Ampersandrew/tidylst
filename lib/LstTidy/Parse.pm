@@ -15,7 +15,6 @@ our @EXPORT_OK = qw(
    normaliseFile
    parseLine
    parseSystemFiles
-   parseToken
    process000
    );
 
@@ -27,72 +26,28 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Convert qw(doTokenConversions);
+use LstTidy::Convert qw(convertAddTokens doTokenConversions);
 use LstTidy::Data qw(
+   BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
+   NO NO_HEADER SINGLE SUB TABSIZE YES
    dirHasSourceTags
    getDirSourceTags
    getEntityName 
    getValidSystemArr
-   incCountInvalidTags 
-   incCountValidTags 
-   isValidFixedValue
    isValidTag
-   mungKey 
    registerXCheck
    setEntityValid
    setValidSystemArr
-   tagTakesFixedValues
    );
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Options qw(getOption isConversionActive);
 use LstTidy::Token;
 use LstTidy::Variable;
 
-# Constants for the master_line_type
-use constant {
-   # Line importance (Mode)
-   MAIN           => 1, # Main line type for the file
-   SUB            => 2, # Sub line type, must be linked to a MAIN
-   SINGLE         => 3, # Idependant line type
-   COMMENT        => 4, # Comment or empty line.
-
-   # Line formatting option (Format)
-   LINE           => 1, # Every line formatted by itself
-   BLOCK          => 2, # Lines formatted as a block
-   FIRST_COLUMN   => 3, # Only the first column of the block gets aligned
-
-   # Line header option (Header)
-   NO_HEADER      => 1, # No header
-   LINE_HEADER    => 2, # One header before each line
-   BLOCK_HEADER   => 3, # One header for the block
-
-   # Standard YES NO constants
-   NO             => 0,
-   YES            => 1,
-
-   # The defined (non-standard) size of a tab
-   TABSIZE        => 6,
-};
-
 my $className         = "";
 my $sourceCurrentFile = "";
 my %classSpellTypes   = ();
 my %spellsForEQMOD    = ();
-
-# These operations convert the id of tags with subTags to contain the embeded :
-my %tagProcessor = (
-   ADD         => \&LstTidy::Convert::convertAddTokens,
-   AUTO        => \&LstTidy::Parse::parseAutoToken,
-   BONUS       => \&LstTidy::Parse::parseSubToken,
-   FACT        => \&LstTidy::Parse::parseProteanSubToken,
-   FACTSET     => \&LstTidy::Parse::parseProteanSubToken,
-   INFO        => \&LstTidy::Parse::parseProteanSubToken,
-   PROFICIENCY => \&LstTidy::Parse::parseSubToken,
-   QUALIFY     => \&LstTidy::Parse::parseSubToken,
-   QUALITY     => \&LstTidy::Parse::parseProteanSubToken,
-   SPELLKNOWN  => \&LstTidy::Parse::parseSubToken,
-   SPELLLEVEL  => \&LstTidy::Parse::parseSubToken,
-);
 
 
 # Valid filetype are the only ones that will be parsed Some filetype are valid
@@ -135,144 +90,6 @@ my %parsableFileType = (
    TEMPLATE        => \&parseFile,
    VARIABLE        => \&parseFile,
    WEAPONPROF      => \&parseFile,
-);
-
-
-my %validSubTags = (
-   AUTO => {
-      'ARMORPROF'             => 1,
-      'EQUIP'                 => 1,
-      'LANG'                  => 1,
-      'SHIELDPROF'            => 1,
-      'WEAPONPROF'            => 1,
-
-      'FEAT'                  => 1,    # Deprecated
-   },
-
-   BONUS => {
-      'ABILITYPOOL'           => 1,
-      'CASTERLEVEL'           => 1,
-      'COMBAT'                => 1,
-      'CONCENTRATION'         => 1,
-      'DC'                    => 1,
-      'DOMAIN'                => 1,
-      'DR'                    => 1,
-      'EQM'                   => 1,
-      'EQMARMOR'              => 1,
-      'EQMWEAPON'             => 1,
-      'FOLLOWERS'             => 1,
-      'HD'                    => 1,
-      'HP'                    => 1,
-      'ITEMCOST'              => 1,
-      'MISC'                  => 1,
-      'MONSKILLPTS'           => 1,
-      'MOVEADD'               => 1,
-      'MOVEMULT'              => 1,
-      'POSTRANGEADD'          => 1,
-      'POSTMOVEADD'           => 1,
-      'PCLEVEL'               => 1,
-      'RANGEADD'              => 1,
-      'RANGEMULT'             => 1,
-      'SIZEMOD'               => 1,
-      'SAVE'                  => 1,
-      'SKILL'                 => 1,
-      'SITUATION'             => 1,
-      'SKILLPOINTS'           => 1,
-      'SKILLPOOL'             => 1,
-      'SKILLRANK'             => 1,
-      'SLOTS'                 => 1,
-      'SPELL'                 => 1,
-      'SPECIALTYSPELLKNOWN'   => 1,
-      'SPELLCAST'             => 1,
-      'SPELLCASTMULT'         => 1,
-      'SPELLKNOWN'            => 1,
-      'VISION'                => 1,
-      'STAT'                  => 1,
-      'UDAM'                  => 1,
-      'VAR'                   => 1,
-      'WEAPON'                => 1,
-      'WEAPONPROF'            => 1,
-      'WIELDCATEGORY'         => 1,
-
-      'CHECKS'                => 1,    # Deprecated
-      'DAMAGE'                => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:COMBAT|DAMAGE.x|y
-      'ESIZE'                 => 1,    # Not listed in the Docs
-      'FEAT'                  => 1,    # Deprecated
-      'LANGUAGES'             => 1,    # Not listed in the Docs
-      'MOVE'                  => 1,    # Deprecated 4.3.8 - Remove 5.16.0 - Use BONUS:MOVEADD or BONUS:POSTMOVEADD
-      'REPUTATION'            => 1,    # Not listed in the Docs
-      'TOHIT'                 => 1,    # Deprecated 5.3.12 - Remove 5.16.0 - Use BONUS:COMBAT|TOHIT|x
-   },
-
-   FACT => {
-      'Abb'                   => 1,
-      'Appearance'            => 1,
-      'AppliedName'           => 1,
-      'Article'               => 1,
-      'BaseSize'              => 1,
-      'ClassType'             => 1,
-      'CompMaterial'          => 1,
-      'IsPC'                  => 1,
-      'RateOfFire'            => 1,
-      'SpellType'             => 1,
-      'Symbol'                => 1,
-      'Title'                 => 1,
-   },
-
-   FACTSET => {
-      'Pantheon'              => 1,
-      'Race'                  => 1,
-      'Worshipers'            => 1,
-   },
-
-   INFO => {
-      'Prerequisite'          => 1,
-      'Normal'                => 1,
-      'Special'               => 1,
-   },
-
-   PROFICIENCY => {
-      'WEAPON'                => 1,
-      'ARMOR'                 => 1,
-      'SHIELD'                => 1,
-   },
-
-   QUALIFY => {
-      'ABILITY'               => 1,
-      'CLASS'                 => 1,
-      'DEITY'                 => 1,
-      'DOMAIN'                => 1,
-      'EQUIPMENT'             => 1,
-      'EQMOD'                 => 1,
-      'RACE'                  => 1,
-      'SPELL'                 => 1,
-      'SKILL'                 => 1,
-      'TEMPLATE'              => 1,
-      'WEAPONPROF'            => 1,
-
-      'FEAT'                  => 1,    # Deprecated
-   },
-
-   QUALITY => {
-      'Aura'                        => 1,
-      'Capacity'                    => 1,
-      'Caster Level'                => 1,
-      'Construction Cost'           => 1,
-      'Construction Craft DC'       => 1,
-      'Construction Requirements'   => 1,
-      'Slot'                        => 1,
-      'Usage'                       => 1,
-   },
-
-   SPELLLEVEL => {
-      CLASS                   => 1,
-      DOMAIN                  => 1,
-   },
-
-   SPELLKNOWN => {
-      CLASS                   => 1,
-      DOMAIN                  => 1,
-   },
 );
 
 
@@ -636,6 +453,12 @@ our %parseControl = (
          Format         => FIRST_COLUMN,
          Header         => NO_HEADER,
       },
+      {  Linetype       => 'KIT AGE',
+         RegEx          => qr{^AGE:([^\t]*)},
+         Mode           => SUB,
+         Format         => FIRST_COLUMN,
+         Header         => NO_HEADER,
+      },
       {  Linetype       => 'KIT ALIGN',
          RegEx          => qr{^ALIGN:([^\t]*)},
          Mode           => SUB,
@@ -901,38 +724,11 @@ our %parseControl = (
 
 );
 
-
-=head2 checkLimitedValueTags
-
-   Certain tokens only specify a specific set of fixed values. This operation is
-   used to ensure their values are correct.
-
-   ALIGN and PREALIGN can both take multiples of a specific set of tokens, they
-   are handled separately.
-
-=cut
-
-sub checkLimitedValueTags {
-
-   my ($token) = @_;
-
-
-   # Special treament for the ALIGN and PREALIGN tokens
-   if ( $token->tag eq 'ALIGN' || $token->tag eq 'PREALIGN' ) {
-
-      processAlign($token);
-
-   } else {
-
-      processNonAlign($token);
-   }
-}
-
 =head2 getParseControl
 
    Get the Parse control record where the lineType field of the record matches
-   the key used to look it up. This ensure we get the main record for the line
-   type as lines can multiple linetype records.
+   the key used to look it up. This ensures we get an appropriate record for the line
+   type as files can contain multiple line types.
 
 =cut
 
@@ -1052,60 +848,6 @@ sub normaliseFile {
    return (\@lines, $filetype);
 }
 
-=head2 parseAutoToken
-
-   Check that the Auto token is valid and adjust it if necessary.
-
-=cut
-
-sub parseAutoToken {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-
-   my $foundAutoType;
-
-   AUTO_TYPE:
-   for my $autoType ( sort { length($b) <=> length($a) || $a cmp $b } keys %{ $validSubTags{'AUTO'} } ) {
-
-      if ( $token->value =~ m/^$autoType/ ) {
-         # We found what we were looking for
-         $token->value($token->value =~ s/^$autoType//r);
-         $foundAutoType = $autoType;
-         last AUTO_TYPE;
-      }
-   }
-
-   if ($foundAutoType) {
-
-      $token->tag($token->tag . ':' . $foundAutoType);
-
-   } elsif ( $token->value =~ /^([^=:|]+)/ ) {
-
-      my $potentialAddTag = $token->tag . ':' . $1;
-
-      incCountInvalidTags($token->lineType, $potentialAddTag);
-      $log->notice(
-         qq{Invalid token "$potentialAddTag" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-      $token->noMoreErrors(1);
-
-   } else {
-
-      incCountInvalidTags($token->lineType, "AUTO");
-      $log->notice(
-         qq{Invalid ADD token "} . $token->origToken . q{" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-      $token->noMoreErrors(1);
-
-   }
-}
-
 
 ###############################################################
 # parseLine
@@ -1178,7 +920,7 @@ sub parseLine {
       if (exists $lineTokens->{'TYPE'} && $lineTokens->{'TYPE'}[0] =~ /Container/) {
 
          if (exists $lineTokens->{'CONTAINS'}) {
-#                       $lineTokens =~ s/'CONTAINS:-1'/'CONTAINS:UNLIM'/g;   # [ 1777282 ] CONTAINS Unlimited Weight is UNLIM, not -1
+#           $lineTokens =~ s/'CONTAINS:-1'/'CONTAINS:UNLIM'/g;   # [ 1777282 ] CONTAINS Unlimited Weight is UNLIM, not -1
          } else {
             $log->warning(
                qq{Any object with TYPE:Container must also have a CONTAINS token to be activated.},
@@ -1433,8 +1175,6 @@ sub parseLine {
       delete $lineTokens->{'TYPE'};
    };
 
-#                       $lineTokens->{'MONCSKILL'} = [ "MON" . $lineTokens->{'CSKILL'}[0] ];
-#                       delete $lineTokens->{'CSKILL'};
 
 
    ##################################################################
@@ -2285,102 +2025,6 @@ sub parseLine {
 }
 
 
-
-=head2 parseProteanSubToken
-
-   Parse the sub set of tokens where data can freely define sub tokens.  Such
-   as FACT or QUALITY.
-
-   Sume of these are standard and become tags with embeded colons (Similar to
-   ADD). Others are accepted as valid as is, no token munging is done.
-
-=cut
-
-sub parseProteanSubToken {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-
-   # If this is s a subTag, the subTag is currently on the front of the value.
-   my ($subTag) = ($token->value =~ /^([^=:|]+)/ );
-
-   my $potentialTag = $token->tag . ':' . $subTag;
-
-   if ($subTag && exists $validSubTags{$token->tag}{$subTag}) {
-
-      $token->tag($potentialTag);
-      $token->value($token->value =~ s/^$subTag(.*)/$1/r);
-
-   } elsif ($subTag) {
-     
-      # Give a really low priority note that we saw this. Mostly we don't care,
-      # the data team can freely define these and they don't want to hear that
-      # they've done that.
-      $log->info(
-         qq{Non-standard } . $token->tag . qq{ tag $potentialTag in "} . $token->origToken . q{" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-
-   } else {
-
-      incCountInvalidTags($token->lineType, $token->tag);
-      $log->notice(
-         q{Invalid } . $token->tag . q{ tag "} . $token->origToken . q{" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-      $token->noMoreErrors(1);
-   }
-}
-
-=head2 parseSubToken
-
-   Check that the sub token is valid and adjust the $tag if appropraite.
-
-=cut
-
-sub parseSubToken {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-
-   # If this is s a subTag, the subTag is currently on the front of the value.
-   my ($subTag) = ($token->value =~ /^([^=:|]+)/ );
-
-   my $potentialTag = $token->tag . ':' . $subTag;
-
-   if ($subTag && exists $validSubTags{$token->tag}{$subTag}) {
-
-      $token->tag($potentialTag);
-      $token->value($token->value =~ s/^$subTag(.*)/$1/r);
-
-   } elsif ($subTag) {
-
-      # No valid type found
-      incCountInvalidTags($token->lineType, $potentialTag);
-      $log->notice(
-         qq{Invalid $potentialTag tag "} . $token->origToken . q{" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-      $token->noMoreErrors(1);
-
-   } else {
-
-      incCountInvalidTags($token->lineType, $token->tag);
-      $log->notice(
-         q{Invalid } . $token->tag . q{ tag "} . $token->origToken . q{" found in } . $token->lineType,
-         $token->file,
-         $token->line
-      );
-      $token->noMoreErrors(1);
-   }
-}
-
-
 =head2 parseSystemFiles
 
    This operation searches the given gamemode directory and parses out
@@ -2628,95 +2272,6 @@ sub extractTag {
    return $tagText;
 }
 
-=head2 parseToken
-
-   The most common use of this function is for the addition, conversion or
-   removal of tags. The token object passed in may be modified and can be queried
-   for the updated token.
-
-=cut
-
-sub parseToken {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-
-   # All PCGen tags should have at least TAG_NAME:TAG_VALUE (Some rare tags
-   # have two colons). Anything without a token value is an anomaly. The only
-   # exception to this rule is LICENSE that can be used without a value to
-   # display an empty line.
-
-   if ( (!defined $token->value || $token->value eq q{}) && $token->fullToken ne 'LICENSE:') {
-      $log->warning(
-         qq(The tag "} . $token->fullToken . q{" is missing a value (or you forgot a : somewhere)),
-         $token->file,
-         $token->line
-      );
-
-      # We set the value to prevent further errors
-      $token->value(q{});
-   }
-
-   # [ 1387361 ] No KIT STARTPACK entry for \"KIT:xxx\"
-   # STARTPACK lines in Kit files weren't getting added to $valid_entities. If
-   # the verify flag is set and they aren't added to valid_entities, each Kit
-   # will cause a spurious error. I've added them to valid entities to prevent
-   # that.
-   if ($token->tag eq 'STARTPACK') {
-      my $value = $token->value;
-      setEntityValid('KIT STARTPACK', "KIT:$value");
-      setEntityValid('KIT STARTPACK', "$value");
-   }
-
-   # Special cases like ADD:... and BONUS:...
-   if (exists $tagProcessor{$token->tag}) {
-
-      my $processor = $tagProcessor{$token->tag};
-
-      if ( ref ($processor) eq "CODE" ) {
-         &{ $processor }($token);
-      }
-   }
-
-   if ( defined $token->value && $token->value =~ /^.CLEAR/i ) {
-      $token->_clear();
-   }
-
-   # The tag is invalid and it's not a commnet.
-   if ( ! isValidTag($token->lineType, $token->tag) && index( $token->fullToken, '#' ) != 0 ) {
-
-      processInvalidNonComment($token);
-
-   } elsif (isValidTag($token->lineType, $token->tag)) {
-
-      # Statistic gathering
-      incCountValidTags($token->lineType, $token->realTag);
-   }
-
-   # Check and reformat the values for the tags with only a limited number of
-   # values.
-
-   if ( tagTakesFixedValues($token->tag) ) {
-      checkLimitedValueTags($token);
-   }
-
-   ############################################################
-   ######################## Conversion ########################
-   # We manipulate the tag here
-   doTokenConversions($token);
-
-   ############################################################
-   # We call the validating function if needed
-   if (getOption('xcheck')) {
-      $token->validate()
-   };
-
-   if ($token->value eq q{}) {
-      $log->debug(qq{parseToken: } . $token->fullToken, $token->file, $token->line)
-   };
-}
-
 =head2 process000
 
    The first tag on a line may need to be processed because it is a MOD, FORGET
@@ -2798,139 +2353,6 @@ sub process000 {
    return 0;
 }
 
-=head2 processAlign
-
-   It is possible for the ALIGN and PREALIGN tags to have more then one value,
-   make sure they are all valid. Convert them from number to text if necessary.
-
-=cut
-
-sub processAlign {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-      
-   # Most of the limited values are uppercase except TIMEUNITS and the alignment value 'Deity'
-   my $newvalue = $token->value;
-      
-   my $is_valid = 1;
-
-   # ALIGN uses | for separator, PREALIGN uses ,
-   my $splitPatern = $token->tag eq 'PREALIGN' ? qr{[,]}xms : qr{[|]}xms;
-
-   for my $value (split $splitPatern, $newvalue) {
-
-      my $align = mungKey($token->tag , $value);
-
-      # Is it a number?
-      my ($number) = $align =~ / \A (\d+) \z /xms;
-
-      if ( defined $number && $number >= 0 && $number < scalar @{getValidSystemArr('alignments')}) {
-         $align = ${getValidSystemArr('alignments')}[$number];
-         $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
-      }
-
-      # Is it not a valid alignment?
-      if (!isValidFixedValue($token->tag, $align)) {
-         $log->notice(
-            qq{Invalid alignment "$align" for tag "} . $token->realTag . q{"},
-            $token->file,
-            $token->line
-         );
-         $is_valid = 0;
-      }
-   }
-
-   # Was the tag changed ?
-   if ( $is_valid && $token->value ne $newvalue) {
-
-      $token->value($newvalue);
-
-      $log->warning(
-         qq{Replaced "} . $token->origToken . q{" with "} . $token->fullRealToken . qq{"},
-         $token->file,
-         $token->line
-      );
-   }
-
-   return  $is_valid;
-}
-
-=head2 processInvalidNonComment
-
-   After modifying the tag to account for sub tags, it is still invalid, check
-   if it might be a valid ADD tag, if not log it (if allowed) and count it.
-
-=cut
-
-sub processInvalidNonComment {
-
-   my ($token) = @_;
-
-   my $invalidTag = 1;
-
-   # See if it might be a valid ADD tag.
-   if ($token->fullToken =~ /^ADD:([^\(\|]+)[\|\(]+/) {
-      my $subTag = ($1);
-      if (isValidTag($token->lineType, "ADD:$subTag")) {
-         $invalidTag = 0;
-      }
-   }
-
-   if ($invalidTag && !$token->noMoreErrors) {
-
-      getLogger()->notice(
-         qq{The tag "} . $token->tag . q{" from "} . $token->origToken . q{" is not in the } . $token->lineType . q{ tag list\n},
-         $token->file,
-         $token->line
-      );
-
-      # If no more errors is set, we have already counted the invalid tag.
-      incCountInvalidTags($token->lineType, $token->realTag);
-   }
-}
-
-
-
-=head2 processNonAlign
-
-   Any tag that has limited values but is not an ALIGN or PREALIGN can only
-   have one value.  The value shold be uppercase, Check for validity and if
-   necessary change the value.
-
-=cut
-
-sub processNonAlign {
-
-   my ($token) = @_;
-
-   my $log = getLogger();
-
-   # Convert the key if possible to make the lookup work
-   my $value = mungKey($token->tag, $token->value);
-
-   # Warn if it's not a proper value
-   if ( !isValidFixedValue($token->tag, $value) ) {
-
-      $log->notice(
-         qq{Invalid value "} . $token->value . q{" for tag "} . $token->realTag . q{"},
-         $token->file,
-         $token->line
-      );
-
-   # If we had to modify the lookup, change the data
-   } elsif ($token->value ne $value) {
-
-      $token->value = $value;
-
-      $log->warning(
-         qq{Replaced "} . $token->origToken . q{" by "} . $token->fullRealToken . qq{"},
-         $token->file,
-         $token->line
-      );
-   }
-}
 
 
 1;
