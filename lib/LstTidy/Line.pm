@@ -42,6 +42,11 @@ has 'line' => (
    predicate => 'hasLine',
 );
 
+has 'regex' => (
+   is        => 'rw',
+   isa       => 'RegexpRef',
+);
+
 sub addToken {
    my ($self, $token) = @_;
 
@@ -68,6 +73,8 @@ sub _joinWith {
 
    $text .= $final->fullRealToken;
 }
+
+# Calculate how long this column would be if separated with tabs.
 
 sub _columnLength {
    my ($self, $key) = @_;

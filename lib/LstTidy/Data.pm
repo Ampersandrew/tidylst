@@ -13,7 +13,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
-   NO NO_HEADER SINGLE SUB TABSIZE YES
+   NO NO_HEADER SINGLE SUB YES
 );
 
 our @EXPORT_OK = qw(
@@ -89,9 +89,6 @@ use constant {
    # Standard YES NO constants
    NO             => 0,
    YES            => 1,
-
-   # The defined (non-standard) size of a tab
-   TABSIZE        => 6,
 };
 
 

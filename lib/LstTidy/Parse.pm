@@ -29,7 +29,7 @@ use lib dirname(dirname abs_path $0);
 use LstTidy::Convert qw(convertAddTokens doTokenConversions);
 use LstTidy::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
-   NO NO_HEADER SINGLE SUB TABSIZE YES
+   NO NO_HEADER SINGLE SUB YES
    dirHasSourceTags
    getDirSourceTags
    getEntityName 
