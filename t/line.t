@@ -9,8 +9,9 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
 use LstTidy::Token;
+use LstTidy::Options qw(getOption parseOptions);
 
-use Test::More tests => 10;
+use Test::More tests => 13;
 use Test::Warn;
 
 use_ok ('LstTidy::Line');
@@ -39,6 +40,9 @@ is($line->hasColumn('KEY'), 1, 'Column KEY is populated');
 my $column = $line->column('KEY');
 
 is($column->[0]->value, 'Rogue ~ Sneak Attack', 'first token in column is correct');
+is($line->_columnLength('KEY'), 24, "Column length correct for single entry");
+
+parseOptions(@ARGV);
 
 my $token1 = LstTidy::Token->new(
    fullToken  => 'ABILITY:FEAT|AUTOMATIC|Acrobatic',
@@ -64,3 +68,6 @@ $column = $line->column('ABILITY');
 
 is($column->[0]->value, 'FEAT|AUTOMATIC|Acrobatic', 'First FEAT is correct');
 is($column->[1]->value, 'FEAT|AUTOMATIC|Toughness', 'Second FEAT is correct');
+is($line->_columnLength('ABILITY'), 68, "Column length correct for two entries");
+
+is($line->_columnLength('ABILITY'), 68, "Column length does not destroy the data");

@@ -11,6 +11,7 @@ use lib dirname(dirname abs_path $0);
 
 use LstTidy::Data;
 use LstTidy::Token;
+use LstTidy::Options qw(getOption);
 
 has 'columns' => (
    traits   => ['Hash'],
@@ -47,6 +48,49 @@ sub addToken {
    $self->column($token->tag, []) unless $self->column($token->tag); 
 
    push @{ $self->column($token->tag) }, $token;
+}
+
+##############################################################################
+
+sub _joinWith {
+   my ($self, $key, $sep) = @_;
+
+   return "" unless $self->hasColumn($key);
+
+   my @column = @{ $self->column($key) };
+
+   my $final = pop @column;
+
+   my $text;
+   for my $token ( @column ) {
+      $text .= $token->fullRealToken . $sep;
+   }
+
+   $text .= $final->fullRealToken;
+}
+
+sub _columnLength {
+   my ($self, $key) = @_;
+
+   my $length = 0;
+   
+   if ($self->hasColumn($key)) {
+
+      my @column = @{ $self->column($key) };
+      my $final  = pop @column;
+
+      # The final item is not rounded to the tab length
+      $length = defined $final ? length $final->fullRealToken : 0;
+
+      my $tabLength = getOption('tabLength');
+
+      # All other elements must be rounded to the next tab
+      for my $token ( @column ) {
+         $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
+      }
+   }
+
+   $length;
 }
 
 1;
