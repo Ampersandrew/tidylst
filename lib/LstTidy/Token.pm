@@ -452,8 +452,10 @@ my %validSubTags = (
       'HD'                    => 1,
       'HP'                    => 1,
       'ITEMCOST'              => 1,
+      'LANG'                  => 1,
       'LOADMULT'              => 1,
       'MISC'                  => 1,
+      'MODSKILLPOINTS'        => 1,
       'MONSKILLPTS'           => 1,
       'MOVEADD'               => 1,
       'MOVEMULT'              => 1,
@@ -1358,7 +1360,7 @@ sub _clear {
 
       getLogger()->notice(
          q{The tag "} . $clearToken . q{" from "} . $self->origToken . 
-         q{" is not in the } . $self->lineType . q{ tag list\n},
+         q{" is not in the } . $self->lineType . qq{ tag list\n},
          $self->file,
          $self->line
       );
@@ -1861,7 +1863,7 @@ sub _invalid {
 
       getLogger()->notice(
          qq{The tag "} . $token->tag . q{" from "} . $token->origToken 
-         . q{" is not in the } . $token->lineType . q{ tag list\n},
+         . q{" is not in the } . $token->lineType . qq{ tag list\n},
          $token->file,
          $token->line
       );

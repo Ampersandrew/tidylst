@@ -47,6 +47,7 @@ use LstTidy::Data qw(
    setEntityValid
    updateValidity
    );
+use LstTidy::Line;
 use LstTidy::Log;
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::LogHeader;
@@ -997,7 +998,7 @@ sub FILETYPE_parse {
    # Phase I - Split line in tokens and parse
    #               the tokens
 
-   my $line = 1;
+   my $lineNum = 1;
    LINE:
    for my $thisLine (@ {$lines_ref} ) {
 
@@ -1027,7 +1028,7 @@ sub FILETYPE_parse {
          $log->warning(
             qq(Can\'t find the line type for "$new_line"),
             $file,
-            $line
+            $lineNum
          );
 
          # We push the line as is.
@@ -1039,7 +1040,7 @@ sub FILETYPE_parse {
       $curent_linetype = $line_info->{Linetype};
       if ( $line_info->{Mode} == MAIN ) {
 
-         $last_main_line = $line - 1;
+         $last_main_line = $lineNum - 1;
 
       } elsif ( $line_info->{Mode} == SUB ) {
 
@@ -1047,7 +1048,7 @@ sub FILETYPE_parse {
             $log->warning(
                qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
                $file,
-               $line
+               $lineNum
             )
          }
 
@@ -1060,8 +1061,15 @@ sub FILETYPE_parse {
          die qq(Invalid type for $curent_linetype);
       }
 
+      my $line = LstTidy::Line->new(
+         type   => $curent_linetype,
+         entity => $curent_entity,
+         file   => $file,
+         num    => $lineNum,
+      );
+
       # Identify the deprecated tags.
-      scanForDeprecatedTokens( $new_line, $curent_linetype, $file, $line );
+      scanForDeprecatedTokens( $new_line, $curent_linetype, $file, $lineNum );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1093,25 +1101,35 @@ sub FILETYPE_parse {
          }
 
          # Grab the token from the front of the line
-         my $token = shift @tokens;
+         my $value = shift @tokens;
 
          # We remove the enclosing quotes if any
-         if ($token =~ s/^"(.*)"$/$1/) {
+         if ($value =~ s/^"(.*)"$/$1/) {
             $log->warning(
-               qq{Removing quotes around the '$token' tag},
+               qq{Removing quotes around the '$value' tag},
                $file,
-               $line
+               $lineNum
             )
          }
 
          # and add it to line_tokens
-         $line_tokens{$column} = [$token];
+         $line_tokens{$column} = [$value];
+
+         my $token =  LstTidy::Token->new(
+            tag       => $column,
+            value     => $value,
+            lineType  => $curent_linetype,
+            file      => $file,
+            line      => $lineNum,
+         );
+
+         $line->add($token);
 
          # Statistic gathering
          incCountValidTags($curent_linetype, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = process000($line_info, $token, $curent_linetype, $file, $line);
+            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
             last COLUMN if $exit;
          }
       }
@@ -1119,7 +1137,8 @@ sub FILETYPE_parse {
       #Second, let's parse the regular columns
       for my $rawToken (@tokens) {
 
-         my ( $extractedToken, $value ) = extractTag($rawToken, $curent_linetype, $file, $line );
+         my ($extractedToken, $value) = 
+            extractTag($rawToken, $curent_linetype, $file, $lineNum);
 
          # if extractTag returns a defined value, no further processing is
          # neeeded. If tag is defined but value is not, then the tag that was
@@ -1130,27 +1149,32 @@ sub FILETYPE_parse {
                fullToken => $extractedToken,
                lineType  => $curent_linetype,
                file      => $file,
-               line      => $line,
+               line      => $lineNum,
             );
 
             # Potentally modify the tag
             $token->process();
 
-            my $key = $token->realTag;
+            my $tag = $token->tag;
 
-            if ( exists $line_tokens{$key} && ! isValidMultiTag($curent_linetype, $key) ) {
+            if (exists $line_tokens{$tag} && ! isValidMultiTag($curent_linetype, $tag)) {
                $log->notice(
-                  qq{The tag "$key" should not be used more than once on the same $curent_linetype line.\n},
+                  qq{The tag "$tag" should not be used more than once on the same } 
+                  . $curent_linetype . qq{ line.\n},
                   $file,
-                  $line
+                  $lineNum
                );
             }
 
-            $line_tokens{$key} = exists $line_tokens{$key} ? [ @{ $line_tokens{$key} }, $token->fullRealToken ] : [$token->fullRealToken];
+            $line_tokens{$tag} = exists $line_tokens{$tag} 
+               ? [ @{ $line_tokens{$tag} }, $token->fullRealToken ] 
+               : [$token->fullRealToken];
+         
+            $line->add($token);
 
          } else {
 
-            $log->warning( "No tags in \"$rawToken\"\n", $file, $line );
+            $log->warning( "No tags in \"$rawToken\"\n", $file, $lineNum );
             $line_tokens{$rawToken} = $rawToken;
          }
       }
@@ -1163,29 +1187,30 @@ sub FILETYPE_parse {
          $line_info,
       ];
 
+
       ############################################################
       ######################## Conversion ########################
       # We manipulate the tags for the line here
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      parseLine($curent_linetype, \%line_tokens, $file, $line, $newline);
+      parseLine(\%line_tokens, $line);
 
       ############################################################
       # Validate the line
       if (getOption('xcheck')) {
-         validateLine($curent_linetype, \%line_tokens, $file, $line)
+         validateLine($curent_linetype, \%line_tokens, $file, $lineNum, $line)
       };
 
       ############################################################
       # .CLEAR order verification
-      check_clear_tag_order(\%line_tokens, $file, $line);
+      check_clear_tag_order(\%line_tokens, $file, $lineNum);
 
       #Last, we put the tokens and other line info in the @newlines array
       push @newlines, $newline;
 
    }
-   continue { $line++ }
+   continue { $lineNum++ }
 
    #####################################################
    #####################################################
@@ -2979,29 +3004,25 @@ Version: 1.38
 
 =head1 DESCRIPTION
 
-B<prettylst.pl> is a script that parse a PCGEN .lst files and generate
-new ones with the proper ordering of the fields. The original order was
-given by Mynex. Nowadays, it's Tir-Gwait that is the
-head-honcho-master-lst-monkey (well, he decide the order anyway :-).
+B<tidylst.pl> is a script that parses PCGEN .lst files and generates
+new ones with ordered fields. The original order was given by Mynex.
 
 The script is also able to do some conversions of the .lst so that old
-versions are compatibled with the latest release of PCGEN.
+versions are made compatible with the latest release of PCGEN.
 
 =head1 INSTALLATION
 
 =head2 Get Perl
 
-I'm using ActivePerl v5.8.6 (build 811) but any standard distribution with version 5.5 and
-over should work. The script has been tested on Windows 98, Windows 2000, Windows XP and FreeBSD.
+I'm using perl v5.24.1 built for debian but any standard distribution 
+should work.
 
-To my knowledge, I'm using only one module that is not included in the standard distribution: Text::Balanced
-(this module is included in the 5.8 standard distribution and maybe with some others).
+The script uses only two nonstandard modules, which you can get from cpan,
+or if you use a package manager (activestate, debian etc.) you can get them
+from there, for instance for activestate
 
-To get Perl use <L<http://www.activestate.com/Products/ActivePerl/>> or <L<http://www.cpan.org/ports/index.html>>
-To get Text::Balanced use <L<http://search.cpan.org/author/DCONWAY/Text-Balanced-1.89/lib/Text/Balanced.pm>> or
-use the following command if you use the ActivePerl distribution:
-
-  ppm install text-balanced
+  ppm install Mouse
+  ppm install MouseX-AttributeHelpers
 
 =head2 Put the script somewhere
 

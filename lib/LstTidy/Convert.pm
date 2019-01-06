@@ -6,7 +6,12 @@ use warnings;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(convertAddTokens convertEntities doTokenConversions);
+our @EXPORT_OK = qw(
+   convertAddTokens
+   convertEntities
+   doTokenConversions
+   doLineConversions
+);
 
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
@@ -1010,9 +1015,63 @@ sub convertWillpower{
    }
 }
 
+=head2 doLineConversions
+
+   This function does token conversion. It is called on individual tags after
+   they have been separated.
+ 
+   Most commun use is for addition, conversion or removal of tags.
+
+=cut
+
+sub doLineConversions {
+
+   my ($line) = @_;
+
+   if (isConversionActive('ALL:Convert ADD:SA to ADD:SAB') && $line->hasColumn('ADD:SA')) {
+      $line->replaceTag('ADD:SA', 'ADD:SAB');
+   }
+
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses') && $line->isType("RACE")) {
+      removePreDefaultMonster($line);
+   }
+
+   if (isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') 
+      && $line->isType("EQUIPMENT") 
+      && $line->hasColumn('ALTCRITICAL')) {
+
+      replaceAltCritical($line);
+   }
+
+   if (isConversionActive('RACE:Remove MFEAT and HITDICE')
+      && $line->isType("RACE")
+      && $line->hasColumn('MFEAT')) { 
+
+      # In RACE files, remove all MFEAT tags, but only if there is a
+      # MONSTERCLASS present.
+      
+      removeMonsterTag($line, 'MFEAT');
+   }
+
+   if (isConversionActive('RACE:Remove MFEAT and HITDICE')
+      && $line->isType("RACE")
+      && $line->hasColumn('HITDICE')) { 
+
+      # In RACE files, remove all HITDICE tags, but only if there is a
+      # MONSTERCLASS present.
+      
+      removeMonsterTag($line, 'HITDICE');
+   }
+
+
+
+}
+
+
 =head2 doTokenConversions
 
-   This function does token conversion. It is called on individual tags after they have been separated.
+   This function does token conversion. It is called on individual tags after
+   they have been separated.
  
    Most commun use is for addition, conversion or removal of tags.
 
@@ -1090,6 +1149,33 @@ sub reformatPreRace {
    }
 }
 
+
+=head2 removeMonsterTag
+
+   Remove $tag if it appears on a line with MONSTERCLASS, otherwise, 
+   warn that they don't appear together
+
+=cut
+
+sub removeMonsterTag  {
+
+   my ($line, $tag) = @_;
+
+   if ( $line->hasColumn('MONSTERCLASS')) { 
+
+      # use the remove tag variant
+      $line->replaceTag($tag);
+
+   } else {
+
+      getLogger()->warning(
+         qq{MONSTERCLASS missing on same line as ${tag}, need to look at this line by hand.},
+         $line->file,
+         $line->num
+      );
+   }
+}
+
 =head2 removePreAlign
 
    Remove all the PREALIGN token from within BONUS, SA and VFEAT tags.
@@ -1123,6 +1209,67 @@ sub removePreAlign {
             $token->line
          );
       }
+   }
+}
+
+=head2 removePreDefaultMonster
+
+   Bonuses associated with a PREDEFAULTMONSTER:Y need to be removed
+   This should remove the whole token.
+
+=cut
+
+sub removePreDefaultMonster {
+
+   my ($line) = @_;
+   
+   my $log = getLogger();
+
+   for my $key ( $line->columns ) {
+      my @column = @{ $line->column($key) };
+
+      # delete the existing column
+      $line->deleteColumn('ADD:SA');
+
+      # put back the non-matching tags
+      for my $token ( @column) {
+         if ($token->value =~ /PREDEFAULTMONSTER:Y/) {
+            $log->warning(
+               qq{Removing "} . $token->fullToken . q{".},
+               $line->file,
+               $line->num
+            )
+         } else{
+            $line->add($token);
+         }
+      }
+   }
+}
+
+=head2 replaceAltCritical
+   
+   In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT
+
+=cut
+
+sub replaceAltCritical {
+
+   my ($line) = @_;
+
+   # Give a warning if both ALTCRITICAL and ALTCRITMULT are on the same line,
+   # then remove ALTCRITICAL.
+   if ( $line->hasColumn('ALTCRITMULT') ) {
+      getLogger()->warning(
+         qq{Removing ALTCRITICAL, ALTCRITMULT is already present on this line.},
+         $line->file,
+         $line->num
+      );
+
+      $line->deleteColumn('ALTCRITICAL');
+
+   } else {
+      
+      $line->replaceTag('ALTCRITICAL', 'ALTCRITMULT');
    }
 }
 

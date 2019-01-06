@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+use Data::Dumper;
+
 # expand library path so we can find LstTidy modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
@@ -11,6 +13,9 @@ use lib dirname(dirname abs_path $0) . '/lib';
 use Test::More tests => 41;
 
 use_ok ('LstTidy::Parse');
+use LstTidy::Data qw(getValidSystemArr updateValidity);
+use LstTidy::Line;
+use LstTidy::Token;
 
 my %enabled = (
    'ABILITY'         => [ 'code'  => "ABILITY is parsed " ],
@@ -72,4 +77,3 @@ is(LstTidy::Parse::isWriteableFileType('COVER'), 0, "COVER is not a writable Fil
 is(LstTidy::Parse::isWriteableFileType('EQUIPMENT'), 1, "EQUIPMENT is a writable File type");
 
 # LstTidy::Parse::parse_system_files
-
