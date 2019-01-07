@@ -1185,6 +1185,7 @@ sub FILETYPE_parse {
          $last_main_line,
          $curent_entity,
          $line_info,
+         $line,
       ];
 
 
@@ -1199,7 +1200,7 @@ sub FILETYPE_parse {
       ############################################################
       # Validate the line
       if (getOption('xcheck')) {
-         validateLine($curent_linetype, \%line_tokens, $file, $lineNum, $line)
+         validateLine($line)
       };
 
       ############################################################

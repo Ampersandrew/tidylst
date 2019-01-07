@@ -84,6 +84,21 @@ sub add {
 }
 
 
+=head2 columnHasSingleToken
+
+   Returns true if the given column has a single value.
+
+=cut
+
+sub columnHasSingleToken {
+
+   my ($self, $token) = @_;
+
+   $self->hasColumn($token) && scalar $self->column($token->tag) == 1;
+}
+
+
+
 =head2 entityName
 
    Return the name of this entity
@@ -101,6 +116,48 @@ sub entityName {
    # is the name.
    $token->value;
 }
+
+
+=head2 firstColumnMatches
+
+   Returns true if this line has the given token and the full token matches the
+   given pattern.
+
+=cut
+
+sub firstColumnMatches {
+
+   my ($self, $column, $pattern) = @_;
+
+   if ($self->hasColumn($column)) {
+      my @column = @{$self->column($column)};
+      my $token  = $column[0];
+      return $token->fullToken =~ $pattern;
+   }
+
+   return 0;   
+}
+
+
+=head2 getFirstTokenInColumn
+
+   Get the token which is first in the column, returns undef if the column is
+   not present in the line.
+
+=cut
+
+sub getFirstTokenInColumn {
+
+   my ($self, $column) = @_;
+
+   if ($self->hasColumn($column)) {
+      my @column = @{$self->column($column)};
+      return $column[0];
+   }
+
+   return undef;   
+}
+
 
 =head2 hasType
 
@@ -204,79 +261,6 @@ sub _columnLength {
    $length;
 }
 
-# Give appropriate warnings for bad combinations of equipment tags
-
-##################################################################
-# Check to see if the TYPE contains Spellbook, if so, warn if NUMUSES or
-# PAGEUSAGE aren't there.  Then check to see if NUMPAGES or PAGEUSAGE are
-# there, and if they are there, but the TYPE doesn't contain Spellbook,
-# warn.
-#
-# Do the same for Type Container with and without CONTAINS
-
-sub _equipment {
-
-   my ($self) = @_;
-
-   my $log = getLogger();
-
-   if ($self->hasType('Spellbook')) {
-
-      if ($self->hasColumn('NUMPAGES') && $self->hasColumn('PAGEUSAGE')) {
-         #Nothing to see here, move along.
-      } else {
-         $log->info(
-            q{You have a Spellbook defined without providing NUMPAGES or PAGEUSAGE.} 
-            . q{ If you want a spellbook of finite capacity, consider adding these tokens.},
-            $self->file,
-            $self->num
-         );
-      }
-
-   } else {
-
-      if ($self->hasColumn('NUMPAGES') ) {
-         $log->warning(
-            q{Invalid use of NUMPAGES token in a non-spellbook.} 
-            . q{ Remove this token, or correct the TYPE.},
-            $self->file,
-            $self->num
-         );
-      }
-
-      if  ($self->hasColumn('PAGEUSAGE'))
-      {
-         $log->warning(
-            q{Invalid use of PAGEUSAGE token in a non-spellbook.} 
-            . q{ Remove this token, or correct the TYPE.},
-            $self->file,
-            $self->num
-         );
-      }
-   }
-
-   if ($self->hasType('Container')) {
-
-      if (! $self->hasColumn('CONTAINS')) {
-
-         $log->warning(
-            q{Any object with TYPE:Container must also have a CONTAINS }
-            . q{token to be activated.},
-            $self->file,
-            $self->num
-         );
-      }
-
-   } elsif ($self->hasColumn('CONTAINS')) {
-
-      $log->warning(
-         q{Any object with CONTAINS must also be TYPE:Container }
-         . q{for the CONTAINS token to be activated.},
-         $self->file,
-         $self->num
-      );
-   }
-}
 
 sub _joinWith {
    my ($self, $key, $sep) = @_;

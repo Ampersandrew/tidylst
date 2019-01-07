@@ -724,6 +724,96 @@ sub convertMove {
    }
 }
 
+
+=head2 convertNaturalAttack
+
+   Need to fix the STR bonus when the monster have only one Natural Attack (STR
+   bonus is then 1.5 * STR).
+
+   We add it if there is only one Melee attack and the bonus is not already
+   present.
+
+=cut
+
+sub convertNaturalAttack {
+
+   my ($line) = @_;
+
+   # First we verify if if there is only one melee attack.
+
+   if ($line->columnHasSingleToken('NATURALATTACKS')) {
+
+            
+
+
+      my @NatAttacks = split '\|', $lineTokens->{'NATURALATTACKS'}[0];
+      if ( @NatAttacks == 1 ) {
+         my ( $NatAttackName, $Types, $NbAttacks, $Damage ) = split ',', $NatAttacks[0];
+         if ( $NbAttacks eq '*1' && $Damage ) {
+
+            # Now, at last, we know there is only one Natural Attack
+            # Is it a Melee attack?
+            my @Types       = split '\.', $Types;
+            my $IsMelee  = 0;
+            my $IsRanged = 0;
+            for my $type (@Types) {
+               $IsMelee  = 1 if uc($type) eq 'MELEE';
+               $IsRanged = 1 if uc($type) eq 'RANGED';
+            }
+
+            if ( $IsMelee && !$IsRanged ) {
+
+               # We have a winner!!!
+               ($NatAttackName) = ( $NatAttackName =~ /:(.*)/ );
+
+               # Well, maybe the BONUS:WEAPONPROF is already there.
+               if ( $line->hasColumn('BONUS:WEAPONPROF') ) {
+                  my $AlreadyThere = 0;
+                  FIND_BONUS:
+                  for my $bonus ( @{ $lineTokens->{'BONUS:WEAPONPROF'} } ) {
+                     if ( $bonus eq "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2" )
+                     {
+                        $AlreadyThere = 1;
+                        last FIND_BONUS;
+                     }
+                  }
+
+                  unless ($AlreadyThere) {
+                     push @{ $lineTokens->{'BONUS:WEAPONPROF'} }, "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2";
+                     $log->warning(
+                        qq{Added "$lineTokens->{'BONUS:WEAPONPROF'}[0]"}
+                        . qq{ to go with "$lineTokens->{'NATURALATTACKS'}[0]"},
+                        $line->file,
+                        $line->num
+                     );
+                  }
+
+               } else {
+
+                  $lineTokens->{'BONUS:WEAPONPROF'} = ["BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2"];
+
+                  $log->warning(
+                     qq{Added "$lineTokens->{'BONUS:WEAPONPROF'}[0]"}
+                     . qq{to go with "$lineTokens->{'NATURALATTACKS'}[0]"},
+                     $line->file,
+                     $line->num
+                  );
+               }
+
+            } elsif ( $IsMelee && $IsRanged ) {
+               $log->warning(
+                  qq{This natural attack is both Melee and Ranged}
+                  . qq{"$lineTokens->{'NATURALATTACKS'}[0]"},
+                  $line->file,
+                  $line->num
+               );
+            }
+         }
+      }
+   }
+}
+
+
 =head2 convertPreAlign
 
    Convert old style PREALIGN to new style
@@ -1211,6 +1301,12 @@ sub doLineConversions {
       && !$line->hasColumn('MONCSKILL')) {
 
       $line->replaceTag('CSKILL', 'MONCSKILL')
+   }
+
+   if (isConversionActive('ALL:CMP NatAttack fix')
+      && $line->hasColumn('NATURALATTACKS')) {
+
+      convertNaturalAttack($line);
    }
 
 
