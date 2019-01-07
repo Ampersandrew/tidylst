@@ -305,12 +305,12 @@ sub addGenericDnDVersion {
          $has_DnD_v35e = 1 if $gameMode eq "DnD_v35e";
       }
 
-      if (!$has_3e && $has_DnD_v30e) { 
+      if (!$has_3e && $has_DnD_v30e) {
          $token->value($token->value =~ s/(DnD_v30e)/3e\|$1/r)
       }
 
-      if (!$has_35e && $has_DnD_v35e) { 
-         $token->value($token->value =~ s/(DnD_v35e)/35e\|$1/r) 
+      if (!$has_35e && $has_DnD_v35e) {
+         $token->value($token->value =~ s/(DnD_v35e)/35e\|$1/r)
       }
 
       if ($token->origToken ne $token->fullRealToken) {
@@ -385,7 +385,7 @@ sub categoriseAddToken {
 =head2 convertAddTokens
 
    If the ADD token parses as valid, the token object is rewritten in standard
-   form.   
+   form.
 
 =cut
 
@@ -425,7 +425,7 @@ sub convertAddTokens {
             $token->line
          );
 
-         incCountInvalidTags($token->lineType, $addToken); 
+         incCountInvalidTags($token->lineType, $addToken);
          $token->noMoreErrors(1);
       }
    }
@@ -513,8 +513,8 @@ sub convertBonusCombatBAB {
          # If there is a BONUS:COMBAT elsewhere, we report it for manual
          # inspection.
          getLogger()->info(
-            qq{Verify this token "} . $token->origToken . q{"}, 
-            $token->file, 
+            qq{Verify this token "} . $token->origToken . q{"},
+            $token->file,
             $token->line
          );
       }
@@ -725,7 +725,7 @@ sub convertMove {
 }
 
 =head2 convertPreAlign
-        
+
    Convert old style PREALIGN to new style
 
    PREALIGN now accepts text (two letters) instead of numbers to specify
@@ -893,6 +893,94 @@ sub convertPreStat {
    }
 }
 
+
+=head2 convertSpells
+
+   Convert the old SPELL tags to the new SPELLS format.
+
+   Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
+   New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
+
+=cut
+
+sub convertSpells {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+
+   my %spellbooks;
+
+   # We parse all the existing SPELL tags
+   for my $token ( @{ $line->column('SPELL') } ) {
+
+      my @elements = split '\|', $token->value;
+      my @pretags;
+
+      while ( $elements[-1] =~ /^!?PRE\w*:/ ) {
+
+         # We keep the PRE tags separated
+         unshift @pretags, pop @elements;
+      }
+
+      my $pretags = scalar @pretags ? join '|', @pretags : 'NONE';
+
+      # We classify each triple <spellname>|<nb per day>|<spellbook>
+      while (@elements) {
+         if ( scalar @elements < 3 ) {
+            $log->warning(
+               qq(Wrong number of elements for ") . $token->fullToken . q("),
+               $line->file,
+               $line->num
+            );
+         }
+
+         my $spellname = shift @elements;
+         my $times     = scalar @elements ? shift @elements : 99999;
+         my $spellbook = scalar @elements ? shift @elements : "MISSING SPELLBOOK";
+
+         push @{ $spellbooks{$spellbook}{$times}{$pretags} }, $spellname;
+      }
+
+      # warn about the impending deletion
+      $log->warning(
+         qq{Removing "} . $token->fullToken . q{"},
+         $line->file,
+         $line->num
+      );
+   }
+
+   # delete the SPELL tags
+   $line->replaceTag('SPELL');
+
+   # add the new format SPELLS tags
+   for my $spellbook ( sort keys %spellbooks ) {
+      for my $times ( sort keys %{ $spellbooks{$spellbook} } ) {
+         for my $pretags ( sort keys %{ $spellbooks{$spellbook}{$times} } ) {
+
+            my $spells = "SPELLS:$spellbook|TIMES=$times";
+
+            for my $spellname ( sort @{ $spellbooks{$spellbook}{$times}{$pretags} } ) {
+               $spells .= "|$spellname";
+            }
+
+            $spells .= "|$pretags" unless $pretags eq "NONE";
+
+            my $token = LstTidy::Token->new(
+               fullToken => $spells,
+               lineType  => $line->type,
+               file      => $line->file,
+               line      => $line->num,
+            );
+
+            $line->add($token);
+            $log->warning( qq{Adding "$spells"}, $line->file, $line->num );
+         }
+      }
+   }
+}
+
+
 =head2 convertToSRDName
 
    Name change for SRD compliance (PCGEN 4.3.3)
@@ -911,7 +999,7 @@ sub convertToSRDName {
        || $token->tag eq 'FEAT'
        || $token->tag eq 'PROFICIENCY'
        || $token->tag eq 'DEITYWEAP'
-       || $token->tag eq 'MFEAT' 
+       || $token->tag eq 'MFEAT'
     ) {
 
        WEAPONNAME:
@@ -1019,7 +1107,7 @@ sub convertWillpower{
 
    This function does token conversion. It is called on individual tags after
    they have been separated.
- 
+
    Most commun use is for addition, conversion or removal of tags.
 
 =cut
@@ -1028,52 +1116,102 @@ sub doLineConversions {
 
    my ($line) = @_;
 
-   if (isConversionActive('ALL:Convert ADD:SA to ADD:SAB') && $line->hasColumn('ADD:SA')) {
-      $line->replaceTag('ADD:SA', 'ADD:SAB');
+   if (isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
+      && $line->hasColumn('ADD:SA')) {
+
+      $line->replaceTag('ADD:SA', 'ADD:SAB')
    }
 
-   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses') && $line->isType("RACE")) {
-      removePreDefaultMonster($line);
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
+      && $line->isType("RACE")) {
+
+      removePreDefaultMonster($line)
    }
 
-   if (isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT') 
-      && $line->isType("EQUIPMENT") 
+   if (isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
+      && $line->isType("EQUIPMENT")
       && $line->hasColumn('ALTCRITICAL')) {
 
-      replaceAltCritical($line);
+      replaceAltCritical($line)
    }
 
    if (isConversionActive('RACE:Remove MFEAT and HITDICE')
       && $line->isType("RACE")
-      && $line->hasColumn('MFEAT')) { 
-      
-      removeMonsterTag($line, 'MFEAT');
+      && $line->hasColumn('MFEAT')) {
+
+      removeMonsterTag($line, 'MFEAT')
    }
 
    if (isConversionActive('RACE:Remove MFEAT and HITDICE')
       && $line->isType("RACE")
-      && $line->hasColumn('HITDICE')) { 
-      
-      removeMonsterTag($line, 'HITDICE');
+      && $line->hasColumn('HITDICE')) {
+
+      removeMonsterTag($line, 'HITDICE')
    }
-   
+
    if (isConversionActive('DEITY:Followeralign conversion')
       && $line->isType("DEITY")
       && $line->hasColumn('FOLLOWERALIGN')
       && $line->hasColumn('DOMAINS')) {
 
-      removeFollowerAlign($line);
+      removeFollowerAlign($line)
    }
-   
-   if (isConversionActive('RACE:TYPE to RACETYPE')
-      && (  $line->isType("RACE") 
-         || $line->isType("TEMPLATE") )
-      && not ($line->hasColumn('RACETYPE'))
-      && $line->hasColumn('TYPE')) {
-      
-      $line->replaceTag('TYPE', 'RACETYPE');
-   };
 
+   if (isConversionActive('RACE:TYPE to RACETYPE')
+      && ($line->isType("RACE") || $line->isType("TEMPLATE") )
+      && ! $line->hasColumn('RACETYPE')
+      && $line->hasColumn('TYPE')) {
+
+      $line->replaceTag('TYPE', 'RACETYPE')
+   }
+
+   if (isConversionActive('ALL:New SOURCExxx tag format')
+      && $line->hasColumn('SOURCELONG')) {
+      $line->_splitToken('SOURCELONG')
+   }
+
+   if (isConversionActive('ALL:Convert SPELL to SPELLS')
+      && $line->hasColumn('SPELL')) {
+
+      convertSpells($line)
+   }
+
+   if (isConversionActive('ALL:CMP remove PREALIGN') 
+      && $line->hasColumn('PREALIGN')) {
+
+      $line->replaceTag('PREALIGN')
+   }
+
+   if (isConversionActive('EQUIP:no more MOVE')
+      && $line->isType("EQUIPMENT")
+      && $line->hasColumn('MOVE')) {
+
+      $line->replaceTag('MOVE')
+   }
+
+   if (isConversionActive('CLASS:no more HASSPELLFORMULA')
+      && $line->isType("CLASS")
+      && $line->hasColumn('HASSPELLFORMULA') )
+   {
+
+      $line->replaceTag('HASSPELLFORMULA')
+   }
+
+   if (isConversionActive('WEAPONPROF:No more SIZE')
+      && $line->isType("WEAPONPROF")
+      && $line->hasColumn('SIZE')) {
+
+      $line->replaceTag('SIZE')
+   }
+
+   if (isConversionActive('RACE:CSKILL to MONCSKILL')
+      && $line->isType("RACE")
+      && $line->hasColumn('CSKILL')
+      && $line->hasColumn('MONSTERCLASS')
+      && !$line->hasColumn('MONCSKILL')) {
+
+      $line->replaceTag('CSKILL', 'MONCSKILL')
+   }
 
 
 }
@@ -1083,7 +1221,7 @@ sub doLineConversions {
 
    This function does token conversion. It is called on individual tags after
    they have been separated.
- 
+
    Most commun use is for addition, conversion or removal of tags.
 
 =cut
@@ -1193,8 +1331,8 @@ sub removeFollowerAlign {
       }
    }
 
-   # join the distinct values with , 
-   my $newprealign = join ",", map {$valid[$_]} sort 
+   # join the distinct values with ,
+   my $newprealign = join ",", map {$valid[$_]} sort
       do { my %seen; grep { !$seen{$_}++ } @alignments };
 
    $line->appendToValue('DOMAINS', "|PREALIGN:$newprealign");
@@ -1211,7 +1349,7 @@ sub removeFollowerAlign {
 
 =head2 removeMonsterTag
 
-   Remove $tag if it appears on a line with MONSTERCLASS, otherwise, 
+   Remove $tag if it appears on a line with MONSTERCLASS, otherwise,
    warn that they don't appear together
 
 =cut
@@ -1220,7 +1358,7 @@ sub removeMonsterTag  {
 
    my ($line, $tag) = @_;
 
-   if ( $line->hasColumn('MONSTERCLASS')) { 
+   if ( $line->hasColumn('MONSTERCLASS')) {
 
       # use the remove tag variant
       $line->replaceTag($tag);
@@ -1281,7 +1419,7 @@ sub removePreAlign {
 sub removePreDefaultMonster {
 
    my ($line) = @_;
-   
+
    my $log = getLogger();
 
    for my $key ( $line->columns ) {
@@ -1306,7 +1444,7 @@ sub removePreDefaultMonster {
 }
 
 =head2 replaceAltCritical
-   
+
    In EQUIPMENT files, take ALTCRITICAL and replace with ALTCRITMULT
 
 =cut
@@ -1327,7 +1465,7 @@ sub replaceAltCritical {
       $line->deleteColumn('ALTCRITICAL');
 
    } else {
-      
+
       $line->replaceTag('ALTCRITICAL', 'ALTCRITMULT');
    }
 }
@@ -1351,7 +1489,7 @@ sub reportRaceCSkill {
       );
    }
 }
- 
+
 =head2 reportReplacement
 
    Report the modification done by a convertoperation.

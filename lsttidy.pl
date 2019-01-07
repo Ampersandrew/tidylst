@@ -58,7 +58,7 @@ use LstTidy::Parse qw(
    isWriteableFileType
    matchLineType
    normaliseFile
-   parseLine
+   processLine
    parseSystemFiles
    process000
    );
@@ -1194,7 +1194,7 @@ sub FILETYPE_parse {
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      parseLine(\%line_tokens, $line);
+      processLine(\%line_tokens, $line);
 
       ############################################################
       # Validate the line

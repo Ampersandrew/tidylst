@@ -9,7 +9,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data;
+use LstTidy::Data qw(getEntityNameTag);
 use LstTidy::Log;
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Token;
@@ -83,6 +83,25 @@ sub add {
    push @{ $self->column($token->tag) }, $token;
 }
 
+
+=head2 entityName
+
+   Return the name of this entity
+
+=cut
+
+sub entityName {
+   my ($self) = @_;
+
+   # Look upo the name of the column that hold the name
+   my $nameTag = getEntityNameTag();
+   my $token   = $self->column($nameTag)[0];
+
+   # There is only a faux tag on this token, so just return the value as that
+   # is the name.
+   $token->value;
+}
+
 =head2 hasType
 
    This opertaion checks whether the line has the given type in its tokens.
@@ -119,7 +138,7 @@ sub isType {
 =head2 replaceTag
 
    When called with two arguments, this replaces the tag in every token in the
-   column with the new tag. This crates a new column, it then deletes the
+   column with the new tag. This creates a new column, it then deletes the
    old column.
 
    If only given one argument, it deletes the tokens in that column
@@ -144,6 +163,12 @@ sub replaceTag {
       if (defined $newTag) {
          $token->tag($newTag);
          $self->add($token);
+
+         $log->warning(
+            qq{Replaced with "} . $token->fullToken . q{".},
+            $self->file,
+            $self->num
+         );
       }
    }
 
@@ -269,6 +294,47 @@ sub _joinWith {
 
    $text .= $final->fullRealToken;
 }
+
+
+=head2 _splitToken
+
+   Split a token which has been separated by | into separate tokens.
+   Mostly used to split the old style SOURCE tokens.
+
+=cut
+
+sub _splitToken {
+
+   my ($line, $column) = @_;
+
+   my @newTokens;
+
+   for my $token (@{ $line->column($column) }) {
+      if( $token->value =~ / [|] /xms ) {
+         for my $tag (split '\|', $token->fullToken) {
+            push @newTokens, $token->clone(fullToken => $tag);
+         }
+
+         $log->warning(
+            qq{Spliting "} . $token->fullToken . q{"},
+            $line->file,
+            $line->num
+         );
+
+      } else {
+         push @newTokens, $token;
+      }
+   }
+
+   # delete the existing column and add back the tokens, if the tokens were
+   # no split, this should end up where we started.
+   $line->deleteColumn($column);
+
+   for my $token (@newTokens) {
+      $line->add($token);
+   }
+}
+
 
 __PACKAGE__->meta->make_immutable;
 

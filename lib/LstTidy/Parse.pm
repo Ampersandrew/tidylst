@@ -13,7 +13,7 @@ our @EXPORT_OK = qw(
    isWriteableFileType
    matchLineType
    normaliseFile
-   parseLine
+   processLine
    parseSystemFiles
    process000
    );
@@ -728,6 +728,48 @@ our %parseControl = (
 
 );
 
+
+=head2 extractTag
+
+   This opeatrion takes a tag and makes sure it is suitable for further
+   processing. It eliminates comments and identifies pragma.
+
+   Paramter: $tagText   The text of the tag
+             $linetype  The Type of the current line
+             $file      The name of the current file
+             $line      The number of the current line
+
+   Return: Tag and value, if value is defined the tag needs no further
+           parsing.
+
+=cut
+
+sub extractTag {
+
+   my ($tagText, $linetype, $file, $line) = @_;
+
+   # We remove the enclosing quotes if any
+   if ($tagText =~ s/^"(.*)"$/$1/) {
+      getLogger()->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
+   }
+
+   # Is this a pragma (e.g. #EXTRAFILE) rather than a comment
+   if ( $tagText =~ m/^(\#.*?):(.*)/ && isValidTag($linetype, $1)) {
+      return ( $1, $2 )
+   }
+
+   # If there is no text to parse or if this is a comment
+   if (length $tagText == 0 || $tagText =~ /^\s*\#/) {
+      return  ( "", "" )
+   }
+
+   # Remove any spaces before and after the tag
+   $tagText =~ s/^\s+//;
+   $tagText =~ s/\s+$//;
+   
+   return $tagText;
+}
+
 =head2 getParseControl
 
    Get the Parse control record where the lineType field of the record matches
@@ -761,6 +803,7 @@ sub isParseableFileType {
    return $parsableFileType{$fileType};
 }
 
+
 =head2 isWriteableFileType
 
    Returns true if the system should rewrite the given file type
@@ -772,6 +815,20 @@ sub isWriteableFileType {
 
    return $writefiletype{$file};
 }
+
+
+=head2 makeExportListString
+
+   Join the arguments into a string suitable for passing to export lists.
+
+=cut
+
+sub makeExportListString {
+
+   my $guts = join qq{","}, @_;
+   qq{"${guts}\n"};
+}
+
 
 =head2 matchLineType
 
@@ -853,40 +910,306 @@ sub normaliseFile {
 }
 
 
+=head2 parseSystemFiles
 
-
-=head2 makeExportListString
-
-   Join the arguments into a string suitable for passing to export lists.
+   This operation searches the given gamemode directory and parses out
+   Allowable game modes, Stats, alignments, variable names and check names. These
+   are then used to populate the valid data for later parses of LST files.
 
 =cut
 
-sub makeExportListString {
+sub parseSystemFiles {
 
-   my $guts = join qq{","}, @_;
-   qq{"${guts}\n"};
+   my ($systemFilePath) = @_;
+
+   my $originalSystemFilePath = $systemFilePath;
+   
+   my $log = getLogger();
+
+   my @verifiedAllowedModes = ();
+   my @verifiedStats        = ();
+   my @verifiedAlignments   = ();
+   my @verifiedVarNames     = ();
+   my @verifiedCheckNames   = ();
+
+   # Set the header for the error messages
+   $log->header(LstTidy::LogHeader::get('System'));
+
+   # Get the Unix direcroty separator even in a Windows environment
+   $systemFilePath =~ tr{\\}{/};
+
+   # Verify if the gameModes directory is present
+   if ( !-d "$systemFilePath/gameModes" ) {
+      die qq{No gameModes directory found in "$originalSystemFilePath"};
+   }
+
+   # We will now find all of the miscinfo.lst and statsandchecks.lst files
+   my @systemFiles = ();;
+
+   my $getSystem = sub {
+      no warnings qw(once);
+      push @systemFiles, $File::Find::name
+      if lc $_ eq 'miscinfo.lst' || lc $_ eq 'statsandchecks.lst';
+   };
+
+   File::Find::find( $getSystem, $systemFilePath );
+
+   # Did we find anything (hopefuly yes)
+   if ( scalar @systemFiles == 0 ) {
+      $log->error(
+         qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
+         getOption('systempath')
+      );
+   }
+
+   # We only keep the files that correspond to the selected
+   # game mode
+   if (getOption('gamemode')) {
+      my $gamemode = getOption('gamemode') ;
+      @systemFiles = grep { m{ \A $systemFilePath [/] gameModes [/] (?: ${gamemode} ) [/] }xmsi; } @systemFiles;
+   }
+
+   # Anything left?
+   if ( scalar @systemFiles == 0 ) {
+      my $gamemode = getOption('gamemode') ;
+      $log->error(
+         qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/${gamemode}/ directory},
+         getOption('systempath')
+      );
+   }
+
+   # Now we search for the interesting part in the miscinfo.lst files
+   for my $systemFile (@systemFiles) {
+      open my $systemFileFh, '<', $systemFile;
+
+      LINE:
+      while ( my $line = <$systemFileFh> ) {
+         chomp $line;
+
+         # Skip comment lines
+         next LINE if $line =~ / \A [#] /xms;
+
+         # ex. ALLOWEDMODES:35e|DnD
+         if ( my ($modes) = ( $line =~ / ALLOWEDMODES: ( [^\t]* )/xms ) ) {
+            push @verifiedAllowedModes, split /[|]/, $modes;
+            next LINE;
+
+            # ex. STATNAME:Strength ABB:STR DEFINE:MAXLEVELSTAT=STR|STRSCORE-10
+         } elsif ( $line =~ / \A STATNAME: /xms ) {
+
+            LINE_TAG:
+            for my $tag (split /\t+/, $line) {
+
+               # STATNAME lines have more then one interesting tags
+               if ( my ($stat) = ( $tag =~ / \A ABB: ( .* ) /xms ) ) {
+                  push @verifiedStats, $stat;
+
+               } elsif ( my ($defineExpression) = ( $tag =~ / \A DEFINE: ( .* ) /xms ) ) {
+
+                  if ( my ($varName) = ( $defineExpression =~ / \A ( [\t=|]* ) /xms ) ) {
+                     push @verifiedVarNames, $varName;
+                  } else {
+                     $log->error(
+                        qq{Cannot find the variable name in "$defineExpression"},
+                        $systemFile,
+                        $INPUT_LINE_NUMBER
+                     );
+                  }
+               }
+            }
+
+            # ex. ALIGNMENTNAME:Lawful Good ABB:LG
+         } elsif ( my ($alignment) = ( $line =~ / \A ALIGNMENTNAME: .* ABB: ( [^\t]* ) /xms ) ) {
+            push @verifiedAlignments, $alignment;
+
+            # ex. CHECKNAME:Fortitude   BONUS:CHECKS|Fortitude|CON
+         } elsif ( my ($checkName) = ( $line =~ / \A CHECKNAME: .* BONUS:CHECKS [|] ( [^\t|]* ) /xms ) ) {
+            # The check name used by PCGen is actually the one defined with the first BONUS:CHECKS.
+            # CHECKNAME:Sagesse     BONUS:CHECKS|Will|WIS would display Sagesse but use Will internaly.
+            push @verifiedCheckNames, $checkName;
+         }
+      }
+
+      close $systemFileFh;
+   }
+
+   # We keep only the first instance of every list items and replace
+   # the default values with the result.
+   # The order of elements must be preserved
+   my %seen = ();
+
+   setValidSystemArr('alignments', grep { !$seen{$_}++ } @verifiedAlignments);
+
+   %seen = ();
+   setValidSystemArr('checks' , grep { !$seen{$_}++ } @verifiedCheckNames);
+
+   %seen = ();
+   setValidSystemArr('gamemodes', grep { !$seen{$_}++ } @verifiedAllowedModes);
+
+   %seen = ();
+   setValidSystemArr('stats', grep { !$seen{$_}++ } @verifiedStats);
+
+   %seen = ();
+   setValidSystemArr('vars', grep { !$seen{$_}++ } @verifiedVarNames);
+
+   # Now we bitch if we are not happy
+   if ( scalar @verifiedStats == 0 ) {
+      $log->error(
+         q{Could not find any STATNAME: tag in the system files},
+         $originalSystemFilePath
+      );
+   }
+
+   if ( scalar @{getValidSystemArr('gamemodes')} == 0 ) {
+      $log->error(
+         q{Could not find any ALLOWEDMODES: tag in the system files},
+         $originalSystemFilePath
+      );
+   }
+
+   if ( scalar @{getValidSystemArr('checks')} == 0 ) {
+      $log->error(
+         q{Could not find any valid CHECKNAME: tag in the system files},
+         $originalSystemFilePath
+      );
+   }
+
+   # If the -exportlist option was used, we generate a system.csv file
+   if ( getOption('exportlist') ) {
+
+      open my $csvFile, '>', 'system.csv';
+
+      print {$csvFile} qq{"System Directory","$originalSystemFilePath"\n};
+
+      if ( getOption('gamemode') ) {
+         my $gamemode = getOption('gamemode') ;
+         print {$csvFile} qq{"Game Mode Selected","${gamemode}"\n};
+      }
+      print {$csvFile} qq{\n};
+
+      print {$csvFile} qq{"Alignments"\n};
+      for my $alignment (@{getValidSystemArr('alignments')}) {
+         print {$csvFile} qq{"$alignment"\n};
+      }
+      print {$csvFile} qq{\n};
+
+      print {$csvFile} qq{"Allowed Modes"\n};
+      for my $mode (sort @{getValidSystemArr('gamemodes')}) {
+         print {$csvFile} qq{"$mode"\n};
+      }
+      print {$csvFile} qq{\n};
+
+      print {$csvFile} qq{"Stats Abbreviations"\n};
+      for my $stat (@{getValidSystemArr('stats')}) {
+         print {$csvFile} qq{"$stat"\n};
+      }
+      print {$csvFile} qq{\n};
+
+      print {$csvFile} qq{"Variable Names"\n};
+      for my $varName (sort @{getValidSystemArr('vars')}) {
+         print {$csvFile} qq{"$varName"\n};
+      }
+      print {$csvFile} qq{\n};
+
+      close $csvFile;
+   }
+
+   return;
+}
+
+=head2 process000
+
+   The first tag on a line may need to be processed because it is a MOD, FORGET
+   or COPY. It may also need to be added to crosschecking data to allow other
+   lines to do MOD, FORGETs or COPYs.
+
+=cut
+
+sub process000 {
+
+   my ($line_info, $token, $linetype, $file, $line) = @_;
+
+   # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
+   my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
+
+   if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
+
+      # We keep track of the .MOD type tags to
+      # later validate if they are valid
+      if (getOption('xcheck')) {
+         LstTidy::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
+      }
+
+      # Special case for .COPY=<new name>
+      # <new name> is a valid entity
+      if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
+         setEntityValid($linetype, $new_name);
+      }
+
+      # Exit the loop
+      return 1; #last COLUMN;
+
+   } elsif ( getOption('xcheck') ) {
+
+      # We keep track of the entities that could be used with a .MOD type of
+      # tag for later validation.
+      #
+      # Some line types need special code to extract the entry.
+
+      if ( $line_info->{RegExGetEntry} ) {
+
+         if ( $token =~ $line_info->{RegExGetEntry} ) {
+            $token = $1;
+
+            # Some line types refer to other line entries directly
+            # in the line identifier.
+            if ( exists $line_info->{GetRefList} ) {
+               LstTidy::Report::add_to_xcheck_tables(
+                  $line_info->{IdentRefType},
+                  $line_info->{IdentRefTag},
+                  $file,
+                  $line,
+                  &{ $line_info->{GetRefList} }($token)
+               );
+            }
+
+         } else {
+
+            getLogger()->warning(
+               qq(Cannot find the $linetype name),
+               $file,
+               $line
+            );
+         }
+      }
+
+      setEntityValid($linetype, $token);
+
+      # Check to see if the token must be recorded for other
+      # token types.
+      if ( exists $line_info->{OtherValidEntries} ) {
+         for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
+            setEntityValid($entry_type, $token);
+         }
+      }
+   }
+
+   # don't exit the loop
+   return 0;
 }
 
 
-sub uniq {
-   my %seen;
-   return grep { !$seen{$_}++ } @_;
-}
+=head2 processLine
 
-###############################################################
-# parseLine
-# ------------------------
-#
-# This function does additional parsing on each line once
-# they have been seperated into tokens.
-#
-# Most commun use is for addition, conversion or removal of tokens.
-#
-# Paramter: $lineTokens Ref to a hash containing the tokens of the line
-#           $line       LstTidy::Line object for this line
+   This function does additional processing on each line once
+   it have been seperated into tokens.
+
+   The processing is a mix of validation and conversion.
+
+=cut
 
 
-sub parseLine {
+sub processLine {
 
    my ($lineTokens, $line) = @_;
 
@@ -896,160 +1219,21 @@ sub parseLine {
 
    if ($line->isType('EQUIPMENT')) { $line->_equipment() }
 
-   ##################################################################
-   # [ 1353255 ] TYPE to RACETYPE conversion
-   #
    # Checking race files for TYPE and if no RACETYPE,
-   # convert TYPE to RACETYPE.
-   # if Race file has no TYPE or RACETYPE, report as 'Info'
+   # Do this check no matter what it is valid all the time
+   if ( $line->isType('RACE')
+      && ! $line->hasColumn('RACETYPE')
+      && ! $line->hasColumn('TYPE')) {
 
-   # Do this check no matter what - valid any time
-   if ( $line->isType("RACE")
-      && not ( $line->hasColumn('RACETYPE') )
-      && not ( $line->hasColumn('TYPE')  )
-   ) {
       # .MOD / .FORGET / .COPY don't need RACETYPE or TYPE'
-      my $race_name = $lineTokens->{'000RaceName'}[0];
-      if ($race_name =~ /\.(FORGET|MOD|COPY=.+)$/) {
-      } else { $log->warning(
-            qq{Race entry missing both TYPE and RACETYPE.},
+      if ($line->getEntityName() !~ /\.(FORGET|MOD|COPY=.+)$/) {
+         $log->info(
+            q{Race entry missing both TYPE and RACETYPE.},
             $line->file,
             $line->num
          );
       }
    };
-
-
-   ##################################################################
-   # [ 1444527 ] New SOURCE tag format
-   #
-   # The SOURCELONG tags found on any linetype but the SOURCE line type must
-   # be converted to use tab if | are found.
-
-   if (isConversionActive('ALL:New SOURCExxx tag format') && $line->hasColumn('SOURCELONG')) {
-
-      my @new_tags;
-
-      for my $tag ( @{ $lineTokens->{'SOURCELONG'} } ) {
-         if( $tag =~ / [|] /xms ) {
-            push @new_tags, split '\|', $tag;
-            $log->warning(
-               qq{Spliting "$tag"},
-               $line->file,
-               $line->num
-            );
-         }
-      }
-
-      if( @new_tags ) {
-         delete $lineTokens->{'SOURCELONG'};
-
-         for my $new_tag (@new_tags) {
-            my ($tag_name) = ( $new_tag =~ / ( [^:]* ) [:] /xms );
-            push @{ $lineTokens->{$tag_name} }, $new_tag;
-         }
-      }
-   }
-
-   ##################################################################
-   # [ 1070084 ] Convert SPELL to SPELLS
-   #
-   # Convert the old SPELL tags to the new SPELLS format.
-   #
-   # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
-   # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
-
-   if (isConversionActive('ALL:Convert SPELL to SPELLS') && $line->hasColumn('SPELL')) {
-
-      my %spellbooks;
-
-      # We parse all the existing SPELL tags
-      for my $tag ( @{ $lineTokens->{'SPELL'} } ) {
-         my ( $tag_name, $tag_value ) = ( $tag =~ /^([^:]*):(.*)/ );
-         my @elements = split '\|', $tag_value;
-         my @pretags;
-
-         while ( $elements[ +@elements - 1 ] =~ /^!?PRE\w*:/ ) {
-
-            # We keep the PRE tags separated
-            unshift @pretags, pop @elements;
-         }
-
-         # We classify each triple <spellname>|<nb per day>|<spellbook>
-         while (@elements) {
-            if ( +@elements < 3 ) {
-               $log->warning(
-                  qq(Wrong number of elements for "$tag_name:$tag_value"),
-                  $line->file,
-                  $line->num
-               );
-            }
-
-            my $spellname = shift @elements;
-            my $times       = +@elements ? shift @elements : 99999;
-            my $pretags   = join '|', @pretags;
-            $pretags = "NONE" unless $pretags;
-            my $spellbook = +@elements ? shift @elements : "MISSING SPELLBOOK";
-
-            push @{ $spellbooks{$spellbook}{$times}{$pretags} }, $spellname;
-         }
-
-         $log->warning(
-            qq{Removing "$tag_name:$tag_value"},
-            $line->file,
-            $line->num
-         );
-      }
-
-      # We delete the SPELL tags
-      delete $lineTokens->{'SPELL'};
-
-      # We add the new SPELLS tags
-      for my $spellbook ( sort keys %spellbooks ) {
-         for my $times ( sort keys %{ $spellbooks{$spellbook} } ) {
-            for my $pretags ( sort keys %{ $spellbooks{$spellbook}{$times} } ) {
-               my $spells = "SPELLS:$spellbook|TIMES=$times";
-
-               for my $spellname ( sort @{ $spellbooks{$spellbook}{$times}{$pretags} } ) {
-                  $spells .= "|$spellname";
-               }
-
-               $spells .= "|$pretags" unless $pretags eq "NONE";
-
-               $log->warning( qq{Adding   "$spells"}, $line->file, $line->num );
-
-               push @{ $lineTokens->{'SPELLS'} }, $spells;
-            }
-         }
-      }
-   }
-
-   ##################################################################
-   # We get rid of all the PREALIGN tags.
-   #
-   # This is needed by my good CMP friends.
-
-   if ( isConversionActive('ALL:CMP remove PREALIGN') ) {
-      if ( $line->hasColumn('PREALIGN') ) {
-         my $number = +@{ $lineTokens->{'PREALIGN'} };
-         delete $lineTokens->{'PREALIGN'};
-         $log->warning(
-            qq{Removing $number PREALIGN tags},
-            $line->file,
-            $line->num
-         );
-      }
-
-      if ( $line->hasColumn('!PREALIGN') ) {
-         my $number = +@{ $lineTokens->{'!PREALIGN'} };
-         delete $lineTokens->{'!PREALIGN'};
-         $log->warning(
-            qq{Removing $number !PREALIGN tags},
-            $line->file,
-            $line->num
-         );
-      }
-   }
 
    ##################################################################
    # Need to fix the STR bonus when the monster have only one
@@ -1128,27 +1312,6 @@ sub parseLine {
             }
          }
       }
-   }
-
-   ##################################################################
-   # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
-   # No conversion needed. We just have to remove the MOVE tags that
-   # are doing nothing anyway.
-
-   if (   isConversionActive('EQUIP:no more MOVE')
-      && $line->isType("EQUIPMENT")
-      && $line->hasColumn('MOVE') )
-   {
-      $log->warning( qq{Removed MOVE tags}, $line->file, $line->num );
-      delete $lineTokens->{'MOVE'};
-   }
-
-   if (   isConversionActive('CLASS:no more HASSPELLFORMULA')
-      && $line->isType("CLASS")
-      && $line->hasColumn('HASSPELLFORMULA') )
-   {
-      $log->warning( qq{Removed deprecated HASSPELLFORMULA tags}, $line->file, $line->num );
-      delete $lineTokens->{'HASSPELLFORMULA'};
    }
 
 
@@ -1297,26 +1460,6 @@ sub parseLine {
    }
 
    ##################################################################
-   # [ 845853 ] SIZE is no longer valid in the weaponprof files
-   #
-   # The SIZE tag must be removed from all WEAPONPROF files since it
-   # cause loading problems with the latest versio of PCGEN.
-
-   if (   isConversionActive('WEAPONPROF:No more SIZE')
-      && $line->isType("WEAPONPROF")
-      && $line->hasColumn('SIZE') )
-   {
-      my $entityName = getEntityName('WEAPONPROF', $lineTokens);
-
-      $log->warning(
-         qq{Removing the SIZE tag in line "$entityName"},
-         $line->file,
-         $line->num
-      );
-      delete $lineTokens->{'SIZE'};
-   }
-
-   ##################################################################
    # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
    #
    # NoProfReq must be added to AUTO:WEAPONPROF if the race has
@@ -1367,29 +1510,6 @@ sub parseLine {
             );
          }
       }
-   }
-
-   ##################################################################
-   # [ 831569 ] RACE:CSKILL to MONCSKILL
-   #
-   # In the RACE files, all the CSKILL must be replaced with MONCSKILL
-   # but only if MONSTERCLASS is present and there is not already a
-   # MONCSKILL present.
-
-   if (   isConversionActive('RACE:CSKILL to MONCSKILL')
-      && $line->isType("RACE")
-      && $line->hasColumn('CSKILL')
-      && $line->hasColumn('MONSTERCLASS')
-      && !$line->hasColumn('MONCSKILL') )
-   {
-      $log->warning(
-         qq{Change CSKILL for MONSKILL in "$lineTokens->{'CSKILL'}[0]"},
-         $line->file,
-         $line->num
-      );
-
-      $lineTokens->{'MONCSKILL'} = [ "MON" . $lineTokens->{'CSKILL'}[0] ];
-      delete $lineTokens->{'CSKILL'};
    }
 
    ##################################################################
@@ -1776,335 +1896,6 @@ sub parseLine {
    }
 
    1;
-}
-
-
-=head2 parseSystemFiles
-
-   This operation searches the given gamemode directory and parses out
-   Allowable game modes, Stats, alignments, variable names and check names. These
-   are then used to populate the valid data for later parses of LST files.
-
-=cut
-
-sub parseSystemFiles {
-
-   my ($systemFilePath) = @_;
-
-   my $originalSystemFilePath = $systemFilePath;
-   
-   my $log = getLogger();
-
-   my @verifiedAllowedModes = ();
-   my @verifiedStats        = ();
-   my @verifiedAlignments   = ();
-   my @verifiedVarNames     = ();
-   my @verifiedCheckNames   = ();
-
-   # Set the header for the error messages
-   $log->header(LstTidy::LogHeader::get('System'));
-
-   # Get the Unix direcroty separator even in a Windows environment
-   $systemFilePath =~ tr{\\}{/};
-
-   # Verify if the gameModes directory is present
-   if ( !-d "$systemFilePath/gameModes" ) {
-      die qq{No gameModes directory found in "$originalSystemFilePath"};
-   }
-
-   # We will now find all of the miscinfo.lst and statsandchecks.lst files
-   my @systemFiles = ();;
-
-   my $getSystem = sub {
-      push @systemFiles, $File::Find::name
-      if lc $_ eq 'miscinfo.lst' || lc $_ eq 'statsandchecks.lst';
-   };
-
-   File::Find::find( $getSystem, $systemFilePath );
-
-   # Did we find anything (hopefuly yes)
-   if ( scalar @systemFiles == 0 ) {
-      $log->error(
-         qq{No miscinfo.lst or statsandchecks.lst file were found in the system directory},
-         getOption('systempath')
-      );
-   }
-
-   # We only keep the files that correspond to the selected
-   # game mode
-   if (getOption('gamemode')) {
-      my $gamemode = getOption('gamemode') ;
-      @systemFiles = grep { m{ \A $systemFilePath [/] gameModes [/] (?: ${gamemode} ) [/] }xmsi; } @systemFiles;
-   }
-
-   # Anything left?
-   if ( scalar @systemFiles == 0 ) {
-      my $gamemode = getOption('gamemode') ;
-      $log->error(
-         qq{No miscinfo.lst or statsandchecks.lst file were found in the gameModes/${gamemode}/ directory},
-         getOption('systempath')
-      );
-   }
-
-   # Now we search for the interesting part in the miscinfo.lst files
-   for my $systemFile (@systemFiles) {
-      open my $systemFileFh, '<', $systemFile;
-
-      LINE:
-      while ( my $line = <$systemFileFh> ) {
-         chomp $line;
-
-         # Skip comment lines
-         next LINE if $line =~ / \A [#] /xms;
-
-         # ex. ALLOWEDMODES:35e|DnD
-         if ( my ($modes) = ( $line =~ / ALLOWEDMODES: ( [^\t]* )/xms ) ) {
-            push @verifiedAllowedModes, split /[|]/, $modes;
-            next LINE;
-
-            # ex. STATNAME:Strength ABB:STR DEFINE:MAXLEVELSTAT=STR|STRSCORE-10
-         } elsif ( $line =~ / \A STATNAME: /xms ) {
-
-            LINE_TAG:
-            for my $tag (split /\t+/, $line) {
-
-               # STATNAME lines have more then one interesting tags
-               if ( my ($stat) = ( $tag =~ / \A ABB: ( .* ) /xms ) ) {
-                  push @verifiedStats, $stat;
-
-               } elsif ( my ($defineExpression) = ( $tag =~ / \A DEFINE: ( .* ) /xms ) ) {
-
-                  if ( my ($varName) = ( $defineExpression =~ / \A ( [\t=|]* ) /xms ) ) {
-                     push @verifiedVarNames, $varName;
-                  } else {
-                     $log->error(
-                        qq{Cannot find the variable name in "$defineExpression"},
-                        $systemFile,
-                        $INPUT_LINE_NUMBER
-                     );
-                  }
-               }
-            }
-
-            # ex. ALIGNMENTNAME:Lawful Good ABB:LG
-         } elsif ( my ($alignment) = ( $line =~ / \A ALIGNMENTNAME: .* ABB: ( [^\t]* ) /xms ) ) {
-            push @verifiedAlignments, $alignment;
-
-            # ex. CHECKNAME:Fortitude   BONUS:CHECKS|Fortitude|CON
-         } elsif ( my ($checkName) = ( $line =~ / \A CHECKNAME: .* BONUS:CHECKS [|] ( [^\t|]* ) /xms ) ) {
-            # The check name used by PCGen is actually the one defined with the first BONUS:CHECKS.
-            # CHECKNAME:Sagesse     BONUS:CHECKS|Will|WIS would display Sagesse but use Will internaly.
-            push @verifiedCheckNames, $checkName;
-         }
-      }
-
-      close $systemFileFh;
-   }
-
-   # We keep only the first instance of every list items and replace
-   # the default values with the result.
-   # The order of elements must be preserved
-   my %seen = ();
-
-   setValidSystemArr('alignments', grep { !$seen{$_}++ } @verifiedAlignments);
-
-   %seen = ();
-   setValidSystemArr('checks' , grep { !$seen{$_}++ } @verifiedCheckNames);
-
-   %seen = ();
-   setValidSystemArr('gamemodes', grep { !$seen{$_}++ } @verifiedAllowedModes);
-
-   %seen = ();
-   setValidSystemArr('stats', grep { !$seen{$_}++ } @verifiedStats);
-
-   %seen = ();
-   setValidSystemArr('vars', grep { !$seen{$_}++ } @verifiedVarNames);
-
-   # Now we bitch if we are not happy
-   if ( scalar @verifiedStats == 0 ) {
-      $log->error(
-         q{Could not find any STATNAME: tag in the system files},
-         $originalSystemFilePath
-      );
-   }
-
-   if ( scalar @{getValidSystemArr('gamemodes')} == 0 ) {
-      $log->error(
-         q{Could not find any ALLOWEDMODES: tag in the system files},
-         $originalSystemFilePath
-      );
-   }
-
-   if ( scalar @{getValidSystemArr('checks')} == 0 ) {
-      $log->error(
-         q{Could not find any valid CHECKNAME: tag in the system files},
-         $originalSystemFilePath
-      );
-   }
-
-   # If the -exportlist option was used, we generate a system.csv file
-   if ( getOption('exportlist') ) {
-
-      open my $csvFile, '>', 'system.csv';
-
-      print {$csvFile} qq{"System Directory","$originalSystemFilePath"\n};
-
-      if ( getOption('gamemode') ) {
-         my $gamemode = getOption('gamemode') ;
-         print {$csvFile} qq{"Game Mode Selected","${gamemode}"\n};
-      }
-      print {$csvFile} qq{\n};
-
-      print {$csvFile} qq{"Alignments"\n};
-      for my $alignment (@{getValidSystemArr('alignments')}) {
-         print {$csvFile} qq{"$alignment"\n};
-      }
-      print {$csvFile} qq{\n};
-
-      print {$csvFile} qq{"Allowed Modes"\n};
-      for my $mode (sort @{getValidSystemArr('gamemodes')}) {
-         print {$csvFile} qq{"$mode"\n};
-      }
-      print {$csvFile} qq{\n};
-
-      print {$csvFile} qq{"Stats Abbreviations"\n};
-      for my $stat (@{getValidSystemArr('stats')}) {
-         print {$csvFile} qq{"$stat"\n};
-      }
-      print {$csvFile} qq{\n};
-
-      print {$csvFile} qq{"Variable Names"\n};
-      for my $varName (sort @{getValidSystemArr('vars')}) {
-         print {$csvFile} qq{"$varName"\n};
-      }
-      print {$csvFile} qq{\n};
-
-      close $csvFile;
-   }
-
-   return;
-}
-
-=head2 extractTag
-
-   This opeatrion takes a tag and makes sure it is suitable for further
-   processing. It eliminates comments and dentifies pragma.
-
-   Paramter: $tagText   The text of the tag
-             $linetype  The Type of the current line
-             $file      The name of the current file
-             $line      The number of the current line
-
-   Return: Tag and value, if value is defined the tag needs no further
-           parsing.
-
-=cut
-
-sub extractTag {
-
-   my ($tagText, $linetype, $file, $line) = @_;
-
-   # We remove the enclosing quotes if any
-   if ($tagText =~ s/^"(.*)"$/$1/) {
-      getLogger()->warning( qq{Removing quotes around the '$tagText' tag}, $file, $line)
-   }
-
-   # Is this a pragma (e.g. #EXTRAFILE) rather than a comment
-   if ( $tagText =~ m/^(\#.*?):(.*)/ && isValidTag($linetype, $1)) {
-      return ( $1, $2 )
-   }
-
-   # If there is no text to parse or if this is a comment
-   if (length $tagText == 0 || $tagText =~ /^\s*\#/) {
-      return  ( "", "" )
-   }
-
-   # Remove any spaces before and after the tag
-   $tagText =~ s/^\s+//;
-   $tagText =~ s/\s+$//;
-   
-   return $tagText;
-}
-
-=head2 process000
-
-   The first tag on a line may need to be processed because it is a MOD, FORGET
-   or COPY. It may also need to be added to crosschecking data to allow other
-   lines to do MOD, FORGETs or COPYs.
-
-=cut
-
-sub process000 {
-
-   my ($line_info, $token, $linetype, $file, $line) = @_;
-
-   # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-   my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
-
-   if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
-
-      # We keep track of the .MOD type tags to
-      # later validate if they are valid
-      if (getOption('xcheck')) {
-         LstTidy::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
-      }
-
-      # Special case for .COPY=<new name>
-      # <new name> is a valid entity
-      if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
-         setEntityValid($linetype, $new_name);
-      }
-
-      # Exit the loop
-      return 1; #last COLUMN;
-
-   } elsif ( getOption('xcheck') ) {
-
-      # We keep track of the entities that could be used with a .MOD type of
-      # tag for later validation.
-      #
-      # Some line types need special code to extract the entry.
-
-      if ( $line_info->{RegExGetEntry} ) {
-
-         if ( $token =~ $line_info->{RegExGetEntry} ) {
-            $token = $1;
-
-            # Some line types refer to other line entries directly
-            # in the line identifier.
-            if ( exists $line_info->{GetRefList} ) {
-               LstTidy::Report::add_to_xcheck_tables(
-                  $line_info->{IdentRefType},
-                  $line_info->{IdentRefTag},
-                  $file,
-                  $line,
-                  &{ $line_info->{GetRefList} }($token)
-               );
-            }
-
-         } else {
-
-            getLogger()->warning(
-               qq(Cannot find the $linetype name),
-               $file,
-               $line
-            );
-         }
-      }
-
-      setEntityValid($linetype, $token);
-
-      # Check to see if the token must be recorded for other
-      # token types.
-      if ( exists $line_info->{OtherValidEntries} ) {
-         for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
-            setEntityValid($entry_type, $token);
-         }
-      }
-   }
-
-   # don't exit the loop
-   return 0;
 }
 
 
