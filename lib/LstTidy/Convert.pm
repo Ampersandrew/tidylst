@@ -1046,9 +1046,6 @@ sub doLineConversions {
    if (isConversionActive('RACE:Remove MFEAT and HITDICE')
       && $line->isType("RACE")
       && $line->hasColumn('MFEAT')) { 
-
-      # In RACE files, remove all MFEAT tags, but only if there is a
-      # MONSTERCLASS present.
       
       removeMonsterTag($line, 'MFEAT');
    }
@@ -1056,12 +1053,26 @@ sub doLineConversions {
    if (isConversionActive('RACE:Remove MFEAT and HITDICE')
       && $line->isType("RACE")
       && $line->hasColumn('HITDICE')) { 
-
-      # In RACE files, remove all HITDICE tags, but only if there is a
-      # MONSTERCLASS present.
       
       removeMonsterTag($line, 'HITDICE');
    }
+   
+   if (isConversionActive('DEITY:Followeralign conversion')
+      && $line->isType("DEITY")
+      && $line->hasColumn('FOLLOWERALIGN')
+      && $line->hasColumn('DOMAINS')) {
+
+      removeFollowerAlign($line);
+   }
+   
+   if (isConversionActive('RACE:TYPE to RACETYPE')
+      && (  $line->isType("RACE") 
+         || $line->isType("TEMPLATE") )
+      && not ($line->hasColumn('RACETYPE'))
+      && $line->hasColumn('TYPE')) {
+      
+      $line->replaceTag('TYPE', 'RACETYPE');
+   };
 
 
 
@@ -1147,6 +1158,54 @@ sub reformatPreRace {
    } elsif ( ( $token->tag eq 'SA' || $token->tag eq 'PREMULT' ) && $token->value =~ / PRERACE: ( [^]|]* ) /xms) {
       ensureLeadingDigit($token, $1);
    }
+}
+
+=head2 removeFollowerAlign
+
+=cut
+
+sub removeFollowerAlign {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+
+   my @valid = getValidSystemArr('alignments');
+   my @alignments;
+
+   for my $token (@{ $line->column('FOLLOWERALIGN') }) {
+
+      for my $align (split //, $token->value) {
+
+         # Is it a number in the range of the indices of @valid, i.e. a
+         # valid alignment?
+         if ($align =~ / \A (\d+) \z /xms && $1 >= 0 && $1 < scalar @valid) {
+
+            push @alignments, $1;
+
+         } else {
+            $log->notice(
+               qq{Invalid value "$align" for tag "$token"},
+               $line->file,
+               $line->num
+            );
+         }
+      }
+   }
+
+   # join the distinct values with , 
+   my $newprealign = join ",", map {$valid[$_]} sort 
+      do { my %seen; grep { !$seen{$_}++ } @alignments };
+
+   $line->appendToValue('DOMAINS', "|PREALIGN:$newprealign");
+
+   $log->notice(
+      qq{Adding PREALIGN to domain information},
+      $line->file,
+      $line->num
+   );
+
+   $line->replaceTag('FOLLOWERALIGN');
 }
 
 

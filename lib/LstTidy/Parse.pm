@@ -896,54 +896,6 @@ sub parseLine {
 
    if ($line->isType('EQUIPMENT')) { $line->_equipment() }
 
-
-   ######################################################
-   # [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
-   #
-   
-   if (isConversionActive('DEITY:Followeralign conversion')
-      && $line->isType("DEITY")
-      && $line->hasColumn('FOLLOWERALIGN')
-      && $line->hasColumn('DOMAINS')) {
-
-      my @valid = getValidSystemArr('alignments');
-      my @alignments;
-
-      for my $token (@{ $line->column('FOLLOWERALIGN') }) {
-
-         for my $align (split //, $token->value) {
-
-            # Is it a number in the range of the indices of @valid, i.e. a
-            # valid alignment?
-            if ($align =~ / \A (\d+) \z /xms && $1 >= 0 && $1 < scalar @valid) {
-
-               push @alignments, $1;
-
-            } else {
-               $log->notice(
-                  qq{Invalid value "$align" for tag "$token"},
-                  $line->file,
-                  $line->num
-               );
-            }
-         }
-      }
-      
-      # join the distinct values with , 
-      my $newprealign = join ",", map {$valid[$_]} sort 
-         do { my %seen; grep { !$seen{$_}++ } @alignments };
-
-      $line->appendToValue('DOMAINS', "|PREALIGN:$newprealign");
-
-      $log->notice(
-         qq{Adding PREALIGN to domain information},
-         $line->file,
-         $line->num
-      );
-
-      $line->replaceTag('FOLLOWERALIGN');
-   }
-
    ##################################################################
    # [ 1353255 ] TYPE to RACETYPE conversion
    #
@@ -967,20 +919,6 @@ sub parseLine {
       }
    };
 
-   if (   isConversionActive('RACE:TYPE to RACETYPE')
-      && ( $line->isType("RACE") || $line->isType("TEMPLATE") )
-      && not ($line->hasColumn('RACETYPE'))
-      && $line->hasColumn('TYPE')
-   ) { $log->warning(
-         qq{Changing TYPE for RACETYPE in "$lineTokens->{'TYPE'}[0]".},
-         $line->file,
-         $line->num
-      );
-      $lineTokens->{'RACETYPE'} = [ "RACE" . $lineTokens->{'TYPE'}[0] ];
-      delete $lineTokens->{'TYPE'};
-   };
-
-
 
    ##################################################################
    # [ 1444527 ] New SOURCE tag format
@@ -988,8 +926,8 @@ sub parseLine {
    # The SOURCELONG tags found on any linetype but the SOURCE line type must
    # be converted to use tab if | are found.
 
-   if (   isConversionActive('ALL:New SOURCExxx tag format')
-      && $line->hasColumn('SOURCELONG') ) {
+   if (isConversionActive('ALL:New SOURCExxx tag format') && $line->hasColumn('SOURCELONG')) {
+
       my @new_tags;
 
       for my $tag ( @{ $lineTokens->{'SOURCELONG'} } ) {
@@ -1021,9 +959,8 @@ sub parseLine {
    # Old SPELL:<spellname>|<nb per day>|<spellbook>|...|PRExxx|PRExxx|...
    # New SPELLS:<spellbook>|TIMES=<nb per day>|<spellname>|<spellname>|PRExxx...
 
-   if ( isConversionActive('ALL:Convert SPELL to SPELLS')
-      && $line->hasColumn('SPELL') )
-   {
+   if (isConversionActive('ALL:Convert SPELL to SPELLS') && $line->hasColumn('SPELL')) {
+
       my %spellbooks;
 
       # We parse all the existing SPELL tags
