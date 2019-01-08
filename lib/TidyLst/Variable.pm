@@ -1,4 +1,4 @@
-package LstTidy::Variable;
+package TidyLst::Variable;
 
 use strict;
 use warnings;
@@ -15,10 +15,10 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Log;
-use LstTidy::LogFactory qw(getLogger);
+use TidyLst::Log;
+use TidyLst::LogFactory qw(getLogger);
 
-use LstTidy::Data qw(registerXCheck);
+use TidyLst::Data qw(registerXCheck);
 
 
 # List of keywords Jep functions names. The fourth and fifth rows are for

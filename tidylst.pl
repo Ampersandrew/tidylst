@@ -7,7 +7,7 @@ use English qw( -no_match_vars );       # No more funky punctuation variables
 
 my $VERSION        = "1.00.00";
 my $VERSION_DATE   = "2019-01-01";
-my ($PROGRAM_NAME) = "PCGen LstTidy";
+my ($PROGRAM_NAME) = "PCGen TidyLst";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 my $VERSION_LONG   = "$SCRIPTNAME version: $VERSION -- $VERSION_DATE";
 
@@ -21,13 +21,13 @@ use Pod::Usage ();
 use File::Find ();
 use File::Basename ();
 
-# Expand the local library path so we can find LstTidy modules
+# Expand the local library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
-use LstTidy::Convert qw(convertEntities);
-use LstTidy::Data qw(
+use TidyLst::Convert qw(convertEntities);
+use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
    addSourceTag
@@ -47,12 +47,12 @@ use LstTidy::Data qw(
    setEntityValid
    updateValidity
    );
-use LstTidy::Line;
-use LstTidy::Log;
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::LogHeader;
-use LstTidy::Options qw(getOption isConversionActive parseOptions setOption);
-use LstTidy::Parse qw(
+use TidyLst::Line;
+use TidyLst::Log;
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::LogHeader;
+use TidyLst::Options qw(getOption isConversionActive parseOptions setOption);
+use TidyLst::Parse qw(
    extractTag
    isParseableFileType
    isWriteableFileType
@@ -62,8 +62,8 @@ use LstTidy::Parse qw(
    parseSystemFiles
    process000
    );
-use LstTidy::Report qw(closeExportListFileHandles openExportListFileHandles);
-use LstTidy::Validate qw(scanForDeprecatedTokens validateLine);
+use TidyLst::Report qw(closeExportListFileHandles openExportListFileHandles);
+use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 
 # Subroutines
 sub FILETYPE_parse;
@@ -136,7 +136,7 @@ if ( getOption('outputpath') && !-d getOption('outputpath') ) {
 #######################################################################
 # Diplay usage information
 
-if ( getOption('help') or $LstTidy::Options::error ) {
+if ( getOption('help') or $TidyLst::Options::error ) {
    Pod::Usage::pod2usage(
       {
          -msg     => $errorMessage,
@@ -198,24 +198,24 @@ updateValidity();
 # PCC processing
 my %files = ();
 
-# this is a temporary hack until we can move the actual parse routine into LstTidy Parse
+# this is a temporary hack until we can move the actual parse routine into TidyLst Parse
 
 INIT {
 
    # At this point everything is compiled, so we can pass a sub ref to
    # a helper module.
 
-   LstTidy::Parse::setParseRoutine(\&FILETYPE_parse);
+   TidyLst::Parse::setParseRoutine(\&FILETYPE_parse);
 
 }
 
 my $tablength = 6;      # Tabulation each 6 characters
 
 # Finds the CVS lines at the top of LST files,so we can delete them
-# and replace with a single line LstTidy Header.
+# and replace with a single line TidyLst Header.
 my $CVSPattern       = qr{\#.*CVS.*Revision}i;
 my $newHeaderPattern = qr{\#.*reformatt?ed by}i;
-my $LstTidyHeader    = "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+my $TidyLstHeader    = "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
 
 my %filesToParse;    # Will hold the file to parse (including path)
 my @lines;           # Will hold all the lines of the file
@@ -306,7 +306,7 @@ if (getOption('inputpath')) {
 
    File::Find::find( \&mywanted, getOption('inputpath') );
 
-   $log->header(LstTidy::LogHeader::get('PCC'));
+   $log->header(TidyLst::LogHeader::get('PCC'));
 
    # Second we parse every .PCC and look for filetypes
    for my $filename ( sort @filelist ) {
@@ -350,7 +350,7 @@ if (getOption('inputpath')) {
 
          my $fullToken = (not defined $value) ?  $tag : "$tag:$value" ;
 
-         my $token =  LstTidy::Token->new(
+         my $token =  TidyLst::Token->new(
             fullToken => $fullToken,
             lineType  => 'PCC',
             file      => $filename,
@@ -573,7 +573,7 @@ if (getOption('inputpath')) {
       }
 
       if ( $found{'gamemode'} && getOption('exportlist') ) {
-         LstTidy::Report::printToExportList('PCC', qq{"$found{'source long'}","$found{'source short'}","$found{'gamemode'}","$filename"\n});
+         TidyLst::Report::printToExportList('PCC', qq{"$found{'source long'}","$found{'source short'}","$found{'gamemode'}","$filename"\n});
       }
 
       # Do we copy the .PCC???
@@ -628,7 +628,7 @@ if (getOption('inputpath')) {
    # Missing .lst files must be printed
    if ( keys %fileListMissing ) {
 
-      $log->header(LstTidy::LogHeader::get('Missing LST'));
+      $log->header(TidyLst::LogHeader::get('Missing LST'));
 
       for my $lstfile ( sort keys %fileListMissing ) {
          $log->notice(
@@ -642,7 +642,7 @@ if (getOption('inputpath')) {
    # If the gamemode filter is active, we do not report files not refered to.
    if ( keys %fileListNotPCC && !getOption('gamemode') ) {
 
-      $log->header(LstTidy::LogHeader::get('Unreferenced'));
+      $log->header(TidyLst::LogHeader::get('Unreferenced'));
 
       my $basepath = getOption('basepath');
 
@@ -658,7 +658,7 @@ if (getOption('inputpath')) {
    $filesToParse{'STDIN'} = getOption('filetype');
 }
 
-$log->header(LstTidy::LogHeader::get('LST'));
+$log->header(TidyLst::LogHeader::get('LST'));
 
 my @filesToParse_sorted = ();
 my %temp_filesToParse   = %filesToParse;
@@ -785,7 +785,7 @@ for my $file (@filesToParse_sorted) {
 
    my $headerRemoved = 0;
 
-   # While the first line is any sort of commant about pretty lst or LstTidy,
+   # While the first line is any sort of commant about pretty lst or TidyLst,
    # we remove it
    REMOVE_HEADER:
    while ( $lines[0] =~ $CVSPattern || $lines[0] =~ $newHeaderPattern ) {
@@ -881,7 +881,7 @@ for my $file (@filesToParse_sorted) {
       }
 
       # The first line of the new file will be a comment line.
-      print {$write_fh} $LstTidyHeader;
+      print {$write_fh} $TidyLstHeader;
 
       # We print the result
       for my $line ( @{$newlines_ref} ) {
@@ -908,7 +908,7 @@ if ( getOption('outputpath') && scalar(@nodifiedFiles) ) {
       $outputpath =~ tr{/}{\\}
    }
 
-   $log->header(LstTidy::LogHeader::get('Created'), getOption('outputpath'));
+   $log->header(TidyLst::LogHeader::get('Created'), getOption('outputpath'));
 
    my $inputpath = getOption('inputpath');
    for my $file (@nodifiedFiles) {
@@ -924,19 +924,19 @@ if ( getOption('outputpath') && scalar(@nodifiedFiles) ) {
 # Print a report for the BONUS and PRExxx usage
 
 if ( isConversionActive('Generate BONUS and PRExxx report') ) {
-   LstTidy::Report::reportBonus();
+   TidyLst::Report::reportBonus();
 }
 
 if (getOption('report')) {
-   LstTidy::Report::report('Valid');
+   TidyLst::Report::report('Valid');
 }
 
-if (LstTidy::Report::foundInvalidTags()) {
-   LstTidy::Report::report('Invalid');
+if (TidyLst::Report::foundInvalidTags()) {
+   TidyLst::Report::report('Invalid');
 }
 
 if (getOption('xcheck')) {
-   LstTidy::Report::doXCheck();
+   TidyLst::Report::doXCheck();
 }
 
 #########################################
@@ -948,7 +948,7 @@ if (isConversionActive('Export lists')) {
 }
 
 if ($dumpValidEntities) {
-   LstTidy::Data::dumpValidEntities();
+   TidyLst::Data::dumpValidEntities();
 }
 
 #########################################
@@ -973,7 +973,7 @@ if (getOption('outputerror')) {
 # FILETYPE_parse
 # --------------
 #
-# This function uses the information of LstTidy::Parse::parseControl to
+# This function uses the information of TidyLst::Parse::parseControl to
 # identify the curent line type and parse it.
 #
 # Parameters: $fileType  = The type of the file has defined by the .PCC file
@@ -1061,7 +1061,7 @@ sub FILETYPE_parse {
          die qq(Invalid type for $curent_linetype);
       }
 
-      my $line = LstTidy::Line->new(
+      my $line = TidyLst::Line->new(
          type   => $curent_linetype,
          entity => $curent_entity,
          file   => $file,
@@ -1115,7 +1115,7 @@ sub FILETYPE_parse {
          # and add it to line_tokens
          $line_tokens{$column} = [$value];
 
-         my $token =  LstTidy::Token->new(
+         my $token =  TidyLst::Token->new(
             tag       => $column,
             value     => $value,
             lineType  => $curent_linetype,
@@ -1145,7 +1145,7 @@ sub FILETYPE_parse {
          # returned is the cleaned token and should be processed further.
          if ($extractedToken && not defined $value) {
 
-            my $token =  LstTidy::Token->new(
+            my $token =  TidyLst::Token->new(
                fullToken => $extractedToken,
                lineType  => $curent_linetype,
                file      => $file,
@@ -1479,7 +1479,7 @@ sub FILETYPE_parse {
                 else {
 
                         # Invalid option
-                        die "Invalid \%LstTidy::Parse::parseControl options: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%TidyLst::Parse::parseControl options: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == MAIN ) {
@@ -1646,7 +1646,7 @@ sub FILETYPE_parse {
                         }
                 }
                 else {
-                        die "Invalid \%LstTidy::Parse::parseControl format: $fileType:$curent_linetype:$mode:$header";
+                        die "Invalid \%TidyLst::Parse::parseControl format: $fileType:$curent_linetype:$mode:$header";
                 }
                 }
                 elsif ( $mode == SUB ) {
@@ -1851,15 +1851,15 @@ sub FILETYPE_parse {
 
                         }
                         else {
-                                die "Invalid \%LstTidy::Parse::parseControl $curent_linetype:$mode:$format:$header";
+                                die "Invalid \%TidyLst::Parse::parseControl $curent_linetype:$mode:$format:$header";
                         }
                 }
                 else {
-                        die "Invalid \%LstTidy::Parse::parseControl $curent_linetype:$mode:$format:$header";
+                        die "Invalid \%TidyLst::Parse::parseControl $curent_linetype:$mode:$format:$header";
                 }
                 }
                 else {
-                die "Invalid \%LstTidy::Parse::parseControl mode: $fileType:$curent_linetype:$mode";
+                die "Invalid \%TidyLst::Parse::parseControl mode: $fileType:$curent_linetype:$mode";
                 }
 
         }
@@ -2248,7 +2248,7 @@ sub FILETYPE_parse {
                                                 \%newline,
                                                 1 + @$lines_ref,
                                                 $spellname,
-                                                LstTidy::Parse::getParseControl('SPELL'),
+                                                TidyLst::Parse::getParseControl('SPELL'),
                                         ];
 
                                 }
@@ -2579,7 +2579,7 @@ sub FILETYPE_parse {
                                                 'CSKILL'                => ["CSKILL:$newskills"]
                                                 },
                                                 $line_no, $class,
-                                                LstTidy::Parse::getParseControl('CLASS'),
+                                                TidyLst::Parse::getParseControl('CLASS'),
                                                 ];
                                         delete $class_skill{$dir}{$class};
 
@@ -2605,7 +2605,7 @@ sub FILETYPE_parse {
                                                 },
                                                 scalar(@$lines_ref),
                                                 "$_.MOD",
-                                                LstTidy::Parse::getParseControl('CLASS'),
+                                                TidyLst::Parse::getParseControl('CLASS'),
                                                 ];
 
                                         delete $class_skill{$dir}{$_};

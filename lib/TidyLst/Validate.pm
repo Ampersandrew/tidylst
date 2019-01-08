@@ -1,4 +1,4 @@
-package LstTidy::Validate;
+package TidyLst::Validate;
 
 use strict;
 use warnings;
@@ -17,7 +17,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(
+use TidyLst::Data qw(
    addValidSubEntity
    getEntityName 
    incCountInvalidTags
@@ -25,8 +25,8 @@ use LstTidy::Data qw(
    splitAndAddToValidEntities
    setEntityValid
    );
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::Options qw(getOption isConversionActive);
 
 
 =head2 scanForDeprecatedTokens
@@ -579,7 +579,7 @@ sub validateLine {
             # Only testing for TITLE= for now.
             # Test for TITLE= and warn if not present.
          
-         elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/))
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/)) {
          
             if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
                $log->info(

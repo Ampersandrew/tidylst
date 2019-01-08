@@ -1,4 +1,4 @@
-package LstTidy::Convert;
+package TidyLst::Convert;
 
 use strict;
 use warnings;
@@ -13,14 +13,14 @@ our @EXPORT_OK = qw(
    doLineConversions
 );
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(incCountInvalidTags);
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::Data qw(incCountInvalidTags);
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::Options qw(getOption isConversionActive);
 
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
@@ -1277,7 +1277,7 @@ sub convertSpells {
 
             $spells .= "|$pretags" unless $pretags eq "NONE";
 
-            my $token = LstTidy::Token->new(
+            my $token = TidyLst::Token->new(
                fullToken => $spells,
                lineType  => $line->type,
                file      => $line->file,
@@ -1919,7 +1919,7 @@ sub reportWillpower {
       # Write the token and related information to the willpower.csv file
       my $output = q{"} . $token->fullToken . q{","} . $token->line . q{","} . $token->file . qq{"\n};
 
-      LstTidy::Report::printToExportList($output);
+      TidyLst::Report::printToExportList($output);
    }
 }
 

@@ -1,4 +1,4 @@
-package LstTidy::LogFactory;
+package TidyLst::LogFactory;
 
 use strict;
 use warnings;
@@ -12,8 +12,8 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Log;
-use LstTidy::Options qw(getOption);
+use TidyLst::Log;
+use TidyLst::Options qw(getOption);
 
 my $log;
 
@@ -21,7 +21,7 @@ sub getLogger {
    
    return $log if defined $log;
 
-   $log = LstTidy::Log->new(warningLevel=>getOption('warninglevel'));
+   $log = TidyLst::Log->new(warningLevel=>getOption('warninglevel'));
 
    return $log;
 }

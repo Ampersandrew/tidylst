@@ -1,4 +1,4 @@
-package LstTidy::Data;
+package TidyLst::Data;
 
 use strict;
 use warnings;
@@ -61,12 +61,12 @@ our @EXPORT_OK = qw(
    validSubEntityExists
 );
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::Options qw(getOption isConversionActive);
 
 # Constants for the master_line_type
 use constant {
@@ -4037,7 +4037,7 @@ sub updateValidity {
       'CMP_D20_Fantasy_v35e_Kalamar',
       'DnD_v3.5e_VPWP',
       'CMP_D20_Fantasy_v35e_VPWP',
-      'b/LstTidy/Validate.pm4e',
+      '4e',
       '5e',
       'DnDNext',
       'AE',

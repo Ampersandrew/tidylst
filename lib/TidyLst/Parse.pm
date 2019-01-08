@@ -1,4 +1,4 @@
-package LstTidy::Parse;
+package TidyLst::Parse;
 
 use strict;
 use warnings;
@@ -21,17 +21,17 @@ our @EXPORT_OK = qw(
 use Carp;
 
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Convert qw(
+use TidyLst::Convert qw(
    convertAddTokens 
    doTokenConversions
    doLineConversions
    );
-use LstTidy::Data qw(
+use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
    dirHasSourceTags
@@ -43,10 +43,10 @@ use LstTidy::Data qw(
    setEntityValid
    setValidSystemArr
    );
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
-use LstTidy::Token;
-use LstTidy::Variable;
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::Options qw(getOption isConversionActive);
+use TidyLst::Token;
+use TidyLst::Variable;
 
 my $className         = "";
 my $sourceCurrentFile = "";
@@ -933,7 +933,7 @@ sub parseSystemFiles {
    my @verifiedCheckNames   = ();
 
    # Set the header for the error messages
-   $log->header(LstTidy::LogHeader::get('System'));
+   $log->header(TidyLst::LogHeader::get('System'));
 
    # Get the Unix direcroty separator even in a Windows environment
    $systemFilePath =~ tr{\\}{/};
@@ -1137,7 +1137,7 @@ sub process000 {
       # We keep track of the .MOD type tags to
       # later validate if they are valid
       if (getOption('xcheck')) {
-         LstTidy::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
+         TidyLst::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
       }
 
       # Special case for .COPY=<new name>
@@ -1164,7 +1164,7 @@ sub process000 {
             # Some line types refer to other line entries directly
             # in the line identifier.
             if ( exists $line_info->{GetRefList} ) {
-               LstTidy::Report::add_to_xcheck_tables(
+               TidyLst::Report::add_to_xcheck_tables(
                   $line_info->{IdentRefType},
                   $line_info->{IdentRefTag},
                   $file,
@@ -1224,7 +1224,7 @@ sub processLine {
       && ! $line->hasColumn('TYPE')) {
 
       # .MOD / .FORGET / .COPY don't need RACETYPE or TYPE'
-      if ($line->getEntityName() !~ /\.(FORGET|MOD|COPY=.+)$/) {
+      if ($line->entityName() !~ /\.(FORGET|MOD|COPY=.+)$/) {
          $log->info(
             q{Race entry missing both TYPE and RACETYPE.},
             $line->file,
@@ -1462,25 +1462,25 @@ sub processLine {
 
 
          # Write to file
-         LstTidy::Report::printToExportList('SPELL', 
+         TidyLst::Report::printToExportList('SPELL', 
             makeExportListString($spellname, $sourcepage, $line->num, $filename));
       }
       if ( $line->isType('CLASS') ) {
          my $class = ( $lineTokens->{'000ClassName'}[0] =~ /^CLASS:(.*)/ )[0];
          if ($className ne $class) {
-            LstTidy::Report::printToExportList('CLASS', 
+            TidyLst::Report::printToExportList('CLASS', 
                makeExportListString($class, $line->num, $filename));
          };
          $className = $class;
       }
 
       if ( $line->isType('DEITY') ) {
-         LstTidy::Report::printToExportList('DEITY', 
+         TidyLst::Report::printToExportList('DEITY', 
             makeExportListString($lineTokens->{'000DeityName'}[0], $line->num, $filename));
       }
 
       if ( $line->isType('DOMAIN') ) {
-         LstTidy::Report::printToExportList('DOMAIN', 
+         TidyLst::Report::printToExportList('DOMAIN', 
             makeExportListString($lineTokens->{'000DomainName'}[0], $line->num, $filename));
       }
 
@@ -1494,7 +1494,7 @@ sub processLine {
             $replacementname = $1;
          }
          $outputname =~ s/\[NAME\]/$replacementname/;
-         LstTidy::Report::printToExportList('EQUIPMENT', 
+         TidyLst::Report::printToExportList('EQUIPMENT', 
             makeExportListString($equipname, $outputname, $line->num, $filename));
       }
 
@@ -1503,31 +1503,31 @@ sub processLine {
          my ( $key, $type ) = ( "", "" );
          $key  = substr( $lineTokens->{'KEY'}[0],  4 ) if $line->hasColumn('KEY');
          $type = substr( $lineTokens->{'TYPE'}[0], 5 ) if $line->hasColumn('TYPE');
-         LstTidy::Report::printToExportList('EQUIPMOD', 
+         TidyLst::Report::printToExportList('EQUIPMOD', 
             makeExportListString($equipmodname, $key, $type, $line->num, $filename));
       }
 
       if ( $line->isType('FEAT') ) {
          my $featname = getEntityName($line->type, $lineTokens);
-         LstTidy::Report::printToExportList('FEAT', 
+         TidyLst::Report::printToExportList('FEAT', 
             makeExportListString($featname, $line->num, $filename));
       }
 
       if ( $line->isType('KIT STARTPACK') ) {
          my ($kitname) = (getEntityName($line->type, $lineTokens) =~ /\A STARTPACK: (.*) \z/xms );
-         LstTidy::Report::printToExportList('KIT', 
+         TidyLst::Report::printToExportList('KIT', 
             makeExportListString($kitname, $line->num, $filename));
       }
 
       if ( $line->isType('KIT TABLE') ) {
          my ($tablename) = ( getEntityName($line->type, $lineTokens) =~ /\A TABLE: (.*) \z/xms );
-         LstTidy::Report::printToExportList('TABLE', 
+         TidyLst::Report::printToExportList('TABLE', 
             makeExportListString($tablename, $line->num, $filename));
       }
 
       if ( $line->isType('LANGUAGE') ) {
          my $languagename = getEntityName($line->type, $lineTokens);
-         LstTidy::Report::printToExportList('LANGUAGE', 
+         TidyLst::Report::printToExportList('LANGUAGE', 
             makeExportListString($languagename, $line->num, $filename));
       }
 
@@ -1542,19 +1542,19 @@ sub processLine {
          $race_sub_type = $lineTokens->{'RACESUBTYPE'}[0] if $line->hasColumn('RACESUBTYPE');
          $race_sub_type =~ s{ \A RACESUBTYPE: }{}xms;
 
-         LstTidy::Report::printToExportList('RACE', 
+         TidyLst::Report::printToExportList('RACE', 
             makeExportListString($racename, $race_type, $race_sub_type, $line->num, $filename));
       }
 
       if ( $line->isType('SKILL') ) {
          my $skillname = getEntityName($line->type, $lineTokens);
-         LstTidy::Report::printToExportList('SKILL', 
+         TidyLst::Report::printToExportList('SKILL', 
             makeExportListString($skillname, $line->num, $filename));
       }
 
       if ( $line->isType('TEMPLATE') ) {
          my $template_name = getEntityName($line->type, $lineTokens);
-         LstTidy::Report::printToExportList('TEMPLATE', 
+         TidyLst::Report::printToExportList('TEMPLATE', 
             makeExportListString($template_name, $line->num, $filename));
       }
    }

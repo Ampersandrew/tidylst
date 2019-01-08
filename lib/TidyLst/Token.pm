@@ -1,4 +1,4 @@
-package LstTidy::Token;
+package TidyLst::Token;
 
 use strict;
 use warnings;
@@ -11,8 +11,8 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Convert qw(doTokenConversions);
-use LstTidy::Data qw(
+use TidyLst::Convert qw(doTokenConversions);
+use TidyLst::Data qw(
    addToValidTypes 
    addValidCategory
    getValidSystemArr
@@ -30,12 +30,12 @@ use LstTidy::Data qw(
    tagTakesFixedValues
    );
 
-use LstTidy::Log;
-use LstTidy::LogFactory qw{getLogger};
+use TidyLst::Log;
+use TidyLst::LogFactory qw{getLogger};
 
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::Options qw(getOption isConversionActive);
 
-use LstTidy::Variable qw(
+use TidyLst::Variable qw(
    oldExtractVariables
    parseJepFormula
    );
@@ -224,7 +224,7 @@ sub process {
    }
 
    if ($token->tag eq 'ADD') {
-      LstTidy::Convert::convertAddTokens($token);
+      TidyLst::Convert::convertAddTokens($token);
    }
 
    # Special cases like BONUS:..., FACT:..., etc.
@@ -879,7 +879,7 @@ sub _bonusFeat {
    if ((shift @list_of_param) ne 'POOL') {
 
       # For now, only POOL is valid here
-      LstTidy::LogFactory::getLogger()->notice(
+      TidyLst::LogFactory::getLogger()->notice(
          qq{Only POOL is valid as second paramater for BONUS:FEAT "} . $self->fullToken . q{"},
          $self->file,
          $self->line
@@ -911,7 +911,7 @@ sub _bonusFeat {
 
       } else {
 
-         LstTidy::LogFactory::getLogger()->notice(
+         TidyLst::LogFactory::getLogger()->notice(
             qq{Invalid parameter "$param" found in "} . $self->fullToken . q{"},
             $self->file,
             $self->line
@@ -920,7 +920,7 @@ sub _bonusFeat {
    }
 
    if ( $type_present > 1 ) {
-      LstTidy::LogFactory::getLogger()->notice(
+      TidyLst::LogFactory::getLogger()->notice(
          qq{There should be only one "TYPE=" in "} . $self->fullToken . q{"},
          $self->file,
          $self->line
@@ -956,7 +956,7 @@ sub _bonusMove {
 
       } else {
 
-         LstTidy::LogFactory::getLogger()->notice(
+         TidyLst::LogFactory::getLogger()->notice(
             qq{Missing "TYPE=" for "$type" in "} . $self->fullToken . q{"},
             $self->file,
             $self->line
@@ -985,7 +985,7 @@ sub _bonusSlots {
 
    my ($type_list, $formula) = ( split '\|', $self->value )[1, 2];
 
-   my $log = LstTidy::LogFactory::getLogger();
+   my $log = TidyLst::LogFactory::getLogger();
 
    # We first check the slot types
    for my $type ( split ',', $type_list ) {
@@ -1090,7 +1090,7 @@ sub _bonusVar {
 
       } else {
 
-         LstTidy::LogFactory::getLogger()->notice(
+         TidyLst::LogFactory::getLogger()->notice(
             qq{Invalid variable name "$varName" in "} . $self->fullToken . q{"},
             $self->file,
             $self->line
@@ -1125,7 +1125,7 @@ sub _bonusWeildCategory {
    # BONUS:WIELDCATEGORY|<List of category>|<formula>
    my ($category_list, $formula) = ( split '\|', $self->value )[1, 2];
 
-   my $log = LstTidy::LogFactory::getLogger();
+   my $log = TidyLst::LogFactory::getLogger();
 
    # Validate the category to see if valid
    for my $category ( split ',', $category_list ) {
@@ -1398,7 +1398,7 @@ sub _define {
          if ( isConversionActive('Export lists') ) {
             my $file = $self->file;
             $file =~ tr{/}{\\};
-            LstTidy::Report::printToExportList('VARIABLE', qq{"$var_name","$self->line","$file"\n});
+            TidyLst::Report::printToExportList('VARIABLE', qq{"$var_name","$self->line","$file"\n});
          }
 
          # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)

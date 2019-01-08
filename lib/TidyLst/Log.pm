@@ -1,4 +1,4 @@
-package LstTidy::Log;
+package TidyLst::Log;
 
 use constant {
    DEBUG      => 7, # INFO message + debug message for the programmer
@@ -17,11 +17,11 @@ use Scalar::Util;
 
 # Make a type that we will use to coerce a string warning level
 # to an integer in the correct range.
-subtype 'LstTidy::Types::WarnLevel'
+subtype 'TidyLst::Types::WarnLevel'
    => as 'Int'
    => where { $_ >= ERROR or $_ <= DEBUG };
 
-coerce 'LstTidy::Types::WarnLevel'
+coerce 'TidyLst::Types::WarnLevel'
    => from 'Str'
    => via \&_coerceWarning; 
 
@@ -57,7 +57,7 @@ has 'printHeader' => (
 
 has 'warningLevel' => (
    is       => 'rw',
-   isa      => 'LstTidy::Types::WarnLevel',
+   isa      => 'TidyLst::Types::WarnLevel',
    default  => NOTICE,
    required => 1,
    coerce   => 1,
@@ -137,7 +137,7 @@ around 'header' => sub {
 
 =head1 NAME
 
-   LstTidy::Log - a logging package for Lst file processing
+   TidyLst::Log - a logging package for Lst file processing
 
 =head1 VERSION
 

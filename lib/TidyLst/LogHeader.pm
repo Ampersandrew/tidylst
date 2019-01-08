@@ -1,4 +1,4 @@
-package LstTidy::LogHeader;
+package TidyLst::LogHeader;
 
 use strict;
 use warnings;

@@ -1,4 +1,4 @@
-package LstTidy::Line;
+package TidyLst::Line;
 
 use strict;
 use warnings;
@@ -9,16 +9,16 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(getEntityFirstTag getEntityNameTag);
-use LstTidy::Log;
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Token;
-use LstTidy::Options qw(getOption);
+use TidyLst::Data qw(getEntityFirstTag getEntityNameTag);
+use TidyLst::Log;
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::Token;
+use TidyLst::Options qw(getOption);
 
 has 'columns' => (
    traits   => ['Hash'],
 #   is       => 'ro',
-   isa      => 'HashRef[ArrayRef[LstTidy::Token]]',
+   isa      => 'HashRef[ArrayRef[TidyLst::Token]]',
    default  => sub { {} },
    handles  => {
       column       => 'accessor',
@@ -71,7 +71,7 @@ sub appendToValue {
 
 =head2 add
 
-   This operation adds a LstTidy::Token object to the line
+   This operation adds a TidyLst::Token object to the line
 
 =cut
 
@@ -109,8 +109,8 @@ sub entityToken {
    my ($self) = @_;
 
    # Look up the name of the column that hold the name
-   my $nameTag = getEntityFirstTag($self->lineType);
-   $self->hasColumn($nameTag) && $self->column($nameTag)[0];
+   my $nameTag = getEntityFirstTag($self->type);
+   $self->hasColumn($nameTag) && @{$self->column($nameTag)}[0];
 }
 
 
@@ -318,6 +318,7 @@ sub _joinWith {
 sub _splitToken {
 
    my ($line, $column) = @_;
+   my $log = getLogger();
 
    my @newTokens;
 

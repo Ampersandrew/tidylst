@@ -1,4 +1,4 @@
-package LstTidy::Reformat;
+package TidyLst::Reformat;
 
 use strict;
 use warnings;
@@ -13,6 +13,6 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
  
-use LstTidy::Data;
+use TidyLst::Data;
 
 1;

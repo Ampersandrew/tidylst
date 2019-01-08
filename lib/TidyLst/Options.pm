@@ -1,4 +1,4 @@
-package LstTidy::Options;
+package TidyLst::Options;
 
 use 5.008_001;		# Perl 5.8.1 or better is now mandantory
 use strict;
@@ -8,12 +8,12 @@ use Scalar::Util qw(reftype);
 use Getopt::Long;
 use Exporter qw(import);
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Log;
+use TidyLst::Log;
 
 our (@ISA, @EXPORT_OK);
 
@@ -376,15 +376,15 @@ sub _checkWarningLevel {
 
    if  (Scalar::Util::looks_like_number $wl) {
 
-      if ($wl < LstTidy::Log::ERROR || $wl > LstTidy::Log::DEBUG) {
+      if ($wl < TidyLst::Log::ERROR || $wl > TidyLst::Log::DEBUG) {
 
-         setOption('warninglevel', LstTidy::Log::NOTICE);
+         setOption('warninglevel', TidyLst::Log::NOTICE);
          $errorMessage = $message;
          setOption('help', 1);
       } 
-   } elsif ($wl !~ $LstTidy::Log::wlPattern) {
+   } elsif ($wl !~ $TidyLst::Log::wlPattern) {
 
-      setOption('warninglevel', LstTidy::Log::NOTICE);
+      setOption('warninglevel', TidyLst::Log::NOTICE);
       $errorMessage = $message;
       setOption('help', 1);
    };
@@ -444,8 +444,8 @@ sub _processOptions {
 
    # No-warning option
    # level 6 is info, level 5 is notice
-   if (getOption('nowarning') && getOption('warninglevel') >= LstTidy::Log::INFO) {
-      setOption('warninglevel', LstTidy::Log::NOTICE);
+   if (getOption('nowarning') && getOption('warninglevel') >= TidyLst::Log::INFO) {
+      setOption('warninglevel', TidyLst::Log::NOTICE);
    }
 
    # oldsourcetag option
