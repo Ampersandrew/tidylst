@@ -9,7 +9,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(getEntityNameTag);
+use LstTidy::Data qw(getEntityFirstTag getEntityNameTag);
 use LstTidy::Log;
 use LstTidy::LogFactory qw(getLogger);
 use LstTidy::Token;
@@ -99,6 +99,21 @@ sub columnHasSingleToken {
 
 
 
+=head2 entityToken
+
+   Return the token that holds the name of this entity
+
+=cut
+
+sub entityToken {
+   my ($self) = @_;
+
+   # Look up the name of the column that hold the name
+   my $nameTag = getEntityFirstTag($self->lineType);
+   $self->hasColumn($nameTag) && $self->column($nameTag)[0];
+}
+
+
 =head2 entityName
 
    Return the name of this entity
@@ -108,13 +123,11 @@ sub columnHasSingleToken {
 sub entityName {
    my ($self) = @_;
 
-   # Look upo the name of the column that hold the name
-   my $nameTag = getEntityNameTag();
-   my $token   = $self->column($nameTag)[0];
+   my $token = $self->entityToken;
 
    # There is only a faux tag on this token, so just return the value as that
    # is the name.
-   $token->value;
+   defined $token && $token->value;
 }
 
 
@@ -161,7 +174,7 @@ sub getFirstTokenInColumn {
 
 =head2 hasType
 
-   This opertaion checks whether the line has the given type in its tokens.
+   This operation checks whether the line has the given type in its tokens.
 
 =cut
 
@@ -230,6 +243,21 @@ sub replaceTag {
    }
 
    $self->deleteColumn($oldTag);
+}
+
+=head2 tokenFor
+   
+   Create a new token that has the correct linetype, line number and file name
+   to be on this line.
+
+=cut
+
+sub tokenFor {
+   my ($self, @args) = @_;
+
+   my $token = $self->entityToken;
+
+   defined $token && $token->clone(@args);
 }
 
 ##############################################################################

@@ -546,6 +546,7 @@ sub convertBonusMove {
    }
 }
 
+
 =head2 convertCountFeatType
 
    # [ 737718 ] COUNT[FEATTYPE] data change
@@ -740,70 +741,51 @@ sub convertNaturalAttack {
    my ($line) = @_;
 
    # First we verify if if there is only one melee attack.
-
    if ($line->columnHasSingleToken('NATURALATTACKS')) {
 
-            
+      my $token = $line->getFirstTokenInColumn('NATURALATTACKS');
+      my @NatAttacks = split '\|', $token->value;
+      my ($attackName, $types, $numAttacks, $damage) = split ',', $NatAttacks[0];
 
+      $types = uc $types;
 
-      my @NatAttacks = split '\|', $lineTokens->{'NATURALATTACKS'}[0];
-      if ( @NatAttacks == 1 ) {
-         my ( $NatAttackName, $Types, $NbAttacks, $Damage ) = split ',', $NatAttacks[0];
-         if ( $NbAttacks eq '*1' && $Damage ) {
+      # Is there a single Natural Attack which is a melee attack
+      if (@NatAttacks == 1 && $numAttacks eq '*1' && $damage && $types =~ qr{\bMELEE\b}) {
 
-            # Now, at last, we know there is only one Natural Attack
-            # Is it a Melee attack?
-            my @Types       = split '\.', $Types;
-            my $IsMelee  = 0;
-            my $IsRanged = 0;
-            for my $type (@Types) {
-               $IsMelee  = 1 if uc($type) eq 'MELEE';
-               $IsRanged = 1 if uc($type) eq 'RANGED';
+         if ($types =~ qr{\bRANGED\b}) {
+            getLogger()->warning(
+               qq{This natural attack is both Melee and Ranged} . $token->value,
+               $line->file,
+               $line->num
+            );
+
+         } else {
+
+            # Make a token for the new bonus
+            ($attackName) = ( $attackName =~ /:(.*)/ );
+
+            my $WPtoken = $token->clone(
+               tag   => 'BONUS:WEAPONPROF', 
+               value => "=$attackName|DAMAGE|STR/2");
+
+            # is the potential new bonus already there.
+            my $addIt = 1;
+            if ($line->hasColumn('BONUS:WEAPONPROF')) {
+               FIND_BONUS:
+               for my $bonus (@{ $line->column('BONUS:WEAPONPROF') }) {
+                  if ($bonus->fullToken eq $WPtoken->fullToken){
+                     $addIt = 0;
+                     last FIND_BONUS;
+                  }
+               }
             }
 
-            if ( $IsMelee && !$IsRanged ) {
+            if ($addIt) {
+               $line->add($WPtoken);
 
-               # We have a winner!!!
-               ($NatAttackName) = ( $NatAttackName =~ /:(.*)/ );
-
-               # Well, maybe the BONUS:WEAPONPROF is already there.
-               if ( $line->hasColumn('BONUS:WEAPONPROF') ) {
-                  my $AlreadyThere = 0;
-                  FIND_BONUS:
-                  for my $bonus ( @{ $lineTokens->{'BONUS:WEAPONPROF'} } ) {
-                     if ( $bonus eq "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2" )
-                     {
-                        $AlreadyThere = 1;
-                        last FIND_BONUS;
-                     }
-                  }
-
-                  unless ($AlreadyThere) {
-                     push @{ $lineTokens->{'BONUS:WEAPONPROF'} }, "BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2";
-                     $log->warning(
-                        qq{Added "$lineTokens->{'BONUS:WEAPONPROF'}[0]"}
-                        . qq{ to go with "$lineTokens->{'NATURALATTACKS'}[0]"},
-                        $line->file,
-                        $line->num
-                     );
-                  }
-
-               } else {
-
-                  $lineTokens->{'BONUS:WEAPONPROF'} = ["BONUS:WEAPONPROF=$NatAttackName|DAMAGE|STR/2"];
-
-                  $log->warning(
-                     qq{Added "$lineTokens->{'BONUS:WEAPONPROF'}[0]"}
-                     . qq{to go with "$lineTokens->{'NATURALATTACKS'}[0]"},
-                     $line->file,
-                     $line->num
-                  );
-               }
-
-            } elsif ( $IsMelee && $IsRanged ) {
-               $log->warning(
-                  qq{This natural attack is both Melee and Ranged}
-                  . qq{"$lineTokens->{'NATURALATTACKS'}[0]"},
+               getLogger()->warning(
+                  qq(Added ") . $WPtoken->fullToken 
+                  . qq(" to go with ") . $token->fullToken . q("),
                   $line->file,
                   $line->num
                );
@@ -870,7 +852,6 @@ sub convertPreAlign {
 sub convertPreClass {
 
    my ($token) = @_;
-
 
    if ( $token->tag eq 'PRECLASS' || $token->tag eq '!PRECLASS' ) {
 
@@ -940,7 +921,8 @@ sub convertPreSpellType {
          }
 
          getLogger()->notice(
-            qq{Invalid standalone PRESPELLTYPE token "PRESPELLTYPE:} . $token->value . qq{" found and converted in } . $token->lineType,
+            qq{Invalid standalone PRESPELLTYPE token "PRESPELLTYPE:} 
+            . $token->value . qq{" found and converted in } . $token->lineType,
             $token->file,
             $token->line
          );
@@ -958,7 +940,8 @@ sub convertPreSpellType {
       $token->value($token->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
       getLogger()->notice(
-         qq{Invalid embedded PRESPELLTYPE token "} . $token->fullToken . q{" found and converted } . $token->lineType . q{.},
+         qq{Invalid embedded PRESPELLTYPE token "} 
+         . $token->fullToken . q{" found and converted } . $token->lineType . q{.},
          $token->file,
          $token->line
       );
@@ -982,6 +965,244 @@ sub convertPreStat {
       reportReplacement($token);
    }
 }
+
+
+=head2 convertRaceClimbandSwim
+
+   Every RACE that has a Climb or a Swim MOVE must have a
+   BONUS:SKILL|Climb|8|TYPE=Racial. 
+
+   If there is a BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
+   removed or lowered by 8.
+
+=cut
+
+sub convertRaceClimbandSwim {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+
+   my $swim  = $line->firstTokenMatches('MOVE', /swim/i);
+   my $climb = $line->firstTokenMatches('MOVE', /climb/i);
+
+   if ( $swim || $climb ) {
+      my $need_swim  = 1;
+      my $need_climb = 1;
+
+      # Is there already a BONUS:SKILL|Swim of at least 8 rank?
+      if ( $line->hasColumn('BONUS:SKILL') ) {
+         for my $token (@{ $line->column('BONUS:SKILL') }) {
+            if ($token->value =~ /^\|([^|]*)\|(\d+)\|TYPE=Racial/i) {
+
+               my $skill_list = $1;
+               my $skill_rank = $2;
+
+               $need_swim  = 0 if $skill_list =~ /swim/i;
+               $need_climb = 0 if $skill_list =~ /climb/i;
+
+               if ( $need_swim && $skill_rank == 8 ) {
+
+                  $skill_list = join( ',', sort( split ( ',', $skill_list ), 'Swim' ) );
+
+                  $token->value("|$skill_list|8|TYPE=Racial");
+
+                  $log->warning(
+                     q(Added Swim to ") . $token->origToken . q("),
+                     $line->file,
+                     $line->num
+                  );
+               }
+
+               if ( $need_climb && $skill_rank == 8 ) {
+
+                  $skill_list = join( ',', sort( split ( ',', $skill_list ), 'Climb' ) );
+
+                  $token->value("|$skill_list|8|TYPE=Racial");
+
+                  $log->warning(
+                     qq(Added Climb to ") . $token->origToken . q("),
+                     $line->file,
+                     $line->num
+                  );
+               }
+
+               if ( ( $need_climb || $need_swim ) && $skill_rank != 8 ) {
+                  $log->info(
+                     qq(You\'ll have to deal with this one yourself ") 
+                     . $token->origToken . q("),
+                     $line->file,
+                     $line->num
+                  );
+               }
+            }
+         }
+
+      } else {
+         $need_swim  = $swim;
+         $need_climb = $climb;
+      }
+
+      # Is there a BONUS:SKILLRANK to remove?
+      if ( $line->hasColumn('BONUS:SKILLRANK') ) {
+         my @keepTokens;
+         for my $token (@{ $line->column('BONUS:SKILLRANK') }) {
+            push @keepTokens, $token;
+            if ($token->value =~ /^\|(.*)\|(\d+)\|PREDEFAULTMONSTER:Y/i) {
+
+               my $skill_list = $1;
+               my $skill_rank = $2;
+
+               if ( $climb && $skill_list =~ /climb/i ) {
+                  if ( $skill_list eq "Climb" ) {
+
+                     $skill_rank -= 8;
+
+                     if ($skill_rank) {
+
+                        $token->value("|Climb|$skill_rank|PREDEFAULTMONSTER:Y");
+
+                        $log->warning(
+                           q(Lowering skill rank in ") . $token->origToken . q("),
+                           $line->file,
+                           $line->num
+                        );
+
+                     } else {
+
+                        $log->warning(
+                           q(Removing ") . $token->fullToken . q("),
+                           $line->file,
+                           $line->num
+                        );
+                        pop @keepTokens;
+                     }
+
+                  } else {
+
+                     $log->info(
+                        q(You\'ll have to deal with this one yourself ") . $token->fullToken . q("),
+                        $line->file,
+                        $line->num
+                     );
+                  }
+               }
+
+               if ( $swim && $skill_list =~ /swim/i ) {
+                  if ( $skill_list eq "Swim" ) {
+
+                     $skill_rank -= 8;
+
+                     if ($skill_rank) {
+
+                        $token->value("|Swim|$skill_rank|PREDEFAULTMONSTER:Y");
+
+                        $log->warning(
+                           q(Lowering skill rank in ") . $token->origToken . q("),
+                           $line->file,
+                           $line->num
+                        );
+
+                     } else {
+
+                        $log->warning(
+                           q(Removing ") . $token->fullToken . q("),
+                           $line->file,
+                           $line->num
+                        );
+                        pop @keepTokens;
+                     }
+
+                  } else {
+
+                     $log->info(
+                        q(You\'ll have to deal with this one yourself ") . $token->fullToken . q("),
+                        $line->file,
+                        $line->num
+                     );
+                  }
+               }
+            }
+         }
+
+         # delete all the current BONUS:SKILLRANK tokens
+         $line->deleteColumn('BONUS:SKILLRANK');
+
+         # put any we didn't delete above back 
+         for my $token (@keepTokens) {
+            $line->add($token);
+         }
+      }
+   }
+}
+
+=head2 convertRaceNoProfReq
+
+   NoProfReq must be added to AUTO:WEAPONPROF if the race has
+   at least one hand and if NoProfReq is not already there.
+
+=cut
+
+      sub convertRaceNoProfReq {
+
+         my ($line) = @_;
+
+      my $log = getLogger();
+
+      my $needNoProfReq = 1;
+
+      # Is NoProfReq already present?
+      if ($line->hasColumn('AUTO:WEAPONPROF')) {
+         if ($line->firstColumnMatches('AUTO:WEAPONPROF', /NoProfReq/) ) {
+            $needNoProfReq = 0
+         }
+      }
+
+      # Default when no HANDS tag is present
+      my $nbHands = 2;        
+
+      # How many hands?
+      if ($line->hasColumn('HANDS')) {
+
+         if ($line->firstColumnMatches('HANDS', /HANDS:(\d+)/) ) {
+            $nbHands = $1;
+
+         } else {
+            my $token = $line->getFirstTokenInColumn('HANDS');
+
+            $log->info(
+               q(Invalid value in tag ") . $token->fullToken . q("),
+               $line->file,
+               $line->num
+            );
+            $needNoProfReq = 0;
+         }
+      }
+
+      if ( $needNoProfReq && $nbHands ) {
+         if ($line->hasColumn('AUTO:WEAPONPROF')) {
+            my $token = $line->getFirstTokenInColumn('AUTO:WEAPONPROF');
+
+            $log->warning(
+               q(Adding "TYPE=NoProfReq" to tag ") . $token->fullToken . q("),
+               $line->file,
+               $line->num
+            );
+            $token->value($token->value . "|TYPE=NoProfReq");
+
+         } else {
+
+            # Create a new token for the lineType, line number and file name
+            $line->add($line->tokenFor(fullToken => "AUTO:WEAPONPROF|TYPE=NoProfReq"));
+
+            $log->warning(
+               q{Creating new token "AUTO:WEAPONPROF|TYPE=NoProfReq"},
+               $line->file,
+               $line->num
+            );
+         }
+      }
+   }
 
 
 =head2 convertSpells
@@ -1082,29 +1303,89 @@ sub convertToSRDName {
    my ($token) = @_;
 
    if (
-          $token->tag eq 'WEAPONBONUS'
-       || $token->tag eq 'WEAPONAUTO'
-       || $token->tag eq 'PROF'
-       || $token->tag eq 'GEAR'
-       || $token->tag eq 'FEAT'
-       || $token->tag eq 'PROFICIENCY'
-       || $token->tag eq 'DEITYWEAP'
-       || $token->tag eq 'MFEAT'
-    ) {
+      $token->tag eq 'WEAPONBONUS'
+      || $token->tag eq 'WEAPONAUTO'
+      || $token->tag eq 'PROF'
+      || $token->tag eq 'GEAR'
+      || $token->tag eq 'FEAT'
+      || $token->tag eq 'PROFICIENCY'
+      || $token->tag eq 'DEITYWEAP'
+      || $token->tag eq 'MFEAT'
+   ) {
 
-       WEAPONNAME:
-       for my $name ( keys %convertWeaponName ) {
+      WEAPONNAME:
+      for my $name ( keys %convertWeaponName ) {
 
-          my $value = $token->value;
+         my $value = $token->value;
 
-          if ($value =~ s/\Q$name\E/$convertWeaponName{$name}/ig ) {
-             $token->value($value);
-             reportReplacement($token);
-             last WEAPONNAME;
-          }
-       }
-    }
- }
+         if ($value =~ s/\Q$name\E/$convertWeaponName{$name}/ig ) {
+            $token->value($value);
+            reportReplacement($token);
+            last WEAPONNAME;
+         }
+      }
+   }
+}
+
+
+=head2 convertVisionCommaToBar
+
+   VISION:.ADD must be converted to BONUS:VISION
+   Some exemple of VISION:.ADD tags:
+     VISION:.ADD,Darkvision (60')
+     VISION:1,Darkvision (60')
+     VISION:.ADD,See Invisibility (120'),See Etheral (120'),Darkvision (120')
+
+=cut
+
+sub convertVisionCommaToBar {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+   my $token = $line->getFirstTokenInColumn('VISION');
+
+   $log->warning(
+      qq(Removing ") . $token->fullToken . q("),
+      $line->file,
+      $line->num
+   );
+   
+   $line->deleteColumn('VISION');
+
+   my $newvision = "VISION:";
+   my $comma;
+
+   for my $vision_bonus ( split ',', $2 ) {
+      if ($vision_bonus =~ /(\w+)\s*\((\d+)\'\)/) {
+
+         my ($type, $bonus) = ($1, $2);
+
+         $line->add($line->tokenFor(fullToken => "BONUS:VISION|$type|$bonus"));
+
+         $log->warning(
+            qq(Adding "BONUS:VISION|$type|$bonus"),
+            $line->file,
+            $line->num
+         );
+
+         $newvision .= "$comma$type (0')";
+         $comma = ',';
+
+      } else {
+
+         $log->error(
+            qq(Do not know how to convert "VISION:.ADD,$vision_bonus"),
+            $line->file,
+            $line->num
+         );
+      }
+   }
+   
+   $log->warning( qq{Adding "$newvision"}, $line->file, $line->num );
+   $line->add($line->tokenFor(fullToken => $newvision));
+}
+
 
 =head2 convertVisionCommas
 
@@ -1212,10 +1493,44 @@ sub doLineConversions {
       $line->replaceTag('ADD:SA', 'ADD:SAB')
    }
 
-   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
-      && $line->isType("RACE")) {
+   if (isConversionActive('ALL:Convert SPELL to SPELLS')
+      && $line->hasColumn('SPELL')) {
 
-      removePreDefaultMonster($line)
+      convertSpells($line)
+   }
+
+   if (isConversionActive('ALL:CMP NatAttack fix')
+      && $line->hasColumn('NATURALATTACKS')) {
+
+      convertNaturalAttack($line);
+   }
+
+   if (isConversionActive('ALL:CMP remove PREALIGN') 
+      && $line->hasColumn('PREALIGN')) {
+
+      $line->replaceTag('PREALIGN')
+   }
+
+   if (isConversionActive('ALL:New SOURCExxx tag format')
+      && $line->hasColumn('SOURCELONG')) {
+
+      $line->_splitToken('SOURCELONG')
+   }
+
+   if (isConversionActive('CLASS:no more HASSPELLFORMULA')
+      && $line->isType("CLASS")
+      && $line->hasColumn('HASSPELLFORMULA') )
+   {
+
+      $line->replaceTag('HASSPELLFORMULA')
+   }
+
+   if (isConversionActive('DEITY:Followeralign conversion')
+      && $line->isType("DEITY")
+      && $line->hasColumn('FOLLOWERALIGN')
+      && $line->hasColumn('DOMAINS')) {
+
+      removeFollowerAlign($line)
    }
 
    if (isConversionActive('EQUIP: ALTCRITICAL to ALTCRITMULT')
@@ -1223,6 +1538,41 @@ sub doLineConversions {
       && $line->hasColumn('ALTCRITICAL')) {
 
       replaceAltCritical($line)
+   }
+
+   if (isConversionActive('EQUIP:no more MOVE')
+      && $line->isType("EQUIPMENT")
+      && $line->hasColumn('MOVE')) {
+
+      $line->replaceTag('MOVE')
+   }
+
+   if (isConversionActive('RACE:BONUS SKILL Climb and Swim')
+      && $line->isType("RACE")
+      && $line->hasColumn('MOVE')) {
+
+      convertRaceClimbandSwim($line);
+   }
+
+   if (isConversionActive('RACE:CSKILL to MONCSKILL')
+      && $line->isType("RACE")
+      && $line->hasColumn('CSKILL')
+      && $line->hasColumn('MONSTERCLASS')
+      && !$line->hasColumn('MONCSKILL')) {
+
+      $line->replaceTag('CSKILL', 'MONCSKILL')
+   }
+
+   if (isConversionActive('RACE:Fix PREDEFAULTMONSTER bonuses')
+      && $line->isType("RACE")) {
+
+      removePreDefaultMonster($line)
+   }
+
+   if (isConversionActive('RACE:NoProfReq')
+      && $line->isType("RACE")) {
+
+      convertRaceNoProfReq($line);
    }
 
    if (isConversionActive('RACE:Remove MFEAT and HITDICE')
@@ -1239,52 +1589,12 @@ sub doLineConversions {
       removeMonsterTag($line, 'HITDICE')
    }
 
-   if (isConversionActive('DEITY:Followeralign conversion')
-      && $line->isType("DEITY")
-      && $line->hasColumn('FOLLOWERALIGN')
-      && $line->hasColumn('DOMAINS')) {
-
-      removeFollowerAlign($line)
-   }
-
    if (isConversionActive('RACE:TYPE to RACETYPE')
       && ($line->isType("RACE") || $line->isType("TEMPLATE") )
       && ! $line->hasColumn('RACETYPE')
       && $line->hasColumn('TYPE')) {
 
       $line->replaceTag('TYPE', 'RACETYPE')
-   }
-
-   if (isConversionActive('ALL:New SOURCExxx tag format')
-      && $line->hasColumn('SOURCELONG')) {
-      $line->_splitToken('SOURCELONG')
-   }
-
-   if (isConversionActive('ALL:Convert SPELL to SPELLS')
-      && $line->hasColumn('SPELL')) {
-
-      convertSpells($line)
-   }
-
-   if (isConversionActive('ALL:CMP remove PREALIGN') 
-      && $line->hasColumn('PREALIGN')) {
-
-      $line->replaceTag('PREALIGN')
-   }
-
-   if (isConversionActive('EQUIP:no more MOVE')
-      && $line->isType("EQUIPMENT")
-      && $line->hasColumn('MOVE')) {
-
-      $line->replaceTag('MOVE')
-   }
-
-   if (isConversionActive('CLASS:no more HASSPELLFORMULA')
-      && $line->isType("CLASS")
-      && $line->hasColumn('HASSPELLFORMULA') )
-   {
-
-      $line->replaceTag('HASSPELLFORMULA')
    }
 
    if (isConversionActive('WEAPONPROF:No more SIZE')
@@ -1294,20 +1604,13 @@ sub doLineConversions {
       $line->replaceTag('SIZE')
    }
 
-   if (isConversionActive('RACE:CSKILL to MONCSKILL')
-      && $line->isType("RACE")
-      && $line->hasColumn('CSKILL')
-      && $line->hasColumn('MONSTERCLASS')
-      && !$line->hasColumn('MONCSKILL')) {
+   if (isConversionActive('ALL: , to | in VISION')
+      && $line->hasColumn('VISION')
+      && $line->firstColumnMatches('VISION', /(\.ADD,|1,)(.*)/i)) {
 
-      $line->replaceTag('CSKILL', 'MONCSKILL')
+      convertVisionCommaToBar($line);
    }
 
-   if (isConversionActive('ALL:CMP NatAttack fix')
-      && $line->hasColumn('NATURALATTACKS')) {
-
-      convertNaturalAttack($line);
-   }
 
 
 }
