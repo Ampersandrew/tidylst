@@ -5,17 +5,17 @@ use warnings;
 
 use Data::Dumper;
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
 use Test::More tests => 41;
 
-use_ok ('LstTidy::Parse');
-use LstTidy::Data qw(getValidSystemArr updateValidity);
-use LstTidy::Line;
-use LstTidy::Token;
+use_ok ('TidyLst::Parse');
+use TidyLst::Data qw(getValidSystemArr updateValidity);
+use TidyLst::Line;
+use TidyLst::Token;
 
 my %enabled = (
    'ABILITY'         => [ 'code'  => "ABILITY is parsed " ],
@@ -57,23 +57,23 @@ for my $type ( keys %enabled ) {
    my ($data, $string) = ( @{ $enabled{$type} } );
 
    if ($data eq 'code') {
-      like(LstTidy::Parse::isParseableFileType($type), qr{^CODE}, $string);
+      like(TidyLst::Parse::isParseableFileType($type), qr{^CODE}, $string);
    } else {
-      like(LstTidy::Parse::isParseableFileType($type), qr{^\d}, $string);
+      like(TidyLst::Parse::isParseableFileType($type), qr{^\d}, $string);
    }
 
 }
 
 
-is(LstTidy::Parse::isWriteableFileType('ABILITY'), 1, "Ability files are writeable");
-is(LstTidy::Parse::isWriteableFileType('COPYRIGHT'), 0, "Copyright files are not writeable");
+is(TidyLst::Parse::isWriteableFileType('ABILITY'), 1, "Ability files are writeable");
+is(TidyLst::Parse::isWriteableFileType('COPYRIGHT'), 0, "Copyright files are not writeable");
 
-LstTidy::Data::updateValidity();
+TidyLst::Data::updateValidity();
 
-is(LstTidy::Parse::isParseableFileType('Dummy'), undef, "Dummy is not a parsable File type");
-like(LstTidy::Parse::isParseableFileType('ABILITY'), qr{CODE}, "ABILITY is a parsable File type");
+is(TidyLst::Parse::isParseableFileType('Dummy'), undef, "Dummy is not a parsable File type");
+like(TidyLst::Parse::isParseableFileType('ABILITY'), qr{CODE}, "ABILITY is a parsable File type");
 
-is(LstTidy::Parse::isWriteableFileType('COVER'), 0, "COVER is not a writable File type");
-is(LstTidy::Parse::isWriteableFileType('EQUIPMENT'), 1, "EQUIPMENT is a writable File type");
+is(TidyLst::Parse::isWriteableFileType('COVER'), 0, "COVER is not a writable File type");
+is(TidyLst::Parse::isWriteableFileType('EQUIPMENT'), 1, "EQUIPMENT is a writable File type");
 
-# LstTidy::Parse::parse_system_files
+# TidyLst::Parse::parse_system_files

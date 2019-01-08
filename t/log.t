@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
@@ -11,25 +11,25 @@ use lib dirname(dirname abs_path $0) . '/lib';
 use Test::More tests => 37;
 use Test::Warn;
 
-use_ok ('LstTidy::Log');
+use_ok ('TidyLst::Log');
 
-my $log = LstTidy::Log->new({warningLevel=>1});
+my $log = TidyLst::Log->new({warningLevel=>1});
 
 is($log->warningLevel, 5, "Creating with warning level too low uses default");
 
-$log = LstTidy::Log->new({warningLevel=>8});
+$log = TidyLst::Log->new({warningLevel=>8});
 
 is($log->warningLevel, 5, "Creating with warning level too high uses default");
 
-$log = LstTidy::Log->new({warningLevel=>6});
+$log = TidyLst::Log->new({warningLevel=>6});
 
 is($log->warningLevel, 6, "Creating with a numeric warning level in range uses default");
 
-$log = LstTidy::Log->new({warningLevel=>'foo'});
+$log = TidyLst::Log->new({warningLevel=>'foo'});
 
 is($log->warningLevel, 5, "Creating with a non-existent string warning level uses default");
 
-$log = LstTidy::Log->new({warningLevel=>'debug'});
+$log = TidyLst::Log->new({warningLevel=>'debug'});
 
 is($log->warningLevel, 7, "Creating with a valid string warning level uses it");
 

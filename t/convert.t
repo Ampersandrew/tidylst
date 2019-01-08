@@ -3,17 +3,17 @@
 use strict;
 use warnings;
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use LstTidy::Token;
+use TidyLst::Token;
 
 use Test::More tests => 23;
 use Test::Warn;
 
-use_ok ('LstTidy::Convert');
+use_ok ('TidyLst::Convert');
 
 my %conversions = (
 
@@ -41,7 +41,7 @@ for my $conv ( keys %conversions ) {
    my $orig   = $conversions{$conv}->{'orig'};
    my $expect = $conversions{$conv}->{'expect'};
 
-   my $got = LstTidy::Convert::convertEntities($orig);
+   my $got = TidyLst::Convert::convertEntities($orig);
 
    is($got, $expect, "Converted $expect");
 }
@@ -50,7 +50,7 @@ for my $conv ( keys %conversions ) {
 # Test convertPreSpellType
 # =====================================
 
-my $token = LstTidy::Token->new(
+my $token = TidyLst::Token->new(
    fullToken => 'PRESPELLTYPE:Arcane|Divine,2,3',
    lineType  => 'SPELL',
    file      => 'foo_spells.lst',
@@ -61,11 +61,11 @@ is($token->value, 'Arcane|Divine,2,3', "Value is Arcane|Divine,2,3");
 
 my @arr = ();
 
-LstTidy::Options::parseOptions(@arr);
-LstTidy::Options::enableConversion('ALL:PRESPELLTYPE Syntax');
+TidyLst::Options::parseOptions(@arr);
+TidyLst::Options::enableConversion('ALL:PRESPELLTYPE Syntax');
 
-warnings_like { LstTidy::Convert::convertPreSpellType($token) } [
-   qr{Warning: something's wrong at /mnt/c/github/lst-tidy/lib/LstTidy/Log.pm line},
+warnings_like { TidyLst::Convert::convertPreSpellType($token) } [
+   qr{Warning: something's wrong at /mnt/c/github/tidylst/lib/TidyLst/Log.pm line},
    qr{foo_spells.lst},
    qr{   Invalid standalone PRESPELLTYPE tag "PRESPELLTYPE:Arcane|Divine,2,3" found and converted in SPELL}
 ], "Throws warnings";
@@ -77,7 +77,7 @@ is($token->value, '2,Arcane=3,Divine=3', "Value is now 2,Arcane=3,Divine=3");
 # Continue Test convertPreSpellType
 # =====================================
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken => 'FEAT:Foo|PRESPELLTYPE:Arcane,2,3',
    lineType  => 'RACE',
    file      => 'foo_race.lst',
@@ -87,7 +87,7 @@ is($token->tag, 'FEAT', "Tag is PRESPELLTYPE");
 is($token->value, 'Foo|PRESPELLTYPE:Arcane,2,3', "Value is Foo|PRESPELLTYPE:Arcane,2,3"); 
 
 
-warnings_like { LstTidy::Convert::convertPreSpellType($token) } 
+warnings_like { TidyLst::Convert::convertPreSpellType($token) } 
 [
    qr{foo_race.lst},
    qr{   Invalid embedded PRESPELLTYPE tag "FEAT:Foo|PRESPELLTYPE:2,Arcane=3" found and converted RACE.}

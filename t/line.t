@@ -3,20 +3,20 @@
 use strict;
 use warnings;
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0) . '/lib';
 
-use LstTidy::Token;
-use LstTidy::Options qw(getOption parseOptions);
+use TidyLst::Token;
+use TidyLst::Options qw(getOption parseOptions);
 
 use Test::More tests => 15;
 use Test::Warn;
 
-use_ok ('LstTidy::Line');
+use_ok ('TidyLst::Line');
 
-my $line = LstTidy::Line->new (
+my $line = TidyLst::Line->new (
    type => 'ABILITY',
    file => 'foo_ability',
 );
@@ -26,7 +26,7 @@ is($line->file, 'foo_ability', 'file is foo_ability');
 
 is($line->hasColumn('KEY'), "", 'Nothing in column KEY');
 
-my $token = LstTidy::Token->new(
+my $token = TidyLst::Token->new(
    tag      => 'KEY',
    value    => 'Rogue ~ Sneak Attack',
    lineType => 'ABILITY',
@@ -44,13 +44,13 @@ is($line->_columnLength('KEY'), 24, "Column length correct for single entry");
 
 parseOptions(@ARGV);
 
-my $token1 = LstTidy::Token->new(
+my $token1 = TidyLst::Token->new(
    fullToken => 'ABILITY:FEAT|AUTOMATIC|Acrobatic',
    lineType  => 'CLASS',
    file      => 'foo_class.lst',
 );
 
-my $token2 = LstTidy::Token->new(
+my $token2 = TidyLst::Token->new(
    fullToken => 'ABILITY:FEAT|AUTOMATIC|Toughness',
    lineType  => 'CLASS',
    file      => 'foo_class.lst',
@@ -72,13 +72,13 @@ is($line->_columnLength('ABILITY'), 68, "Column length correct for two entries")
 
 is($line->_columnLength('ABILITY'), 68, "Column length does not destroy the data");
 
-$token1 = LstTidy::Token->new(
+$token1 = TidyLst::Token->new(
    fullToken => 'TYPE:Magic.Medium',
    lineType  => 'CLASS',
    file      => 'foo_equipment.lst',
 );
 
-$token2 = LstTidy::Token->new(
+$token2 = TidyLst::Token->new(
    fullToken => 'TYPE:Container.Spellbook.Wondrous',
    lineType  => 'CLASS',
    file      => 'foo_equipment.lst',
