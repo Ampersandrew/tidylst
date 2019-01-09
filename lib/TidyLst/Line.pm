@@ -25,6 +25,7 @@ has 'columns' => (
       columns      => 'keys',
       deleteColumn => 'delete',
       hasColumn    => 'exists',
+      noTokens     => 'is_empty',
    },
 );
 
@@ -34,7 +35,7 @@ has 'type' => (
    required => 1,
 );
 
-has 'entity' => (
+has 'unsplit' => (
    is       => 'rw',
    isa      => 'Str',
    predicate => 'hasEntity',
@@ -317,12 +318,12 @@ sub _joinWith {
 
 sub _splitToken {
 
-   my ($line, $column) = @_;
+   my ($self, $column) = @_;
    my $log = getLogger();
 
    my @newTokens;
 
-   for my $token (@{ $line->column($column) }) {
+   for my $token (@{ $self->column($column) }) {
       if( $token->value =~ / [|] /xms ) {
          for my $tag (split '\|', $token->fullToken) {
             push @newTokens, $token->clone(fullToken => $tag);
@@ -330,8 +331,8 @@ sub _splitToken {
 
          $log->warning(
             qq{Spliting "} . $token->fullToken . q{"},
-            $line->file,
-            $line->num
+            $self->file,
+            $self->num
          );
 
       } else {
@@ -341,10 +342,10 @@ sub _splitToken {
 
    # delete the existing column and add back the tokens, if the tokens were
    # no split, this should end up where we started.
-   $line->deleteColumn($column);
+   $self->deleteColumn($column);
 
    for my $token (@newTokens) {
-      $line->add($token);
+      $self->add($token);
    }
 }
 

@@ -1005,34 +1005,41 @@ sub FILETYPE_parse {
       my $line_info;
 
       # Convert the non-ascii character in the line
-      my $new_line = convertEntities($thisLine);
+      my $newLine = convertEntities($thisLine);
 
       # Remove spaces at the end of the line
-      $new_line =~ s/\s+$//;
+      $newLine =~ s/\s+$//;
 
       # Remove spaces at the begining of the line
-      $new_line =~ s/^\s+//;
+      $newLine =~ s/^\s+//;
+
+      my $line = TidyLst::Line->new(
+         type    => $curent_linetype,
+         unsplit => $newLine,
+         file    => $file,
+         num     => $lineNum,
+      );
 
       # Skip comments and empty lines
-      if ( length($new_line) == 0 || $new_line =~ /^\#/ ) {
+      if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $new_line, $last_main_line, undef, undef, ];
+         push @newlines, [ $curent_linetype, $newLine, $last_main_line, undef, undef, $line, ];
          next LINE;
       }
 
-      ($line_info, $curent_entity) = matchLineType($new_line, $fileType);
+      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
 
       # If we didn't find a record with info how to parse this line
       if ( ! defined $line_info ) {
          $log->warning(
-            qq(Can\'t find the line type for "$new_line"),
+            qq(Can\'t find the line type for "$newLine"),
             $file,
             $lineNum
          );
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $new_line, $last_main_line, undef, undef, ];
+         push @newlines, [ $curent_linetype, $newLine, $last_main_line, undef, undef, $line, ];
          next LINE;
       }
 
@@ -1061,15 +1068,8 @@ sub FILETYPE_parse {
          die qq(Invalid type for $curent_linetype);
       }
 
-      my $line = TidyLst::Line->new(
-         type   => $curent_linetype,
-         entity => $curent_entity,
-         file   => $file,
-         num    => $lineNum,
-      );
-
       # Identify the deprecated tags.
-      scanForDeprecatedTokens( $new_line, $curent_linetype, $file, $lineNum );
+      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
 
       # Split the line in tokens
       my %line_tokens;
@@ -1084,7 +1084,7 @@ sub FILETYPE_parse {
       my @tokens = 
          grep { $_ ne q{} } 
          map { s{ \A \s* | \s* \z }{}xmsg; $_ } 
-         split $sep, $new_line;
+         split $sep, $newLine;
 
       #First, we deal with the tag-less columns
       COLUMN:
