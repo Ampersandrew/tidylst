@@ -987,7 +987,7 @@ sub FILETYPE_parse {
    # Working variables
 
    my $curent_linetype = "";
-   my $last_main_line  = -1;
+   my $lastMainLine  = -1;
 
    my $curent_entity;
 
@@ -1014,17 +1014,18 @@ sub FILETYPE_parse {
       $newLine =~ s/^\s+//;
 
       my $line = TidyLst::Line->new(
-         type    => $curent_linetype,
-         unsplit => $newLine,
-         file    => $file,
-         num     => $lineNum,
+         type     => $curent_linetype,
+         unsplit  => $newLine,
+         file     => $file,
+         num      => $lineNum,
+         lastMain => $lastMainLine,
       );
 
       # Skip comments and empty lines
       if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $last_main_line, undef, undef, $line, ];
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, undef, undef, $line, ];
          next LINE;
       }
 
@@ -1039,7 +1040,7 @@ sub FILETYPE_parse {
          );
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $last_main_line, undef, undef, $line, ];
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, undef, undef, $line, ];
          next LINE;
       }
 
@@ -1047,11 +1048,11 @@ sub FILETYPE_parse {
       $curent_linetype = $line_info->{Linetype};
       if ( $line_info->{Mode} == MAIN ) {
 
-         $last_main_line = $lineNum - 1;
+         $lastMainLine = $lineNum - 1;
 
       } elsif ( $line_info->{Mode} == SUB ) {
 
-         if ($last_main_line == -1) {
+         if ($lastMainLine == -1) {
             $log->warning(
                qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
                $file,
@@ -1061,7 +1062,7 @@ sub FILETYPE_parse {
 
       } elsif ( $line_info->{Mode} == SINGLE ) {
 
-         $last_main_line = -1;
+         $lastMainLine = -1;
 
       } else {
 
@@ -1182,7 +1183,7 @@ sub FILETYPE_parse {
       my $newline = [
          $curent_linetype,
          \%line_tokens,
-         $last_main_line,
+         $lastMainLine,
          $curent_entity,
          $line_info,
          $line,
@@ -1248,7 +1249,7 @@ sub FILETYPE_parse {
                ? getHeader(getEntityFirstTag($next_linetype), $next_linetype )
                : "";
 
-         if (   ( $this_header && index( $line, $this_header ) == 0 )
+         if (  ( $this_header && index( $line, $this_header ) == 0 )
             || ( $next_header && index( $line, $next_header ) == 0 ) )
          {
 
@@ -1276,601 +1277,7 @@ sub FILETYPE_parse {
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
 
-   # Now on to all the non header lines.
-   CORE_LINE:
-   for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
-
-      # We skip any text or header lines
-      next CORE_LINE
-      if ref( $newlines[$line_index] ) ne 'ARRAY'
-      || $newlines[$line_index][0] eq 'HEADER';
-
-      my $line_ref = $newlines[$line_index];
-
-      my ($curent_linetype, $line_tokens, $last_main_line, $curent_entity, $line_info) = @$line_ref;
-
-      my $newline = "";
-
-      # If the separator is not a tab, with just join the
-      # tag in order
-      my $sep = $line_info->{Sep} || "\t";
-
-      if ( $sep ne "\t" ) {
-
-         # First, deal with the tags in masterOrder
-         for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
-            if ( exists $line_tokens->{$tag} ) {
-               $newline .= join $sep, @{ $line_tokens->{$tag} };
-               $newline .= $sep;
-               delete $line_tokens->{$tag};
-            }
-         }
-
-         # The remaining tags are not in the masterOrder list
-         for my $tag ( sort keys %$line_tokens ) {
-            $newline .= join $sep, @{ $line_tokens->{$tag} };
-            $newline .= $sep;
-         }
-
-         # We remove the extra separator
-         for ( my $i = 0; $i < length($sep); $i++ ) {
-            chop $newline;
-         }
-
-         # We replace line_ref with the new line
-         $newlines[$line_index] = $newline;
-         next CORE_LINE;
-      }
-
-                ##################################################
-                # The line must be formatted according to its
-                # TYPE, FORMAT and HEADER parameters.
-
-                my $mode   = $line_info->{Mode};
-                my $format = $line_info->{Format};
-                my $header = $line_info->{Header};
-
-                if ( $mode == SINGLE || $format == LINE ) {
-
-                # LINE: the line if formatted independently.
-                #               The FORMAT is ignored.
-                if ( $header == NO_HEADER ) {
-
-                        # Just put the line in order and with a single tab
-                        # between the columns. If there is a header in the previous
-                        # line, we remove it.
-
-                        # First, the tag known in masterOrder
-                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
-                                if ( exists $line_tokens->{$tag} ) {
-                                $newline .= join $sep, @{ $line_tokens->{$tag} };
-                                $newline .= $sep;
-                                delete $line_tokens->{$tag};
-                                }
-                        }
-
-                        # The remaining tag are not in the masterOrder list
-                        for my $tag ( sort keys %$line_tokens ) {
-                                $newline .= join $sep, @{ $line_tokens->{$tag} };
-                                $newline .= $sep;
-                        }
-
-                        # We remove the extra separator
-                        for ( my $i = 0; $i < length($sep); $i++ ) {
-                                chop $newline;
-                        }
-
-                        # If there was an header before this line, we remove it
-                        if ( ref( $newlines[ $line_index - 1 ] ) eq 'ARRAY'
-                                && $newlines[ $line_index - 1 ][0] eq 'HEADER' )
-                        {
-                                splice( @newlines, $line_index - 1, 1 );
-                                $line_index--;
-                        }
-
-                        # Replace the array with the new line
-                        $newlines[$line_index] = $newline;
-                        next CORE_LINE;
-                }
-                elsif ( $header == LINE_HEADER ) {
-
-                        # Put the line with a header in front of it.
-                        my %col_length  = ();
-                        my $header_line = "";
-                        my $line_entity = "";
-
-                        # Find the length for each column
-                        $col_length{$_} = mylength( $line_tokens->{$_} ) for ( keys %$line_tokens );
-
-                        # Find the columns order and build the header and
-                        # the curent line
-                        TAG_NAME:
-                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
-
-                                # We skip if the tag is not present in the line
-                                next TAG_NAME if !exists $col_length{$tag};
-
-                                # The first tag is the line entity and must be kept
-                                $line_entity = $line_tokens->{$tag}[0] unless $line_entity;
-
-                                # What is the length of the column?
-                                my $header_text   = getHeader( $tag, $curent_linetype );
-                                my $header_length = mylength($header_text);
-                                my $col_length    = $header_length > $col_length{$tag}
-                                                       ? $header_length
-                                                       : $col_length{$tag};
-
-                                # Round the col_length up to the next tab
-                                $col_length = $tablength * ( int( $col_length / $tablength ) + 1 );
-
-                                # The header
-                                my $tab_to_add = int( ( $col_length - $header_length ) / $tablength )
-                                + ( ( $col_length - $header_length ) % $tablength ? 1 : 0 );
-                                $header_line .= $header_text . $sep x $tab_to_add;
-
-                                # The line
-                                $tab_to_add = int( ( $col_length - $col_length{$tag} ) / $tablength )
-                                + ( ( $col_length - $col_length{$tag} ) % $tablength ? 1 : 0 );
-                                $newline .= join $sep, @{ $line_tokens->{$tag} };
-                                $newline .= $sep x $tab_to_add;
-
-                                # Remove the tag we just dealt with
-                                delete $line_tokens->{$tag};
-                        }
-
-                        # Add the tags that were not in the masterOrder
-                        for my $tag ( sort keys %$line_tokens ) {
-
-                                # What is the length of the column?
-                                my $header_text   = getHeader( $tag, $curent_linetype );
-                                my $header_length = mylength($header_text);
-                                my $col_length  =
-                                        $header_length > $col_length{$tag}
-                                ? $header_length
-                                : $col_length{$tag};
-
-                                # Round the col_length up to the next tab
-                                $col_length = $tablength * ( int( $col_length / $tablength ) + 1 );
-
-                                # The header
-                                my $tab_to_add = int( ( $col_length - $header_length ) / $tablength )
-                                + ( ( $col_length - $header_length ) % $tablength ? 1 : 0 );
-                                $header_line .= $header_text . $sep x $tab_to_add;
-
-                                # The line
-                                $tab_to_add = int( ( $col_length - $col_length{$tag} ) / $tablength )
-                                + ( ( $col_length - $col_length{$tag} ) % $tablength ? 1 : 0 );
-                                $newline .= join $sep, @{ $line_tokens->{$tag} };
-                                $newline .= $sep x $tab_to_add;
-                        }
-
-                        # Remove the extra separators (tabs) at the end of both lines
-                        $header_line =~ s/$sep$//g;
-                        $newline        =~ s/$sep$//g;
-
-                        # Put the header in place
-                        if ( ref( $newlines[ $line_index - 1 ] ) eq 'ARRAY'
-                                && $newlines[ $line_index - 1 ][0] eq 'HEADER' )
-                        {
-
-                                # We replace the existing header
-                                $newlines[ $line_index - 1 ] = $header_line;
-                        }
-                        else {
-
-                                # We add the header before the line
-                                splice( @newlines, $line_index++, 0, $header_line );
-                        }
-
-                        # Add an empty line in front of the header unless
-                        # there is already one or the previous line
-                        # match the line entity.
-                        if ( $newlines[ $line_index - 2 ] ne ''
-                                && index( $newlines[ $line_index - 2 ], $line_entity ) != 0 )
-                        {
-                                splice( @newlines, $line_index - 1, 0, '' );
-                                $line_index++;
-                        }
-
-                        # Replace the array with the new line
-                        $newlines[$line_index] = $newline;
-                        next CORE_LINE;
-                }
-                else {
-
-                        # Invalid option
-                        die "Invalid \%TidyLst::Parse::parseControl options: $fileType:$curent_linetype:$mode:$header";
-                }
-                }
-                elsif ( $mode == MAIN ) {
-                if ( $format == BLOCK ) {
-                        #####################################
-                        # All the main lines must be found
-                        # up until a different main line type
-                        # or a ###Block comment.
-                        my @main_lines;
-                        my $main_linetype = $curent_linetype;
-
-                        BLOCK_LINE:
-                        for ( my $index = $line_index; $index < @newlines; $index++ ) {
-
-                                # If the line_type  change or
-                                # if a '###Block' comment is found,
-                                # we are out of the block
-                                last BLOCK_LINE
-                                if ( ref( $newlines[$index] ) eq 'ARRAY'
-                                && ref $newlines[$index][4] eq 'HASH'
-                                && $newlines[$index][4]{Mode} == MAIN
-                                && $newlines[$index][0] ne $main_linetype )
-                                || ( ref( $newlines[$index] ) ne 'ARRAY'
-                                && index( lc( $newlines[$index] ), '###block' ) == 0 );
-
-                                # Skip the lines already dealt with
-                                next BLOCK_LINE
-                                if ref( $newlines[$index] ) ne 'ARRAY'
-                                || $newlines[$index][0] eq 'HEADER';
-
-                                push @main_lines, $index
-                                if $newlines[$index][4]{Mode} == MAIN;
-                        }
-
-                        #####################################
-                        # We find the length of each tag for the block
-                        my %col_length;
-                        for my $block_line (@main_lines) {
-                                for my $tag ( keys %{ $newlines[$block_line][1] } ) {
-                                my $col_length = mylength( $newlines[$block_line][1]{$tag} );
-                                $col_length{$tag} = $col_length
-                                        if !exists $col_length{$tag} || $col_length > $col_length{$tag};
-                                }
-                        }
-
-                        if ( $header != NO_HEADER ) {
-
-                                # We add the length of the headers if needed.
-                                for my $tag ( keys %col_length ) {
-                                my $length = mylength( getHeader( $tag, $fileType ) );
-
-                                $col_length{$tag} = $length if $length > $col_length{$tag};
-                                }
-                        }
-
-                        #####################################
-                        # Find the columns order
-                        my %seen;
-                        my @col_order;
-
-                        # First, the columns included in masterOrder
-                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
-                                push @col_order, $tag if exists $col_length{$tag};
-                                $seen{$tag}++;
-                        }
-
-                        # Put the unknown columns at the end
-                        for my $tag ( sort keys %col_length ) {
-                                push @col_order, $tag unless $seen{$tag};
-                        }
-
-                        # Each of the block lines must be reformated
-                        for my $block_line (@main_lines) {
-                                my $newline;
-
-                                for my $tag (@col_order) {
-                                my $col_max_length
-                                        = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-
-                                # Is the tag present in this line?
-                                if ( exists $newlines[$block_line][1]{$tag} ) {
-                                        my $curent_length = mylength( $newlines[$block_line][1]{$tag} );
-
-                                        my $tab_to_add
-                                                = int( ( $col_max_length - $curent_length ) / $tablength )
-                                                + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                                        $newline .= join $sep, @{ $newlines[$block_line][1]{$tag} };
-                                        $newline .= $sep x $tab_to_add;
-                                }
-                                else {
-
-                                        # We pad with tabs
-                                        $newline .= $sep x ( $col_max_length / $tablength );
-                                }
-                                }
-
-                                # We remove the extra $sep at the end
-                                $newline =~ s/$sep+$//;
-
-                                # We replace the array with the new line
-                                $newlines[$block_line] = $newline;
-                        }
-
-                        if ( $header == NO_HEADER ) {
-
-                                # If there are header before any of the block line,
-                                # we need to remove them
-                                for my $block_line ( reverse @main_lines ) {
-                                if ( ref( $newlines[ $block_line - 1 ] ) eq 'ARRAY'
-                                        && $newlines[ $block_line - 1 ][0] eq 'HEADER' )
-                                {
-                                        splice( @newlines, $block_line - 1, 1 );
-                                        $line_index--;
-                                }
-                                }
-                        }
-                        elsif ( $header == LINE_HEADER ) {
-                                die "MAIN:BLOCK:LINE_HEADER not implemented yet";
-                        }
-                        elsif ( $header == BLOCK_HEADER ) {
-
-                                # We must add the header line at the top of the block
-                                # and anywhere else we find them whitin the block.
-
-                                my $header_line;
-                                for my $tag (@col_order) {
-
-                                # Round the col_length up to the next tab
-                                my $col_max_length
-                                        = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = getHeader( $tag, $main_linetype );
-                                my $curent_length = mylength($curent_header);
-                                my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
-                                        + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                                $header_line .= $curent_header . $sep x $tab_to_add;
-                                }
-
-                                # We remove the extra $sep at the end
-                                $header_line =~ s/$sep+$//;
-
-                                # Before the top of the block
-                                my $need_top_header = NO;
-                                if ( ref( $newlines[ $main_lines[0] - 1 ] ) ne 'ARRAY'
-                                || $newlines[ $main_lines[0] - 1 ][0] ne 'HEADER' )
-                                {
-                                $need_top_header = YES;
-                                }
-
-                                # Anywhere in the block
-                                for my $block_line (@main_lines) {
-                                if ( ref( $newlines[ $block_line - 1 ] ) eq 'ARRAY'
-                                        && $newlines[ $block_line - 1 ][0] eq 'HEADER' )
-                                {
-                                        $newlines[ $block_line - 1 ] = $header_line;
-                                }
-                                }
-
-                                # Add a header line at the top of the block
-                                if ($need_top_header) {
-                                splice( @newlines, $main_lines[0], 0, $header_line );
-                                $line_index++;
-                                }
-
-                        }
-                }
-                else {
-                        die "Invalid \%TidyLst::Parse::parseControl format: $fileType:$curent_linetype:$mode:$header";
-                }
-                }
-                elsif ( $mode == SUB ) {
-                if ( $format == LINE ) {
-                        die "SUB:LINE not implemented yet";
-                }
-                elsif ( $format == BLOCK || $format == FIRST_COLUMN ) {
-                        #####################################
-                        # Need to find all the file in the SUB BLOCK i.e. same
-                        # line type within two MAIN lines.
-                        # If we encounter a ###Block comment, that's the end
-                        # of the block
-                        my @sub_lines;
-                        my $begin_block  = $last_main_line;
-                        my $sub_linetype = $curent_linetype;
-
-                        BLOCK_LINE:
-                        for ( my $index = $line_index; $index < @newlines; $index++ ) {
-
-                                # If the last_main_line change or
-                                # if a '###Block' comment is found,
-                                # we are out of the block
-                                last BLOCK_LINE
-                                if ( ref( $newlines[$index] ) eq 'ARRAY'
-                                && $newlines[$index][0] ne 'HEADER'
-                                && $newlines[$index][2] != $begin_block )
-                                || ( ref( $newlines[$index] ) ne 'ARRAY'
-                                && index( lc( $newlines[$index] ), '###block' ) == 0 );
-
-                                # Skip the lines already dealt with
-                                next BLOCK_LINE
-                                if ref( $newlines[$index] ) ne 'ARRAY'
-                                || $newlines[$index][0] eq 'HEADER';
-
-                                push @sub_lines, $index
-                                if $newlines[$index][0] eq $curent_linetype;
-                        }
-
-                        #####################################
-                        # We find the length of each tag for the block
-                        my %col_length;
-                        for my $block_line (@sub_lines) {
-                                for my $tag ( keys %{ $newlines[$block_line][1] } ) {
-                                my $col_length = mylength( $newlines[$block_line][1]{$tag} );
-                                $col_length{$tag} = $col_length
-                                        if !exists $col_length{$tag} || $col_length > $col_length{$tag};
-                                }
-                        }
-
-                        if ( $header == BLOCK_HEADER ) {
-
-                                # We add the length of the headers if needed.
-                                for my $tag ( keys %col_length ) {
-                                my $length = mylength( getHeader( $tag, $fileType ) );
-
-                                $col_length{$tag} = $length if $length > $col_length{$tag};
-                                }
-                        }
-
-                        #####################################
-                        # Find the columns order
-                        my %seen;
-                        my @col_order;
-
-                        # First, the columns included in masterOrder
-                        for my $tag ( @{getOrderForLineType($curent_linetype)} ) {
-                                push @col_order, $tag if exists $col_length{$tag};
-                                $seen{$tag}++;
-                        }
-
-                        # Put the unknown columns at the end
-                        for my $tag ( sort keys %col_length ) {
-                                push @col_order, $tag unless $seen{$tag};
-                        }
-
-                        # Each of the block lines must be reformated
-                        if ( $format == BLOCK ) {
-                                for my $block_line (@sub_lines) {
-                                my $newline;
-
-                                for my $tag (@col_order) {
-                                        my $col_max_length
-                                                = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-
-                                        # Is the tag present in this line?
-                                        if ( exists $newlines[$block_line][1]{$tag} ) {
-                                                my $curent_length = mylength( $newlines[$block_line][1]{$tag} );
-
-                                                my $tab_to_add
-                                                = int( ( $col_max_length - $curent_length ) / $tablength )
-                                                + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                                                $newline .= join $sep, @{ $newlines[$block_line][1]{$tag} };
-                                                $newline .= $sep x $tab_to_add;
-                                        }
-                                        else {
-
-                                                # We pad with tabs
-                                                $newline .= $sep x ( $col_max_length / $tablength );
-                                        }
-                                }
-
-                                # We replace the array with the new line
-                                $newlines[$block_line] = $newline;
-                                }
-                        }
-                        else {
-
-                                # $format == FIRST_COLUMN
-
-                                for my $block_line (@sub_lines) {
-                                my $newline;
-                                my $first_column = YES;
-                                my $tab_to_add;
-
-                                TAG:
-                                for my $tag (@col_order) {
-
-                                        # Is the tag present in this line?
-                                        next TAG if !exists $newlines[$block_line][1]{$tag};
-
-                                        if ($first_column) {
-                                                my $col_max_length
-                                                = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                                my $curent_length = mylength( $newlines[$block_line][1]{$tag} );
-
-                                                $tab_to_add
-                                                = int( ( $col_max_length - $curent_length ) / $tablength )
-                                                + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-
-                                                # It's no longer the first column
-                                                $first_column = NO;
-                                        }
-                                        else {
-                                                $tab_to_add = 1;
-                                        }
-
-                                        $newline .= join $sep, @{ $newlines[$block_line][1]{$tag} };
-                                        $newline .= $sep x $tab_to_add;
-                                }
-
-                                # We replace the array with the new line
-                                $newlines[$block_line] = $newline;
-                                }
-                        }
-
-                        if ( $header == NO_HEADER ) {
-
-                                # If there are header before any of the block line,
-                                # we need to remove them
-                                for my $block_line ( reverse @sub_lines ) {
-                                if ( ref( $newlines[ $block_line - 1 ] ) eq 'ARRAY'
-                                        && $newlines[ $block_line - 1 ][0] eq 'HEADER' )
-                                {
-                                        splice( @newlines, $block_line - 1, 1 );
-                                        $line_index--;
-                                }
-                                }
-                        }
-                        elsif ( $header == LINE_HEADER ) {
-                                die "SUB:BLOCK:LINE_HEADER not implemented yet";
-                        }
-                        elsif ( $header == BLOCK_HEADER ) {
-
-                                # We must add the header line at the top of the block
-                                # and anywhere else we find them whitin the block.
-
-                                my $header_line;
-                                for my $tag (@col_order) {
-
-                                # Round the col_length up to the next tab
-                                my $col_max_length
-                                        = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $curent_header = getHeader( $tag, $sub_linetype );
-                                my $curent_length = mylength($curent_header);
-                                my $tab_to_add  = int( ( $col_max_length - $curent_length ) / $tablength )
-                                        + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                                $header_line .= $header . $sep x $tab_to_add;
-                                }
-
-                                # Before the top of the block
-                                my $need_top_header = NO;
-                                if ( ref( $newlines[ $sub_lines[0] - 1 ] ) ne 'ARRAY'
-                                || $newlines[ $sub_lines[0] - 1 ][0] ne 'HEADER' )
-                                {
-                                $need_top_header = YES;
-                                }
-
-                                # Anywhere in the block
-                                for my $block_line (@sub_lines) {
-                                if ( ref( $newlines[ $block_line - 1 ] ) eq 'ARRAY'
-                                        && $newlines[ $block_line - 1 ][0] eq 'HEADER' )
-                                {
-                                        $newlines[ $block_line - 1 ] = $header_line;
-                                }
-                                }
-
-                                # Add a header line at the top of the block
-                                if ($need_top_header) {
-                                splice( @newlines, $sub_lines[0], 0, $header_line );
-                                $line_index++;
-                                }
-
-                        }
-                        else {
-                                die "Invalid \%TidyLst::Parse::parseControl $curent_linetype:$mode:$format:$header";
-                        }
-                }
-                else {
-                        die "Invalid \%TidyLst::Parse::parseControl $curent_linetype:$mode:$format:$header";
-                }
-                }
-                else {
-                die "Invalid \%TidyLst::Parse::parseControl mode: $fileType:$curent_linetype:$mode";
-                }
-
-        }
-
-        # If there are header lines remaining, we keep the old value
-        for (@newlines) {
-                $_ = $_->[1] if ref($_) eq 'ARRAY' && $_->[0] eq 'HEADER';
-        }
-
-        return \@newlines;
-
+   reformatFile(\@newlines);
 }
 
 ###############################################################
@@ -1892,7 +1299,7 @@ sub FILETYPE_parse {
 #           The format is: [ 
 #                            $curent_linetype,
 #                            \%line_tokens,
-#                            $last_main_line,
+#                            $lastMainLine,
 #                            $curent_entity,
 #                            $line_info,
 #                          ];
@@ -1922,7 +1329,7 @@ sub FILETYPE_parse {
          );
 
          if ( exists $valid_line_type{$filetype} ) {
-            my $last_main_line = -1;
+            my $lastMainLine = -1;
 
             # Find all the lines with the same identifier
             ENTITY:
@@ -1936,7 +1343,7 @@ sub FILETYPE_parse {
                   my $old_length;
                   my $curent_linetype = $lines_ref->[$i][0];
                   my %new_line        = %{ $lines_ref->[$i][1] };
-                     $last_main_line  = $i;
+                     $lastMainLine    = $i;
                   my $entity_name     = $lines_ref->[$i][3];
                   my $line_info       = $lines_ref->[$i][4];
                   my $j               = $i + 1;
@@ -1986,7 +1393,7 @@ sub FILETYPE_parse {
                      [
                         $curent_linetype,
                         \%new_line,
-                        $last_main_line,
+                        $lastMainLine,
                         $entity_name,
                         $line_info,
                      ];
@@ -2005,8 +1412,8 @@ sub FILETYPE_parse {
                   && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == SUB )
                {
 
-                  # We must replace the last_main_line with the correct value
-                  $lines_ref->[$i][2] = $last_main_line;
+                  # We must replace the lastMainLine with the correct value
+                  $lines_ref->[$i][2] = $lastMainLine;
 
                } elsif (
                   ref $lines_ref->[$i] eq 'ARRAY'
@@ -2014,9 +1421,9 @@ sub FILETYPE_parse {
                   && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == MAIN )
                {
 
-                  # We update the last_main_line value and
+                  # We update the lastMainLine value and
                   # put the correct value in the curent line
-                  $lines_ref->[$i][2] = $last_main_line = $i;
+                  $lines_ref->[$i][2] = $lastMainLine = $i;
                }
             }
          }
@@ -2271,7 +1678,7 @@ sub FILETYPE_parse {
                 if (   isConversionActive('CLASS:Four lines')
                 && $filetype eq 'CLASS' )
                 {
-                my $last_main_line = -1;
+                my $lastMainLine = -1;
 
                 # Find all the CLASS lines
                 for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
@@ -2319,7 +1726,7 @@ sub FILETYPE_parse {
                                    SPELLSTAT                   => 1,
                                    SPELLTYPE                   => 1,
                                 );
-                                $last_main_line = $i;
+                                $lastMainLine = $i;
                                 my $class       = $lines_ref->[$i][3];
                                 my $line_info   = $lines_ref->[$i][4];
                                 my $j           = $i + 1;
@@ -2383,7 +1790,7 @@ sub FILETYPE_parse {
                                         [
                                         'CLASS',
                                         \%new_class_line,
-                                        $last_main_line,
+                                        $lastMainLine,
                                         $class,
                                         $line_info,
                                         ];
@@ -2400,7 +1807,7 @@ sub FILETYPE_parse {
                                    [
                                       'CLASS',
                                       \%new_pre_line,
-                                      ++$last_main_line,
+                                      ++$lastMainLine,
                                       $class,
                                       $line_info,
                                    ];
@@ -2417,7 +1824,7 @@ sub FILETYPE_parse {
                                    [
                                       'CLASS',
                                       \%new_skill_line,
-                                      ++$last_main_line,
+                                      ++$lastMainLine,
                                       $class,
                                       $line_info,
                                    ];
@@ -2469,7 +1876,7 @@ sub FILETYPE_parse {
                                         [
                                         'CLASS',
                                         \%new_spell_line,
-                                        ++$last_main_line,
+                                        ++$lastMainLine,
                                         $class,
                                         $line_info,
                                         ];
@@ -2488,8 +1895,8 @@ sub FILETYPE_parse {
                                 && $lines_ref->[$i][4]{Mode} == SUB )
                         {
 
-                                # We must replace the last_main_line with the correct value
-                                $lines_ref->[$i][2] = $last_main_line;
+                                # We must replace the lastMainLine with the correct value
+                                $lines_ref->[$i][2] = $lastMainLine;
                         }
                         elsif (ref $lines_ref->[$i] eq 'ARRAY'
                                 && $lines_ref->[$i][0] ne 'HEADER'
@@ -2497,9 +1904,9 @@ sub FILETYPE_parse {
                                 && $lines_ref->[$i][4]{Mode} == MAIN )
                         {
 
-                                # We update the last_main_line value and
+                                # We update the lastMainLine value and
                                 # put the correct value in the curent line
-                                $lines_ref->[$i][2] = $last_main_line = $i;
+                                $lines_ref->[$i][2] = $lastMainLine = $i;
                         }
                 }
                 }

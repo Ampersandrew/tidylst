@@ -53,6 +53,12 @@ has 'num' => (
    predicate => 'hasNum',
 );
 
+has 'lastMain' => (
+   is        => 'rw',
+   isa       => 'Int',
+   predicate => 'hasNum',
+);
+
 
 =head2 appendToValue
 
@@ -99,6 +105,38 @@ sub columnHasSingleToken {
 }
 
 
+=head2 columnLength
+
+   Calculate how long this column would be if its tokens were separated with
+   tabs.
+
+=cut
+
+sub columnLength {
+   my ($self, $key) = @_;
+
+   my $length = 0;
+
+   if ($self->hasColumn($key)) {
+
+      my @column = @{ $self->column($key) };
+      my $final  = pop @column;
+
+      # The final item is not rounded to the tab length
+      $length = defined $final ? length $final->fullRealToken : 0;
+
+      my $tabLength = getOption('tabLength');
+
+      # All other elements must be rounded to the next tab
+      for my $token ( @column ) {
+         $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
+      }
+   }
+
+   $length;
+}
+
+
 
 =head2 entityToken
 
@@ -109,7 +147,7 @@ sub columnHasSingleToken {
 sub entityToken {
    my ($self) = @_;
 
-   # Look up the name of the column that hold the name
+   # Look up the name of the column that holds the name
    my $nameTag = getEntityFirstTag($self->type);
    $self->hasColumn($nameTag) && @{$self->column($nameTag)}[0];
 }
@@ -190,7 +228,7 @@ sub hasType {
       }
    }
    return 0;
-};
+}
 
 
 =head2 isType
@@ -203,7 +241,32 @@ sub isType {
    my ($self, $lineType) = @_;
 
    $self->type eq $lineType;
-};
+}
+
+
+=head2 joinWith
+
+   Join the entries in the supplied colum together with the supplied seaparator
+   and return the result.
+
+=cut
+
+sub joinWith {
+   my ($self, $key, $sep) = @_;
+
+   return "" unless $self->hasColumn($key);
+
+   my @column = @{ $self->column($key) };
+
+   my $final = pop @column;
+
+   my $text;
+   for my $token ( @column ) {
+      $text .= $token->fullRealToken . $sep;
+   }
+
+   $text .= $final->fullRealToken;
+}
 
 
 =head2 replaceTag
@@ -261,53 +324,8 @@ sub tokenFor {
    defined $token && $token->clone(@args);
 }
 
+
 ##############################################################################
-
-# Calculate how long this column would be if its tokens were separated with
-# tabs.
-
-sub _columnLength {
-   my ($self, $key) = @_;
-
-   my $length = 0;
-   
-   if ($self->hasColumn($key)) {
-
-      my @column = @{ $self->column($key) };
-      my $final  = pop @column;
-
-      # The final item is not rounded to the tab length
-      $length = defined $final ? length $final->fullRealToken : 0;
-
-      my $tabLength = getOption('tabLength');
-
-      # All other elements must be rounded to the next tab
-      for my $token ( @column ) {
-         $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
-      }
-   }
-
-   $length;
-}
-
-
-sub _joinWith {
-   my ($self, $key, $sep) = @_;
-
-   return "" unless $self->hasColumn($key);
-
-   my @column = @{ $self->column($key) };
-
-   my $final = pop @column;
-
-   my $text;
-   for my $token ( @column ) {
-      $text .= $token->fullRealToken . $sep;
-   }
-
-   $text .= $final->fullRealToken;
-}
-
 
 =head2 _splitToken
 
