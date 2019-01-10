@@ -176,11 +176,6 @@ our %SourceLineDef = (
    SepRegEx  => qr{ (?: [|] ) | (?: \t+ ) }xms,  # Catch both | and tab
 );
 
-# Some people may still want to use the old ways (for PCGen v5.9.5 and older)
-if( getOption('oldsourcetag') ) {
-   $SourceLineDef{Sep} = q{|};  # use | instead of [tab] to split
-}
-
 # Information needed to parse the line type
 our %parseControl = (
 

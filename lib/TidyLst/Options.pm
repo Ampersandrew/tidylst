@@ -141,7 +141,6 @@ sub parseOptions {
    my $noJEP          = 0;          # Do not use the new parse_jep function
    my $noWarning      = 0;          # Do not display warning messages in the report
    my $noXCheck       = 0;          # Disable the x-check validations
-   my $oldSourceTag   = 0;          # Use | instead of \t for the SOURCExxx line
    my $outputError    = q{};        # Path and file name of the error log
    my $outputPath     = q{};        # Path for the ouput directory
    my $report         = 0;          # Generate tag usage report
@@ -170,7 +169,6 @@ sub parseOptions {
          'nojep'             =>  \$noJEP,
          'nowarning|nw'      =>  \$noWarning,
          'noxcheck|nx'       =>  \$noXCheck,
-         'oldsourcetag'      =>  \$oldSourceTag,
          'outputerror|e=s'   =>  \$outputError,
          'outputpath|o=s'    =>  \$outputPath,
          'report|r'          =>  \$report,
@@ -195,7 +193,6 @@ sub parseOptions {
          'nojep'           =>  $noJEP,
          'nowarning'       =>  $noWarning,
          'noxcheck'        =>  $noXCheck,
-         'oldsourcetag'    =>  $oldSourceTag,
          'outputerror'     =>  $outputError,
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,
@@ -241,7 +238,6 @@ sub parseOptions {
          'nojep'           =>  $noJEP,
          'nowarning'       =>  $noWarning,
          'noxcheck'        =>  $noXCheck,
-         'oldsourcetag'    =>  $oldSourceTag,
          'outputerror'     =>  $outputError,
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,

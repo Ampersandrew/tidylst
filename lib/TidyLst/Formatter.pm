@@ -149,11 +149,10 @@ sub constructHeaderLine {
 
 =head2 constructLine
 
-   Make a text line for the columns in this liner. Each of the columns present
-   in this line will be present and occupying the amount of space specified in the
-   column attribute of this object.
-
-   Space will be left for columns not present in this line.
+   Make a text line for the columns in this Line. Each of the columns present
+   in this Formatter will be present and occupying the amount of space
+   specified in the column attribute of this Formatter object.  Space will be
+   left for columns not present in this Line.
 
 =cut
 

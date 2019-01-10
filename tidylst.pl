@@ -1015,8 +1015,9 @@ sub FILETYPE_parse {
 
       my $line = TidyLst::Line->new(
          type     => $curent_linetype,
-         unsplit  => $newLine,
          file     => $file,
+         unsplit  => $newLine,
+         entity   => $curent_entity,
          num      => $lineNum,
          lastMain => $lastMainLine,
       );
@@ -1025,7 +1026,7 @@ sub FILETYPE_parse {
       if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, undef, undef, $line, ];
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
          next LINE;
       }
 
@@ -1040,12 +1041,13 @@ sub FILETYPE_parse {
          );
 
          # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, undef, undef, $line, ];
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
          next LINE;
       }
 
       # What type of line is it?
       $curent_linetype = $line_info->{Linetype};
+
       if ( $line_info->{Mode} == MAIN ) {
 
          $lastMainLine = $lineNum - 1;
@@ -1068,6 +1070,11 @@ sub FILETYPE_parse {
 
          die qq(Invalid type for $curent_linetype);
       }
+
+      # Got a line info hash, so update the entity and type in the line
+      $line->entity($curent_entity);
+      $line->type($line_info->{Linetype});
+      $line->lastMain($lastMainLine);
 
       # Identify the deprecated tags.
       scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
@@ -1135,7 +1142,7 @@ sub FILETYPE_parse {
          }
       }
 
-      #Second, let's parse the regular columns
+      # Second, let's parse the regular columns
       for my $rawToken (@tokens) {
 
          my ($extractedToken, $value) = 
@@ -1184,8 +1191,6 @@ sub FILETYPE_parse {
          $curent_linetype,
          \%line_tokens,
          $lastMainLine,
-         $curent_entity,
-         $line_info,
          $line,
       ];
 
@@ -1218,47 +1223,51 @@ sub FILETYPE_parse {
    #####################################################
    # We find all the header lines
    for ( my $line_index = 0; $line_index < @newlines; $line_index++ ) {
-      my $curent_linetype = $newlines[$line_index][0];
-      my $line_tokens     = $newlines[$line_index][1];
 
-      my $next_linetype;
-      if ($line_index + 1 < @newlines) {
-         $next_linetype = $newlines[ $line_index + 1 ][0]
+      my ($line, $next, $line_tokens);
+
+      if ($line_index + 1 <= $#newlines) {
+         $line_tokens = $newlines[$line_index][1];
+         $next        = $newlines[$line_index + 1][-1]
+         $line        = $newlines[$line_index][-1];
+      } else {
+         $line_tokens = $newlines[$line_index][1];
+         $line        = $newlines[$line_index][-1];
       }
 
       # A header line either begins with the curent line_type header
       # or the next line header.
       #
-      # Only comment -- $line_token is not a hash --  can be header lines
-      if ( ref($line_tokens) ne 'HASH' ) {
-
-         # We are on a comment line, there are no tokens
-         my $line = $line_tokens;
+      # Only comment lines (unsplit lines with no tokens) can be header lines
+      if ($line->noTokens) {
 
          # we need to find the curent and the next line header.
 
          # Curent header
          my $this_header =
-            $curent_linetype
-               ? getHeader(getEntityFirstTag($curent_linetype), $curent_linetype )
+            $line->type
+               ? getHeader(getEntityFirstTag($line->type), $line->type )
                : "";
 
          # Next line header
          my $next_header =
-            $next_linetype
-               ? getHeader(getEntityFirstTag($next_linetype), $next_linetype )
+            $next->type
+               ? getHeader(getEntityFirstTag($next->type), $next->type )
                : "";
+   
+               
+         # if this line or the next starts with the header for this type, 
 
-         if (  ( $this_header && index( $line, $this_header ) == 0 )
-            || ( $next_header && index( $line, $next_header ) == 0 ) )
+         if (  ( $this_header && index( $line->unsplit, $this_header ) == 0 )
+            || ( $next_header && index( $line->unsplit, $next_header ) == 0 ) )
          {
 
             # It is a header, let's tag it as such.
-            $newlines[$line_index] = [ 'HEADER', $line, ];
+            $newlines[$line_index] = [ 'HEADER', $line->unsplit, $line ];
          } else {
 
             # It is just a comment, we won't botter with it ever again.
-            $newlines[$line_index] = $line;
+            $newlines[$line_index] = $line->unsplit;
          }
       }
    }

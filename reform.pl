@@ -12,6 +12,7 @@ use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
    );
+
 use TidyLst::Options qw(getOption);
 
 =head2 reformatFile

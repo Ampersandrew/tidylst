@@ -35,16 +35,22 @@ has 'type' => (
    required => 1,
 );
 
-has 'unsplit' => (
-   is       => 'rw',
-   isa      => 'Str',
-   predicate => 'hasEntity',
-);
-
 has 'file' => (
    is       => 'rw',
    isa      => 'Str',
    required => 1,
+);
+
+has 'unsplit' => (
+   is       => 'rw',
+   isa      => 'Str',
+   required => 1,
+);
+
+has 'entity' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasEntity',
 );
 
 has 'num' => (
@@ -56,7 +62,7 @@ has 'num' => (
 has 'lastMain' => (
    is        => 'rw',
    isa       => 'Int',
-   predicate => 'hasNum',
+   predicate => 'hasLastMain',
 );
 
 
