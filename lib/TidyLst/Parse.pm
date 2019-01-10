@@ -28,25 +28,36 @@ use lib dirname(dirname abs_path $0);
 
 use TidyLst::Convert qw(
    convertAddTokens 
-   doTokenConversions
+   convertEntities
    doLineConversions
+   doTokenConversions
    );
 use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
    dirHasSourceTags
    getDirSourceTags
+   getEntityFirstTag
    getEntityName 
+   getEntityNameTag
+   getHeader
    getValidSystemArr
+   incCountValidTags
+   isValidMultiTag
    isValidTag
    registerXCheck
    setEntityValid
    setValidSystemArr
    );
+
+use TidyLst::Line;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 use TidyLst::Token;
+use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
+
+sub check_clear_tag_order;
 
 my $className         = "";
 my $sourceCurrentFile = "";
@@ -69,47 +80,35 @@ my %parsableFileType = (
    '#EXTRAFILE'    => 1,
    PCC             => 1,
 
-   ABILITY         => \&parseFile,
-   ABILITYCATEGORY => \&parseFile,
-   ALIGNMENT       => \&parseFile,
-   ARMORPROF       => \&parseFile,
-   BIOSET          => \&parseFile,
-   CLASS           => \&parseFile,
-   COMPANIONMOD    => \&parseFile,
-   DATACONTROL     => \&parseFile,
-   DEITY           => \&parseFile,
-   DOMAIN          => \&parseFile,
-   EQUIPMENT       => \&parseFile,
-   EQUIPMOD        => \&parseFile,
-   FEAT            => \&parseFile,
-   GLOBALMODIFIER  => \&parseFile,
-   KIT             => \&parseFile,
-   LANGUAGE        => \&parseFile,
-   RACE            => \&parseFile,
-   SAVE            => \&parseFile,
-   SHIELDPROF      => \&parseFile,
-   SKILL           => \&parseFile,
-   SPELL           => \&parseFile,
-   STAT            => \&parseFile,
-   TEMPLATE        => \&parseFile,
-   VARIABLE        => \&parseFile,
-   WEAPONPROF      => \&parseFile,
+   ABILITY         => \&FILETYPE_parse,
+   ABILITYCATEGORY => \&FILETYPE_parse,
+   ALIGNMENT       => \&FILETYPE_parse,
+   ARMORPROF       => \&FILETYPE_parse,
+   BIOSET          => \&FILETYPE_parse,
+   CLASS           => \&FILETYPE_parse,
+   COMPANIONMOD    => \&FILETYPE_parse,
+   DATACONTROL     => \&FILETYPE_parse,
+   DEITY           => \&FILETYPE_parse,
+   DOMAIN          => \&FILETYPE_parse,
+   EQUIPMENT       => \&FILETYPE_parse,
+   EQUIPMOD        => \&FILETYPE_parse,
+   FEAT            => \&FILETYPE_parse,
+   GLOBALMODIFIER  => \&FILETYPE_parse,
+   KIT             => \&FILETYPE_parse,
+   LANGUAGE        => \&FILETYPE_parse,
+   RACE            => \&FILETYPE_parse,
+   SAVE            => \&FILETYPE_parse,
+   SHIELDPROF      => \&FILETYPE_parse,
+   SKILL           => \&FILETYPE_parse,
+   SPELL           => \&FILETYPE_parse,
+   STAT            => \&FILETYPE_parse,
+   TEMPLATE        => \&FILETYPE_parse,
+   VARIABLE        => \&FILETYPE_parse,
+   WEAPONPROF      => \&FILETYPE_parse,
 );
 
 
 
-
-
-
-=head2 parseFile
-
-   placeholder, will be replaced when the script is split up.
-
-=cut
-
-sub parseFile {
-   return 1;
-};
 
 
 =head2 setParseRoutine
@@ -128,6 +127,320 @@ sub setParseRoutine {
       }
    }
 }
+
+
+
+
+
+
+###############################################################
+# FILETYPE_parse
+# --------------
+#
+# This function uses the information of TidyLst::Parse::parseControl to
+# identify the curent line type and parse it.
+#
+# Parameters: $fileType  = The type of the file has defined by the .PCC file
+#             $lines_ref = Reference to an array containing all the lines of the file
+#             $file      = File name to use with the logger
+
+sub FILETYPE_parse {
+   my ($fileType, $lines_ref, $file) = @_;
+
+   ##################################################
+   # Working variables
+
+   my $curent_linetype = "";
+   my $lastMainLine  = -1;
+
+   my $curent_entity;
+
+   my @newlines;   # New line generated
+
+   ##################################################
+   ##################################################
+   # Phase I - Split line in tokens and parse
+   #               the tokens
+
+   my $lineNum = 1;
+   LINE:
+   for my $thisLine (@ {$lines_ref} ) {
+
+      my $line_info;
+
+      # Convert the non-ascii character in the line
+      my $newLine = convertEntities($thisLine);
+
+      # Remove spaces at the end of the line
+      $newLine =~ s/\s+$//;
+
+      # Remove spaces at the begining of the line
+      $newLine =~ s/^\s+//;
+
+      my $line = TidyLst::Line->new(
+         type     => $curent_linetype,
+         file     => $file,
+         unsplit  => $newLine,
+         entity   => $curent_entity,
+         num      => $lineNum,
+         lastMain => $lastMainLine,
+      );
+
+      # Skip comments and empty lines
+      if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
+
+         # We push the line as is.
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
+         next LINE;
+      }
+
+      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
+
+      # If we didn't find a record with info how to parse this line
+      if ( ! defined $line_info ) {
+         $log->warning(
+            qq(Can\'t find the line type for "$newLine"),
+            $file,
+            $lineNum
+         );
+
+         # We push the line as is.
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
+         next LINE;
+      }
+
+      # What type of line is it?
+      $curent_linetype = $line_info->{Linetype};
+
+      if ( $line_info->{Mode} == MAIN ) {
+
+         $lastMainLine = $lineNum - 1;
+
+      } elsif ( $line_info->{Mode} == SUB ) {
+
+         if ($lastMainLine == -1) {
+            $log->warning(
+               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
+               $file,
+               $lineNum
+            )
+         }
+
+      } elsif ( $line_info->{Mode} == SINGLE ) {
+
+         $lastMainLine = -1;
+
+      } else {
+
+         die qq(Invalid type for $curent_linetype);
+      }
+
+      # Got a line info hash, so update the entity and type in the line
+      $line->entity($curent_entity);
+      $line->type($line_info->{Linetype});
+      $line->lastMain($lastMainLine);
+
+      # Identify the deprecated tags.
+      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
+
+      # Split the line in tokens
+      my %line_tokens;
+
+      # By default, the tab character is used
+      my $sep = $line_info->{SepRegEx} || qr(\t+);
+
+      # We split the tokens, strip the spaces and silently remove the empty tags
+      # (empty tokens are the result of [tab][space][tab] type of chracter
+      # sequences).
+      # [ 975999 ] [tab][space][tab] breaks prettylst
+      my @tokens = 
+         grep { $_ ne q{} } 
+         map { s{ \A \s* | \s* \z }{}xmsg; $_ } 
+         split $sep, $newLine;
+
+      #First, we deal with the tag-less columns
+      COLUMN:
+      for my $column ( getEntityNameTag($curent_linetype) ) {
+
+         # If this line type does not have tagless first entry
+         if (not defined $column) {
+            last COLUMN;
+         }
+
+         # If the line has no tokens
+         if ( scalar @tokens == 0 ) {
+            last COLUMN;
+         }
+
+         # Grab the token from the front of the line
+         my $value = shift @tokens;
+
+         # We remove the enclosing quotes if any
+         if ($value =~ s/^"(.*)"$/$1/) {
+            $log->warning(
+               qq{Removing quotes around the '$value' tag},
+               $file,
+               $lineNum
+            )
+         }
+
+         # and add it to line_tokens
+         $line_tokens{$column} = [$value];
+
+         my $token =  TidyLst::Token->new(
+            tag       => $column,
+            value     => $value,
+            lineType  => $curent_linetype,
+            file      => $file,
+            line      => $lineNum,
+         );
+
+         $line->add($token);
+
+         # Statistic gathering
+         incCountValidTags($curent_linetype, $column);
+
+         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
+            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
+            last COLUMN if $exit;
+         }
+      }
+
+      # Second, let's parse the regular columns
+      for my $rawToken (@tokens) {
+
+         my ($extractedToken, $value) = 
+            extractTag($rawToken, $curent_linetype, $file, $lineNum);
+
+         # if extractTag returns a defined value, no further processing is
+         # neeeded. If tag is defined but value is not, then the tag that was
+         # returned is the cleaned token and should be processed further.
+         if ($extractedToken && not defined $value) {
+
+            my $token =  TidyLst::Token->new(
+               fullToken => $extractedToken,
+               lineType  => $curent_linetype,
+               file      => $file,
+               line      => $lineNum,
+            );
+
+            # Potentally modify the tag
+            $token->process();
+
+            my $tag = $token->tag;
+
+            if (exists $line_tokens{$tag} && ! isValidMultiTag($curent_linetype, $tag)) {
+               $log->notice(
+                  qq{The tag "$tag" should not be used more than once on the same } 
+                  . $curent_linetype . qq{ line.\n},
+                  $file,
+                  $lineNum
+               );
+            }
+
+            $line_tokens{$tag} = exists $line_tokens{$tag} 
+               ? [ @{ $line_tokens{$tag} }, $token->fullRealToken ] 
+               : [$token->fullRealToken];
+         
+            $line->add($token);
+
+         } else {
+
+            $log->warning( "No tags in \"$rawToken\"\n", $file, $lineNum );
+            $line_tokens{$rawToken} = $rawToken;
+         }
+      }
+
+      my $newline = [
+         $curent_linetype,
+         \%line_tokens,
+         $lastMainLine,
+         $line,
+      ];
+
+
+      ############################################################
+      ######################## Conversion ########################
+      # We manipulate the tags for the line here
+      # This function call will parse individual lines, which will
+      # in turn parse the tags within the lines.
+
+      processLine(\%line_tokens, $line);
+
+      ############################################################
+      # Validate the line
+      if (getOption('xcheck')) {
+         validateLine($line)
+      };
+
+      ############################################################
+      # .CLEAR order verification
+      check_clear_tag_order(\%line_tokens, $file, $lineNumi, $line);
+
+      #Last, we put the tokens and other line info in the @newlines array
+      push @newlines, $newline;
+
+   }
+   continue { $lineNum++ }
+
+   #####################################################
+   #####################################################
+   # We find all the header lines
+
+   for (my $line_index = 0; $line_index < @newlines; $line_index++) {
+
+      my $line = $newlines[$line_index][-1];
+
+      # A header line either begins with the curent line_type header
+      # or the next line header.
+      #
+      # Only comment lines (unsplit lines with no tokens) can be header lines
+      if ($line->noTokens) {
+
+         my $header = getHeader(getEntityFirstTag($line->type), $line->type);
+
+         my $thisIsHeader = $header && index($line->unsplit, $header) == 0;
+         my $nextIsHeader;
+
+         if ($line_index + 1 <= $#newlines) {
+            my $next = $newlines[$line_index + 1][-1]
+
+            my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
+            $nextIsHeader = $header && index($next->unsplit, $header) == 0;
+         }
+
+         # if this line or the next starts with the header for its type, 
+         if ($thisIsHeader || $nextIsHeader) {
+
+            # It is a header, let's tag it as such.
+            $line->type('HEADER');
+
+         } else {
+
+            # It is just a comment, we won't botter with it ever again.
+            $line->type('COMMENT');
+         }
+      }
+   }
+
+
+   #################################################################
+   ######################## Conversion #############################
+   # We manipulate the tags for the whole file here
+
+   parseFile(\@newlines, $fileType, $file);
+
+   ##################################################
+   ##################################################
+   # Phase II - Reformating the lines
+
+   # No reformating needed?
+   return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
+
+   reformatFile(\@newlines);
+}
+
+
 
 # The file type that will be rewritten.
 my %writefiletype = (
@@ -724,6 +1037,113 @@ our %parseControl = (
 );
 
 
+=head2 check_clear_tag_order
+
+   Verify that the .CLEAR tags are correctly put before the
+   tags that they clear.
+
+   Parameter:  $line_ref         : Hash reference to the line
+               $file_for_error
+               $line_for_error
+
+=cut
+
+sub check_clear_tag_order {
+
+   my ($line_ref, $file_for_error, $line_for_error, $line) = @_;
+
+   TAG:
+   for my $tag (keys %$line_ref) {
+
+      # if the current value is not an array, there is only one
+      # tag and no order to check.
+      next unless ref($line_ref->{$tag});
+
+      # if only one of a kind, skip the rest
+      next TAG if scalar @{$line_ref->{$tag}} <= 1;
+
+      my %value_found;
+
+      if ( $tag eq "SA" ) {
+
+         # The SA tag is special because it is only checked
+         # up to the first (
+
+         for ( @{$line_ref->{$tag}} ) {
+
+            if (/:\.?CLEAR.?([^(]*)/) {
+
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ( $1 ne "" ) {
+
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
+                  }
+
+               } else {
+
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
+                  }
+               }
+
+            } elsif ( / : ([^(]*) /xms ) {
+
+               # Let's store the value
+               $value_found{$1} = 1;
+
+            } else {
+               $log->error(
+                  "Didn't anticipate this tag: $_",
+                  $file_for_error,
+                  $line_for_error
+               );
+            }
+         }
+
+      } else {
+
+         for ( @{ $line_ref->{$tag} } ) {
+            if (/:\.?CLEAR.?(.*)/) {
+
+               # clear tag either clear the whole thing,
+               # in which case it must be the very beginning,
+               # or it clear a particular value, in which case
+               # it must be before any such value.
+               if ($1 ne "") {
+
+                  # Let's check if the value was found before
+                  if (exists $value_found{$1}) {
+                     $log->notice(qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error)
+                  }
+
+               } else {
+
+                  # Let's check if any value was found before
+                  if (keys %value_found) {
+                     $log->notice(qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error)
+                  }
+               }
+
+            } elsif (/:(.*)/) {
+
+               # Let's store the value
+               $value_found{$1} = 1;
+
+            } else {
+               $log->error("Didn't anticipate this tag: $_", $file_for_error, $line_for_error)
+            }
+         }
+      }
+   }
+}
+
+
 =head2 extractTag
 
    This opeatrion takes a tag and makes sure it is suitable for further
@@ -903,6 +1323,758 @@ sub normaliseFile {
    # return a arrayref so we are a little more efficient
    return (\@lines, $filetype);
 }
+
+
+
+###############################################################
+# parseFile
+# ------------------------
+#
+# This function does additional parsing on each file once
+# they have been seperated in lines of tags.
+#
+# Most commun use is for addition, conversion or removal of tags.
+#
+# Paramter: $lines_ref  Ref to an array containing lines of tags
+#           $filetype   Type for the current file
+#           $filename   Name of the current file
+#
+#           The $line_ref entries may now be in a new format, we need to find out
+#           before using it. ref($line_ref) eq 'ARRAY'means new format.
+#
+#           The format is: [ 
+#                            $curent_linetype,
+#                            \%line_tokens,
+#                            $lastMainLine,
+#                            $curent_entity,
+#                            $line_info,
+#                          ];
+#
+
+{
+
+   my %class_skill;
+   my %class_spell;
+   my %domain_spell;
+
+   sub parseFile {
+
+      my ( $lines_ref, $filetype, $filename ) = @_;
+
+      ###############################################################
+      # Reformat multiple lines to one line for RACE and TEMPLATE.
+      #
+      # This is only useful for those who like to start new entries
+      # with multiple lines (for clarity) and then want them formatted
+      # properly for submission.
+
+      if ( isConversionActive('ALL:Multiple lines to one') ) {
+         my %valid_line_type = (
+            'RACE'  => 1,
+            'TEMPLATE' => 1,
+         );
+
+         if ( exists $valid_line_type{$filetype} ) {
+            my $lastMainLine = -1;
+
+            # Find all the lines with the same identifier
+            ENTITY:
+            for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
+
+               # Is this a linetype we are interested in?
+               if ( ref $lines_ref->[$i] eq 'ARRAY' && exists $valid_line_type{ $lines_ref->[$i][0] } )
+               {
+                  my $first_line = $i;
+                  my $last_line  = $i;
+                  my $old_length;
+                  my $curent_linetype = $lines_ref->[$i][0];
+                  my %new_line        = %{ $lines_ref->[$i][1] };
+                     $lastMainLine    = $i;
+                  my $entity_name     = $lines_ref->[$i][3];
+                  my $line_info       = $lines_ref->[$i][4];
+                  my $j               = $i + 1;
+                  my $extra_entity    = 0;
+                  my @new_lines;
+
+                  #Find all the line with the same entity name
+                  ENTITY_LINE:
+                  for ( ; $j < @{$lines_ref}; $j++ ) {
+
+                     # Skip empty and comment lines
+                     if (ref( $lines_ref->[$j] ) ne 'ARRAY' || $lines_ref->[$j][0] eq 'HEADER' || ref( $lines_ref->[$j][1] ) ne 'HASH') {
+                        next ENTITY_LINE 
+                     }
+
+                     # Is it an entity of the same name?
+                     if ($lines_ref->[$j][0] eq $curent_linetype && $entity_name eq $lines_ref->[$j][3]) {
+
+                        $last_line = $j;
+                        $extra_entity++;
+                        my $entityFirstTag = getEntityFirstTag($curent_linetype);
+
+                        for ( keys %{ $lines_ref->[$j][1] } ) {
+
+                           # We add the tags except for the first one (the entity tag)
+                           # that is already there.
+                           push @{ $new_line{$_} }, @{ $lines_ref->[$j][1]{$_} } if $_ ne $entityFirstTag;
+                        }
+
+                     } else {
+                        last ENTITY_LINE;
+                     }
+                  }
+
+                  # If there was only one line for the entity, we do nothing
+                  next ENTITY if !$extra_entity;
+
+                  # Number of lines included in the CLASS
+                  $old_length = $last_line - $first_line + 1;
+
+                  # We prepare the replacement lines
+                  $j = 0;
+
+                  # The main line
+                  if ( keys %new_line > 1 ) {
+                     push @new_lines,
+                     [
+                        $curent_linetype,
+                        \%new_line,
+                        $lastMainLine,
+                        $entity_name,
+                        $line_info,
+                     ];
+                     $j++;
+                  }
+
+                  # We splice the new class lines in place
+                  splice @$lines_ref, $first_line, $old_length, @new_lines;
+
+                  # Continue with the rest
+                  $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
+
+               } elsif (
+                  ref $lines_ref->[$i] eq 'ARRAY'
+                  && $lines_ref->[$i][0] ne 'HEADER'
+                  && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == SUB )
+               {
+
+                  # We must replace the lastMainLine with the correct value
+                  $lines_ref->[$i][2] = $lastMainLine;
+
+               } elsif (
+                  ref $lines_ref->[$i] eq 'ARRAY'
+                  && $lines_ref->[$i][0] ne 'HEADER'
+                  && defined $lines_ref->[$i][4] && $lines_ref->[$i][4]{Mode} == MAIN )
+               {
+
+                  # We update the lastMainLine value and
+                  # put the correct value in the curent line
+                  $lines_ref->[$i][2] = $lastMainLine = $i;
+               }
+            }
+         }
+      }
+
+                ###############################################################
+                # [ 641912 ] Convert CLASSSPELL to SPELL
+                #
+                #
+                # "CLASSSPELL"  => [
+                #   'CLASS',
+                #   'SOURCEPAGE',
+                #   '#HEADER#SOURCE',
+                #   '#HEADER#SOURCELONG',
+                #   '#HEADER#SOURCESHORT',
+                #   '#HEADER#SOURCEWEB',
+                # ],
+                #
+                # "CLASSSPELL Level"    => [
+                #   '000ClassSpellLevel',
+                #   '001ClassSpells'
+
+                if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
+                if ( $filetype eq 'CLASSSPELL' ) {
+
+                        # Here we will put aside all the CLASSSPELL that
+                        # we find for later use.
+
+                        my $dir = File::Basename::dirname($filename);
+
+                        $log->warning(
+                                qq(Already found a CLASSSPELL file in $dir),
+                                $filename
+                        ) if exists $class_spell{$dir};
+
+                        my $curent_name;
+                        my $curent_type = 2;    # 0 = CLASS, 1 = DOMAIN, 2 = invalid
+                        my $line_number = 1;
+
+                        LINE:
+                        for my $line (@$lines_ref) {
+
+                                # We skip all the lines that do not begin by CLASS or a number
+                                next LINE
+                                if ref($line) ne 'HASH'
+                                || ( !exists $line->{'CLASS'} && !exists $line->{'000ClassSpellLevel'} );
+
+                                if ( exists $line->{'CLASS'} ) {
+
+                                # We keep the name
+                                $curent_name = ( $line->{'CLASS'}[0] =~ /CLASS:(.*)/ )[0];
+
+                                # Is it a CLASS or a DOMAIN ?
+
+
+                                if (isValidEntity('CLASS', $curent_name)) {
+                                        $curent_type = 0;
+                                }
+                                elsif (isValidEntity('DOMAIN', $curent_name)) {
+                                        $curent_type = 1;
+                                }
+                                else {
+                                        $curent_type = 2;
+                                        $log->warning(
+                                                qq(Don\'t know if "$curent_name" is a CLASS or a DOMAIN),
+                                                $filename,
+                                                $line_number
+                                        );
+                                }
+                                }
+                                else {
+                                next LINE if $curent_type == 2 || !exists $line->{'001ClassSpells'};
+
+                                # We store the CLASS name and Level
+
+                                for my $spellname ( split '\|', $line->{'001ClassSpells'}[0] ) {
+                                        push @{ $class_spell{$dir}{$spellname}[$curent_type]
+                                                { $line->{'000ClassSpellLevel'}[0] } }, $curent_name;
+
+                                }
+                                }
+                        }
+                        continue { $line_number++; }
+                }
+                elsif ( $filetype eq 'SPELL' ) {
+                        my $dir = File::Basename::dirname($filename);
+
+                        if ( exists $class_spell{$dir} ) {
+
+                                # There was a CLASSSPELL in the directory, we need to add
+                                # the CLASSES and DOMAINS tag for it.
+
+                                # First we find all the SPELL lines and add the CLASSES
+                                # and DOMAINS tags if needed
+                                my $line_number = 1;
+                                LINE:
+                                for my $line (@$lines_ref) {
+                                next LINE if ref($line) ne 'ARRAY' || $line->[0] ne 'SPELL';
+                                $_ = $line->[1];
+
+                                next LINE if ref ne 'HASH' || !exists $_->{'000SpellName'};
+                                my $spellname = $_->{'000SpellName'}[0];
+
+                                if ( exists $class_spell{$dir}{$spellname} ) {
+                                        if ( defined $class_spell{$dir}{$spellname}[0] ) {
+
+                                                # We have classes
+                                                # Is there already a CLASSES tag?
+                                                if ( exists $_->{'CLASSES'} ) {
+                                                $log->warning(
+                                                        qq(The is already a CLASSES tag for "$spellname"),
+                                                        $filename,
+                                                        $line_number
+                                                );
+                                                }
+                                                else {
+                                                my @new_levels;
+                                                for my $level ( sort { $a <=> $b }
+                                                        keys %{ $class_spell{$dir}{$spellname}[0] } )
+                                                {
+                                                        my $new_level = join ',',
+                                                                @{ $class_spell{$dir}{$spellname}[0]{$level} };
+                                                        push @new_levels, "$new_level=$level";
+                                                }
+                                                my $new_classes = 'CLASSES:' . join '|', @new_levels;
+                                                $_->{'CLASSES'} = [$new_classes];
+
+                                                $log->warning(
+                                                        qq{SPELL $spellname: adding "$new_classes"},
+                                                        $filename,
+                                                        $line_number
+                                                );
+                                                }
+                                        }
+
+                                        if ( defined $class_spell{$dir}{$spellname}[1] ) {
+
+                                                # We have domains
+                                                # Is there already a CLASSES tag?
+                                                if ( exists $_->{'DOMAINS'} ) {
+                                                $log->warning(
+                                                        qq(The is already a DOMAINS tag for "$spellname"),
+                                                        $filename,
+                                                        $line_number
+                                                );
+                                                }
+                                                else {
+                                                my @new_levels;
+                                                for my $level ( sort { $a <=> $b }
+                                                        keys %{ $class_spell{$dir}{$spellname}[1] } )
+                                                {
+                                                        my $new_level = join ',',
+                                                                @{ $class_spell{$dir}{$spellname}[1]{$level} };
+                                                        push @new_levels, "$new_level=$level";
+                                                }
+                                                my $new_domains = 'DOMAINS:' . join '|', @new_levels;
+                                                $_->{'DOMAINS'} = [$new_domains];
+
+                                                $log->warning(
+                                                        qq{SPELL $spellname: adding "$new_domains"},
+                                                        $filename,
+                                                        $line_number
+                                                );
+                                                }
+                                        }
+
+                                        # We remove the curent spell from the list.
+                                        delete $class_spell{$dir}{$spellname};
+                                }
+                                }
+                                continue { $line_number++; }
+
+                                # Second, we add .MOD line for the SPELL that were not present.
+                                if ( keys %{ $class_spell{$dir} } ) {
+
+                                # Put a comment line and a new header line
+                                push @$lines_ref, "",
+                                        "###Block:SPELL.MOD generated from the old CLASSSPELL files";
+
+                                for my $spellname ( sort keys %{ $class_spell{$dir} } ) {
+                                        my %newline = ( '000SpellName' => ["$spellname.MOD"] );
+                                        $line_number++;
+
+                                        if ( defined $class_spell{$dir}{$spellname}[0] ) {
+
+                                                # New CLASSES
+                                                my @new_levels;
+                                                for my $level ( sort { $a <=> $b }
+                                                keys %{ $class_spell{$dir}{$spellname}[0] } )
+                                                {
+                                                my $new_level = join ',',
+                                                        @{ $class_spell{$dir}{$spellname}[0]{$level} };
+                                                push @new_levels, "$new_level=$level";
+                                                }
+                                                my $new_classes = 'CLASSES:' . join '|', @new_levels;
+                                                $newline{'CLASSES'} = [$new_classes];
+
+                                                $log->warning(
+                                                qq{SPELL $spellname.MOD: adding "$new_classes"},
+                                                $filename,
+                                                $line_number
+                                                );
+                                        }
+
+                                        if ( defined $class_spell{$dir}{$spellname}[1] ) {
+
+                                                # New DOMAINS
+                                                my @new_levels;
+                                                for my $level ( sort { $a <=> $b }
+                                                keys %{ $class_spell{$dir}{$spellname}[1] } )
+                                                {
+                                                my $new_level = join ',',
+                                                        @{ $class_spell{$dir}{$spellname}[1]{$level} };
+                                                push @new_levels, "$new_level=$level";
+                                                }
+
+                                                my $new_domains = 'DOMAINS:' . join '|', @new_levels;
+                                                $newline{'DOMAINS'} = [$new_domains];
+
+                                                $log->warning(
+                                                qq{SPELL $spellname.MOD: adding "$new_domains"},
+                                                $filename,
+                                                $line_number
+                                                );
+                                        }
+
+                                        push @$lines_ref, [
+                                                'SPELL',
+                                                \%newline,
+                                                1 + @$lines_ref,
+                                                $spellname,
+                                                TidyLst::Parse::getParseControl('SPELL'),
+                                        ];
+
+                                }
+                                }
+                        }
+                }
+                }
+
+                ###############################################################
+                # [ 626133 ] Convert CLASS lines into 4 lines
+                #
+                # The 3 lines are:
+                #
+                # General (all tags not put in the two other lines)
+                # Prereq. (all the PRExxx tags)
+                # Class skills (the STARTSKILLPTS, the CKSILL and the CCSKILL tags)
+                #
+                # 2003.07.11: a fourth line was added for the SPELL related tags
+
+                if (   isConversionActive('CLASS:Four lines')
+                && $filetype eq 'CLASS' )
+                {
+                my $lastMainLine = -1;
+
+                # Find all the CLASS lines
+                for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
+
+                        # Is this a CLASS line?
+                        if ( ref $lines_ref->[$i] eq 'ARRAY' && $lines_ref->[$i][0] eq 'CLASS' ) {
+                                my $first_line = $i;
+                                my $last_line  = $i;
+                                my $old_length;
+                                my %new_class_line = %{ $lines_ref->[$i][1] };
+                                my %new_pre_line;
+                                my %new_skill_line;
+                                my %new_spell_line;
+                                my %skill_tags = (
+                                   'CSKILL:.CLEAR' => 1,
+                                   CCSKILL         => 1,
+                                   CSKILL          => 1,
+                                   MODTOSKILLS     => 1,   #
+                                   MONSKILL        => 1,   # [ 1097487 ] MONSKILL in class.lst
+                                   MONNONSKILLHD   => 1,
+                                   SKILLLIST       => 1,   # [ 1580059 ] SKILLLIST tag
+                                   STARTSKILLPTS   => 1,
+                                );
+                                my %spell_tags = (
+                                   BONUSSPELLSTAT              => 1,
+                                   'BONUS:CASTERLEVEL'         => 1,
+                                   'BONUS:DC'                  => 1,  #[ 1037456 ] Move BONUS:DC on class line to the spellcasting portion
+                                   'BONUS:SCHOOL'              => 1,
+                                   'BONUS:SPELL'               => 1,
+                                   'BONUS:SPECIALTYSPELLKNOWN' => 1,
+                                   'BONUS:SPELLCAST'           => 1,
+                                   'BONUS:SPELLCASTMULT'       => 1,
+                                   'BONUS:SPELLKNOWN'          => 1,
+                                   CASTAS                      => 1,
+                                   ITEMCREATE                  => 1,
+                                   KNOWNSPELLS                 => 1,
+                                   KNOWNSPELLSFROMSPECIALTY    => 1,
+                                   MEMORIZE                    => 1,
+                                   HASSPELLFORMULA             => 1, # [ 1893279 ] HASSPELLFORMULA Class Line tag
+                                   PROHIBITED                  => 1,
+                                   SPELLBOOK                   => 1,
+                                   SPELLKNOWN                  => 1,
+                                   SPELLLEVEL                  => 1,
+                                   SPELLLIST                   => 1,
+                                   SPELLSTAT                   => 1,
+                                   SPELLTYPE                   => 1,
+                                );
+                                $lastMainLine = $i;
+                                my $class       = $lines_ref->[$i][3];
+                                my $line_info   = $lines_ref->[$i][4];
+                                my $j           = $i + 1;
+                                my @new_class_lines;
+
+                                #Find the next line that is not empty or of the same CLASS
+                                CLASS_LINE:
+                                for ( ; $j < @{$lines_ref}; $j++ ) {
+
+                                # Skip empty and comment lines
+                                next CLASS_LINE
+                                        if ref( $lines_ref->[$j] ) ne 'ARRAY'
+                                        || $lines_ref->[$j][0] eq 'HEADER'
+                                        || ref( $lines_ref->[$j][1] ) ne 'HASH';
+
+                                # Is it a CLASS line of the same CLASS?
+                                if ( $lines_ref->[$j][0] eq 'CLASS' && $class eq $lines_ref->[$j][3] ) {
+                                        $last_line = $j;
+                                        my $firstTag = getEntityNameTag('CLASS');
+                                        for my $column ( grep {$_ ne $firstTag} keys %{ $lines_ref->[$j][1] } ) {
+                                           push @{ $new_class_line{$column} }, @{ $lines_ref->[$j][1]{$column} };
+                                        }
+                                }
+                                else {
+                                        last CLASS_LINE;
+                                }
+                                }
+
+                                # Number of lines included in the CLASS
+                                $old_length = $last_line - $first_line + 1;
+
+                                # We build the two other lines.
+                                for ( keys %new_class_line ) {
+
+                                # Is it a SKILL tag?
+                                if ( exists $skill_tags{$_} ) {
+                                        $new_skill_line{$_} = delete $new_class_line{$_};
+                                }
+
+                                # Is it a PRExxx tag?
+                                elsif (/^\!?PRE/
+                                        || /^DEITY/ ) {
+                                        $new_pre_line{$_} = delete $new_class_line{$_};
+                                }
+
+                                # Is it a SPELL tag?
+                                elsif ( exists $spell_tags{$_} ) {
+                                        $new_spell_line{$_} = delete $new_class_line{$_};
+                                }
+                                }
+
+                                # We prepare the replacement lines
+                                $j = 0;
+
+                                # The main line
+                                if ( keys %new_class_line > 1
+                                || ( !keys %new_pre_line && !keys %new_skill_line && !keys %new_spell_line )
+                                )
+                                {
+                                push @new_class_lines,
+                                        [
+                                        'CLASS',
+                                        \%new_class_line,
+                                        $lastMainLine,
+                                        $class,
+                                        $line_info,
+                                        ];
+                                $j++;
+                                }
+
+                                # The PRExxx line
+                                if ( keys %new_pre_line ) {
+
+                                   # Need to tell what CLASS we are dealing with
+                                   my $tagLookup = getEntityNameTag('CLASS');
+                                   $new_pre_line{ $tagLookup } = $new_class_line{ $tagLookup };
+                                   push @new_class_lines,
+                                   [
+                                      'CLASS',
+                                      \%new_pre_line,
+                                      ++$lastMainLine,
+                                      $class,
+                                      $line_info,
+                                   ];
+                                   $j++;
+                                }
+
+                                # The skills line
+                                if ( keys %new_skill_line ) {
+
+                                   # Need to tell what CLASS we are dealing with
+                                   my $tagLookup = getEntityNameTag('CLASS');
+                                   $new_skill_line{ $tagLookup } = $new_class_line{ $tagLookup };
+                                   push @new_class_lines,
+                                   [
+                                      'CLASS',
+                                      \%new_skill_line,
+                                      ++$lastMainLine,
+                                      $class,
+                                      $line_info,
+                                   ];
+                                   $j++;
+                                }
+
+                                # The spell line
+                                if ( keys %new_spell_line ) {
+
+                                # Need to tell what CLASS we are dealing with
+                                my $tagLookup = getEntityNameTag('CLASS');
+                                $new_spell_line{ $tagLookup } = $new_class_line{ $tagLookup };
+
+                                ##################################################################
+                                # [ 876536 ] All spell casting classes need CASTERLEVEL
+                                #
+                                # BONUS:CASTERLEVEL|<class name>|CL will be added to all classes
+                                # that have a SPELLTYPE tag except if there is also an
+                                # ITEMCREATE tag present.
+
+                                if (   isConversionActive('CLASS:CASTERLEVEL for all casters')
+                                        && exists $new_spell_line{'SPELLTYPE'}
+                                        && !exists $new_spell_line{'BONUS:CASTERLEVEL'} )
+                                {
+                                        my $class = getEntityName('CLASS', \%new_spell_line);
+
+                                        if ( exists $new_spell_line{'ITEMCREATE'} ) {
+
+                                           # ITEMCREATE is present, we do not convert but we warn.
+                                           $log->warning(
+                                              "Can't add BONUS:CASTERLEVEL for class \"$class\", "
+                                              . "\"$new_spell_line{'ITEMCREATE'}[0]\" was found.",
+                                              $filename
+                                           );
+
+                                        } else {
+
+                                           # We add the missing BONUS:CASTERLEVEL
+                                           $class =~ s/^CLASS:(.*)/$1/;
+                                           $new_spell_line{'BONUS:CASTERLEVEL'} = ["BONUS:CASTERLEVEL|$class|CL"];
+                                           $log->warning(
+                                              qq{Adding missing "BONUS:CASTERLEVEL|$class|CL"},
+                                              $filename
+                                           );
+                                        }
+                                }
+
+                                push @new_class_lines,
+                                        [
+                                        'CLASS',
+                                        \%new_spell_line,
+                                        ++$lastMainLine,
+                                        $class,
+                                        $line_info,
+                                        ];
+                                $j++;
+                                }
+
+                                # We splice the new class lines in place
+                                splice @{$lines_ref}, $first_line, $old_length, @new_class_lines;
+
+                                # Continue with the rest
+                                $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
+                        }
+                        elsif (ref $lines_ref->[$i] eq 'ARRAY'
+                                && $lines_ref->[$i][0] ne 'HEADER'
+                                && defined $lines_ref->[$i][4]
+                                && $lines_ref->[$i][4]{Mode} == SUB )
+                        {
+
+                                # We must replace the lastMainLine with the correct value
+                                $lines_ref->[$i][2] = $lastMainLine;
+                        }
+                        elsif (ref $lines_ref->[$i] eq 'ARRAY'
+                                && $lines_ref->[$i][0] ne 'HEADER'
+                                && defined $lines_ref->[$i][4]
+                                && $lines_ref->[$i][4]{Mode} == MAIN )
+                        {
+
+                                # We update the lastMainLine value and
+                                # put the correct value in the curent line
+                                $lines_ref->[$i][2] = $lastMainLine = $i;
+                        }
+                }
+                }
+
+                ###############################################################
+                # The CLASSSKILL files must be deprecated in favor of extra
+                # CSKILL in the CLASS files.
+                #
+                # For every CLASSSKILL found, an extra line must be added after
+                # the CLASS line with the class name and the list of
+                # CSKILL in the first CLASS file on the same directory as the
+                # CLASSSKILL.
+                #
+                # If no CLASS with the same name can be found in the same
+                # directory, entries with class name.MOD must be generated
+                # at the end of the first CLASS file in the same directory.
+
+                if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
+                if ( $filetype eq 'CLASSSKILL' ) {
+
+                        # Here we will put aside all the CLASSSKILL that
+                        # we find for later use.
+
+                        my $dir = File::Basename::dirname($filename);
+                        LINE:
+                        for ( @{ $lines_ref } ) {
+
+                                # Only the 000ClassName are of interest to us
+                                next LINE
+                                if ref ne 'HASH'
+                                || !exists $_->{'000ClassName'}
+                                || !exists $_->{'001SkillName'};
+
+                                # We preserve the list of skills for the class
+                                $class_skill{$dir}{ $_->{'000ClassName'} } = $_->{'001SkillName'};
+                        }
+                }
+                elsif ( $filetype eq 'CLASS' ) {
+                        my $dir = File::Basename::dirname($filename);
+                        my $skipnext = 0;
+                        if ( exists $class_skill{$dir} ) {
+
+                                # There was a CLASSSKILL file in this directory
+                                # We need to incorporate it
+
+                                # First, we find all of the existing CLASS and
+                                # add an extra line to them
+                                my $index = 0;
+                                LINE:
+                                for (@$lines_ref) {
+
+                                # If the line is text only, skip
+                                next LINE if ref ne 'ARRAY';
+
+                                my $line_tokens = $_->[1];
+
+                                # If it is not a CLASS line, we skip it
+                                next LINE
+                                        if ref($line_tokens) ne 'HASH'
+                                        || !exists $line_tokens->{'000ClassName'};
+
+                                my $class = ( $line_tokens->{'000ClassName'}[0] =~ /CLASS:(.*)/ )[0];
+
+                                if ( exists $class_skill{$dir}{$class} ) {
+                                        my $line_no = $- > [2];
+
+                                        # We build a new CLASS, CSKILL line to add.
+                                        my $newskills = join '|',
+                                                sort split( '\|', $class_skill{$dir}{$class} );
+                                        $newskills =~ s/Craft[ %]\|/TYPE.Craft\|/;
+                                        $newskills =~ s/Knowledge[ %]\|/TYPE.Knowledge\|/;
+                                        $newskills =~ s/Profession[ %]\|/TYPE.Profession\|/;
+                                        splice @$lines_ref, $index + 1, 0,
+                                                [
+                                                'CLASS',
+                                                {   '000ClassName' => ["CLASS:$class"],
+                                                'CSKILL'                => ["CSKILL:$newskills"]
+                                                },
+                                                $line_no, $class,
+                                                TidyLst::Parse::getParseControl('CLASS'),
+                                                ];
+                                        delete $class_skill{$dir}{$class};
+
+                                        $log->warning( qq{Adding line "CLASS:$class\tCSKILL:$newskills"}, $filename );
+                                }
+                                }
+                                continue { $index++ }
+
+                                # If there are any CLASSSKILL remaining for the directory,
+                                # we have to create .MOD entries
+
+                                if ( exists $class_skill{$dir} ) {
+                                for ( sort keys %{ $class_skill{$dir} } ) {
+                                        my $newskills = join '|', sort split( '\|', $class_skill{$dir}{$_} );
+                                        $newskills =~ s/Craft \|/TYPE.Craft\|/;
+                                        $newskills =~ s/Knowledge \|/TYPE.Knowledge\|/;
+                                        $newskills =~ s/Profession \|/TYPE.Profession\|/;
+                                        push @$lines_ref,
+                                                [
+                                                'CLASS',
+                                                {   '000ClassName' => ["CLASS:$_.MOD"],
+                                                'CSKILL'                => ["CSKILL:$newskills"]
+                                                },
+                                                scalar(@$lines_ref),
+                                                "$_.MOD",
+                                                TidyLst::Parse::getParseControl('CLASS'),
+                                                ];
+
+                                        delete $class_skill{$dir}{$_};
+
+                                        $log->warning( qq{Adding line "CLASS:$_.MOD\tCSKILL:$newskills"}, $filename );
+                                }
+                                }
+                        }
+                }
+                }
+
+                1;
+        }
+
+}
+
 
 
 =head2 parseSystemFiles

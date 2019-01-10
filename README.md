@@ -1,2 +1,2 @@
-# lst-tidy
+# tidylst
 A program to validate and reformat files in PCGen's LST format
