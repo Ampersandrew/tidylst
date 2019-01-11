@@ -7,6 +7,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw( 
+   addToBonusAndPreReport
    add_to_xcheck_tables
    closeExportListFileHandles
    doXCheck
@@ -92,15 +93,15 @@ my %Hardcoded_Variables = map { $_ => 1 } (
 
 =head2 addToBonusAndPreReport
 
+   Add the give token to the Bonus and PRE tag report
+
 =cut
 
 sub addToBonusAndPreReport {
 
-   my ($lineRef, $fileType, $tagType) = @_;
+   my ($token, $lineType) = @_;
 
-   for my $tag ( @{ $lineRef->{$tagType} } ) {
-      $bonusAndPreTagReport{$fileType}{$tag} = 1;
-   };
+   $bonusAndPreTagReport{$lineType}{$token->fullRealTag} = 1;
 }
                                 
 

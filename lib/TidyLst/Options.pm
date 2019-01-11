@@ -60,14 +60,13 @@ my $errorMessage;
 # The active conversions
 %conversionEnabled =
 (
-   'Generate BONUS and PRExxx report'   => 0,
-
    'ALL:Fix Common Extended ASCII'      => 1,    # [ 1324519 ] ASCII characters
    'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
    'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
    'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
 
-   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types # [ 728038 ] BONUS:VISION must replace VISION:
+   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types 
+                                                 # [ 728038 ] BONUS:VISION must replace VISION:
    'ALL: 4.3.3 Weapon name change'      => 0,    # Bunch of name changed for SRD compliance
    'ALL:ADD Syntax Fix'                 => 0,    # [ 1678577 ] ADD: syntax no longer uses parens
    'ALL:Add TYPE=Base.REPLACE'          => 0,    # [ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
@@ -98,7 +97,6 @@ my $errorMessage;
    'EQUIPMENT: SLOTS:2 for plurals'     => 0,    # [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
    'EQUIPMENT: generate EQMOD'          => 0,    # [ 677962 ] The DMG wands have no charge.
    'EQUIPMENT: remove ATTACKS'          => 0,    # [ 686169 ] remove ATTACKS: tag
-   'Export lists'                       => 0,    # Export various lists of entities
    'PCC:GAME to GAMEMODE'               => 0,    # [ 707325 ] PCC: GAME is now GAMEMODE
    'PCC:GAMEMODE Add to the CMP DnD_'   => 0,    # In order for the CMP files to work with the  normal PCGEN files
    'PCC:GAMEMODE DnD to 3e'             => 0,    # [ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
@@ -129,6 +127,7 @@ sub parseOptions {
 
    # Set up the defaults for each of the options
    my $basePath       = q{};        # Base path for the @ replacement
+   my $bonusReport    = 0;          # Do not generate the BONUS and PRE report
    my $convert        = q{};        # Activate a standard conversion
    my $exportList     = 0;          # Export lists of object in CVS format
    my $fileType       = q{};        # File type to use if no PCC are read
@@ -156,31 +155,33 @@ sub parseOptions {
    if ( scalar @ARGV ) {
 
       GetOptions(
-         'basepath|b=s'      =>  \$basePath,  
-         'convert|c=s'       =>  \$convert,
-         'exportlist'        =>  \$exportList,
-         'filetype|f=s'      =>  \$fileType,
-         'gamemode|gm=s'     =>  \$gamemode,
-         'help|h|?'          =>  \$help,
-         'htmlhelp'          =>  \$htmlHelp,
-         'inputpath|i=s'     =>  \$inputPath,
-         'man'               =>  \$man,
-         'missingheader|mh'  =>  \$missingHeader,
-         'nojep'             =>  \$noJEP,
-         'nowarning|nw'      =>  \$noWarning,
-         'noxcheck|nx'       =>  \$noXCheck,
-         'outputerror|e=s'   =>  \$outputError,
-         'outputpath|o=s'    =>  \$outputPath,
-         'report|r'          =>  \$report,
-         'systempath|s=s'    =>  \$systemPath,
-         'tabLength|t=i'     =>  \$tabLength,
-         'test'              =>  \$test,
-         'vendorpath|v=s'    =>  \$vendorPath,
-         'warninglevel|wl=s' =>  \$warningLevel,
-         'xcheck|x'          =>  \$xCheck);
+         'basepath|b=s'       =>  \$basePath,  
+         'bonusreport|br'     =>  \$bonusReport,
+         'convert|c=s'        =>  \$convert,
+         'exportlist|el'      =>  \$exportList,
+         'filetype|f=s'       =>  \$fileType,
+         'gamemode|gm=s'      =>  \$gamemode,
+         'help|h|?'           =>  \$help,
+         'htmlhelp'           =>  \$htmlHelp,
+         'inputpath|i=s'      =>  \$inputPath,
+         'man'                =>  \$man,
+         'missingheader|mh'   =>  \$missingHeader,
+         'nojep'              =>  \$noJEP,
+         'nowarning|nw'       =>  \$noWarning,
+         'noxcheck|nx'        =>  \$noXCheck,
+         'outputerror|e=s'    =>  \$outputError,
+         'outputpath|o=s'     =>  \$outputPath,
+         'report|r'           =>  \$report,
+         'systempath|s=s'     =>  \$systemPath,
+         'tabLength|t=i'      =>  \$tabLength,
+         'test'               =>  \$test,
+         'vendorpath|v=s'     =>  \$vendorPath,
+         'warninglevel|wl=s'  =>  \$warningLevel,
+         'xcheck|x'           =>  \$xCheck);
 
       %clOptions = (
          'basepath'        =>  $basePath,  
+         'bonusreport'     =>  $bonusReport,
          'convert'         =>  $convert,
          'exportlist'      =>  $exportList,
          'filetype'        =>  $fileType,
@@ -226,11 +227,12 @@ sub parseOptions {
       # make sure the defaults are set if there were no command line options
       %clOptions = (
          'basepath'        =>  $basePath,  
+         'bonusreport'     =>  $bonusReport,
          'convert'         =>  $convert,
          'exportlist'      =>  $exportList,
          'filetype'        =>  $fileType,
          'gamemode'        =>  $gamemode,
-         'help'            =>  0,
+         'help'            =>  $help,
          'htmlhelp'        =>  $htmlHelp,
          'inputpath'       =>  $inputPath,
          'man'             =>  $man,
@@ -412,6 +414,9 @@ sub _enableRequestedConversion {
 
    Convert the windows style path separator \\ to the unix style / 
 
+   If the path is not the empty string and does not end with /, then
+   append /.
+
 =cut
 
 sub _fixPath {
@@ -445,18 +450,13 @@ sub _processOptions {
    }
 
    # oldsourcetag option
-   if ( getOption('oldsourcetag') ) {
+   if (getOption('oldsourcetag')) {
       # We disable the conversion if the -oldsourcetag option is used
       disableConversion ('ALL:New SOURCExxx tag format');
    }
 
-   # exportlist option
-   if ( getOption('exportlist') ) {
-      enableConversion ('Export lists');
-   }
-
    # noxcheck option
-   if ( getOption('noxcheck') ) {
+   if (getOption('noxcheck')) {
 
       # The xcheck option is now on by default. Using noxcheck is the only way to
       # disable it
@@ -465,7 +465,7 @@ sub _processOptions {
 
    # basepath option
    # If no basepath was given, use input_dir
-   if ( getOption('basepath') eq q{} ) {
+   if (getOption('basepath') eq q{}) {
       setOption('basepath', getOption('inputpath'));
    }
 

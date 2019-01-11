@@ -30,7 +30,7 @@ use TidyLst::Convert qw(convertEntities);
 use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
-   addSourceTag
+   addSourceToken
    addTagsForConversions
    constructValidTags
    getEntityFirstTag
@@ -43,7 +43,7 @@ use TidyLst::Data qw(
    isValidGamemode
    isValidMultiTag
    isValidTag
-   seenSourceTag
+   seenSourceToken
    setEntityValid
    updateValidity
    );
@@ -56,11 +56,8 @@ use TidyLst::Parse qw(
    extractTag
    isParseableFileType
    isWriteableFileType
-   matchLineType
    normaliseFile
-   processLine
    parseSystemFiles
-   process000
    );
 use TidyLst::Report qw(closeExportListFileHandles openExportListFileHandles);
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
@@ -216,7 +213,7 @@ if (getOption('inputpath')) {
    ##########################################################
    # Files that needs to be open for special conversions
 
-   if ( isConversionActive('Export lists') ) {
+   if (getOption('exportlist')) {
       openExportListFileHandles();
    }
 
@@ -429,7 +426,8 @@ if (getOption('inputpath')) {
                {
                   my $path = File::Basename::dirname($filename);
 
-                  if ( seenSourceTag($path, $token->tag) && $path !~ /custom|altpcc/i ) {
+                  # If a token with the same tag has been seen in this directory
+                  if (seenSourceToken($path, $token) && $path !~ /custom|altpcc/i ) {
 
                      $log->notice(
                         $token->tag . " already found for $path",
@@ -438,7 +436,7 @@ if (getOption('inputpath')) {
                      );
 
                   } else {
-                     addSourceTag($path, $token->tag, $token->fullRealToken);
+                     addSourceToken($path, $token->tag, $token->fullRealToken);
                   }
 
                   # For the PCC report
@@ -907,7 +905,7 @@ if ( getOption('outputpath') && scalar(@nodifiedFiles) ) {
 ###########################################
 # Print a report for the BONUS and PRExxx usage
 
-if ( isConversionActive('Generate BONUS and PRExxx report') ) {
+if (getOption('bonusreport')) {
    TidyLst::Report::reportBonus();
 }
 
@@ -927,7 +925,7 @@ if (getOption('xcheck')) {
 # Close the files that were opened for
 # special conversion
 
-if (isConversionActive('Export lists')) {
+if ( getOption('exportlist') ) {
    closeExportListFileHandles();
 }
 

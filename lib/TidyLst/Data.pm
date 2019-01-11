@@ -17,7 +17,7 @@ our @EXPORT = qw(
 );
 
 our @EXPORT_OK = qw(
-   addSourceTag
+   addSourceToken
    addTagsForConversions
    addToValidTypes
    addValidCategory
@@ -52,7 +52,7 @@ our @EXPORT_OK = qw(
    mungKey
    registerXCheck
    searchRace
-   seenSourceTag
+   seenSourceToken
    setEntityValid
    setValidSystemArr
    splitAndAddToValidEntities
@@ -480,8 +480,8 @@ my @QUALITY_Tags = (
 
 # This will hold a list of the SOURCE tags found for a given directory. Since
 # all the lst files in a directory should have the same source tags. These are
-# tags actually cound in the files.
-my %sourceTags = ();
+# tags actually found in the files.
+my %sourceTokens = ();
 
 # Ensure consistent ordering in the masterOrder structure
 our @SOURCETags = (
@@ -3274,15 +3274,17 @@ our @xcheck_to_process;
 
 
 
-=head2 addSourceTag
+=head2 addSourceToken
+
+   found a SOURCE token, add a note of it for this directory.
 
 =cut
 
-sub addSourceTag {
+sub addSourceToken {
 
-   my ($path, $tag, $value) = @_;
+   my ($path, $token) = @_;
 
-   $sourceTags{File::Basename::dirname($path)}{$tag} = $value;
+   $sourceTokens{File::Basename::dirname($path)}{$token->tag} = $token;
 }
 
 
@@ -3430,14 +3432,15 @@ sub constructValidTags {
 
 =head2 dirHasSourceTags
 
-   True if Source tags have been found in $path
+   True if Source tags have been found in the PCC file in the same directory as
+   $file.
 
 =cut
 
 sub dirHasSourceTags {
 
-   my ($path) = @_;
-   exists $sourceTags{ File::Basename::dirname($path) };
+   my ($file) = @_;
+   exists $sourceTokens{ File::Basename::dirname($file) };
 }
 
 
@@ -3472,14 +3475,14 @@ sub getCrossCheckData {
 
 =head2 getDirSourceTags
 
-   True if Source tags have been found in $file
+   Gets the Source tokens that have been found in $file's path (in the PCC).
 
 =cut
 
 sub getDirSourceTags {
 
    my ($file) = @_;
-   $sourceTags{ File::Basename::dirname($file) };
+   $sourceTokens{ File::Basename::dirname($file) };
 }
 
 
@@ -3914,17 +3917,17 @@ sub searchRace {
 }
 
 
-=head2 seenSourceTag
+=head2 seenSourceToken
 
    Have we seen this source tag on this path before?
 
 =cut
 
-sub seenSourceTag {
+sub seenSourceToken {
 
-   my ($path, $tag) = @_;
+   my ($path, $token) = @_;
 
-   exists $sourceTags{File::Basename::dirname($path)}{$tag};
+   exists $sourceTokens{File::Basename::dirname($path)}{$token->tag};
 }
 
 

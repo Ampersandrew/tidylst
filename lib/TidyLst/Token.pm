@@ -32,8 +32,7 @@ use TidyLst::Data qw(
 
 use TidyLst::Log;
 use TidyLst::LogFactory qw{getLogger};
-
-use TidyLst::Options qw(getOption isConversionActive);
+use TidyLst::Options qw(getOption);
 
 use TidyLst::Variable qw(
    oldExtractVariables
@@ -1395,9 +1394,11 @@ sub _define {
 
          #####################################################
          # Export a list of variable names if requested
-         if ( isConversionActive('Export lists') ) {
+         if (getOption('exportlist')) {
+
             my $file = $self->file;
-            $file =~ tr{/}{\\};
+            $file =~ tr{/}{\\} if ($^O eq "MSWin32");
+
             TidyLst::Report::printToExportList('VARIABLE', qq{"$var_name","$self->line","$file"\n});
          }
 

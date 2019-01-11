@@ -26,6 +26,7 @@ has 'columns' => (
       deleteColumn => 'delete',
       hasColumn    => 'exists',
       noTokens     => 'is_empty',
+      clearTokens  => 'clear',
    },
 );
 
@@ -78,6 +79,28 @@ sub appendToValue {
 
    for my $token ( @{ $self->column($column) } ) {
       $token->value($token->value . $value);
+   }
+}
+
+
+=head2 addToBonusAndPreReport
+
+   This all the bONUS and standalong PRE tokens in the line to the Bonus and
+   pre report.
+
+=cut
+
+sub addToBonusAndPreReport {
+   my ($self) = @_;
+
+   COLUMNS:
+   for my $column ($self->columns) {
+      if ($column !~ qr{^BONUS|^PRE}) {
+         next COLUMNS;
+         for my $token ($self->column($column)) {
+            addToBonusAndPreReport($token, $self->type);
+         }
+      }
    }
 }
 
@@ -197,20 +220,40 @@ sub firstColumnMatches {
 }
 
 
-=head2 getFirstTokenInColumn
+=head2 firstTokenInColumn
 
    Get the token which is first in the column, returns undef if the column is
    not present in the line.
 
 =cut
 
-sub getFirstTokenInColumn {
+sub firstTokenInColumn {
 
    my ($self, $column) = @_;
 
    if ($self->hasColumn($column)) {
       my @column = @{$self->column($column)};
       return $column[0];
+   }
+
+   return undef;   
+}
+
+
+=head2 valueInFirstTokenInColumn
+
+   Get the token which is first in the column, returns undef if the column is
+   not present in the line.
+
+=cut
+
+sub valueInFirstTokenInColumn {
+
+   my ($self, $column) = @_;
+
+   if ($self->hasColumn($column)) {
+      my $token = $self->firstTokenInColumn;
+      $token->value
    }
 
    return undef;   
@@ -275,6 +318,32 @@ sub joinWith {
 }
 
 
+=head2 levelForWizardOrCleric
+
+   For spell lines, get the level of the spell for Wizards or Clerics. If this
+   is not a spell line or not a Wizard or Cleric spell, return -1;
+
+=cut
+
+sub levelForWizardOrCleric {
+
+   my ($self) = @_;
+
+   if ($self->isType('SPELL') && $self->hasColumn('CLASSES')) {
+
+      for my $token (@{$self->column('CLASSES')}) {
+         for my $class (split '\|', $token->value) {
+            if ($class =~ qr{(Wizard|Cleric)=(\d+)$}) {
+               return $2;
+            }
+         }
+      }
+
+      return -1
+   }
+}
+
+
 =head2 replaceTag
 
    When called with two arguments, this replaces the tag in every token in the
@@ -316,7 +385,7 @@ sub replaceTag {
 }
 
 =head2 tokenFor
-   
+
    Create a new token that has the correct linetype, line number and file name
    to be on this line.
 

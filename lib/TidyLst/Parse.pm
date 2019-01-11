@@ -11,11 +11,8 @@ our @EXPORT_OK = qw(
    extractTag
    isParseableFileType
    isWriteableFileType
-   matchLineType
    normaliseFile
    parseSystemFiles
-   process000
-   processLine
    );
 
 use Carp;
@@ -32,6 +29,7 @@ use TidyLst::Convert qw(
    doLineConversions
    doTokenConversions
    );
+
 use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
@@ -59,10 +57,7 @@ use TidyLst::Variable;
 
 sub check_clear_tag_order;
 
-my $className         = "";
-my $sourceCurrentFile = "";
-my %classSpellTypes   = ();
-my %spellsForEQMOD    = ();
+my $className = "";
 
 
 # Valid filetype are the only ones that will be parsed Some filetype are valid
@@ -80,53 +75,32 @@ my %parsableFileType = (
    '#EXTRAFILE'    => 1,
    PCC             => 1,
 
-   ABILITY         => \&FILETYPE_parse,
-   ABILITYCATEGORY => \&FILETYPE_parse,
-   ALIGNMENT       => \&FILETYPE_parse,
-   ARMORPROF       => \&FILETYPE_parse,
-   BIOSET          => \&FILETYPE_parse,
-   CLASS           => \&FILETYPE_parse,
-   COMPANIONMOD    => \&FILETYPE_parse,
-   DATACONTROL     => \&FILETYPE_parse,
-   DEITY           => \&FILETYPE_parse,
-   DOMAIN          => \&FILETYPE_parse,
-   EQUIPMENT       => \&FILETYPE_parse,
-   EQUIPMOD        => \&FILETYPE_parse,
-   FEAT            => \&FILETYPE_parse,
-   GLOBALMODIFIER  => \&FILETYPE_parse,
-   KIT             => \&FILETYPE_parse,
-   LANGUAGE        => \&FILETYPE_parse,
-   RACE            => \&FILETYPE_parse,
-   SAVE            => \&FILETYPE_parse,
-   SHIELDPROF      => \&FILETYPE_parse,
-   SKILL           => \&FILETYPE_parse,
-   SPELL           => \&FILETYPE_parse,
-   STAT            => \&FILETYPE_parse,
-   TEMPLATE        => \&FILETYPE_parse,
-   VARIABLE        => \&FILETYPE_parse,
-   WEAPONPROF      => \&FILETYPE_parse,
+   ABILITY         => \&parseFile,
+   ABILITYCATEGORY => \&parseFile,
+   ALIGNMENT       => \&parseFile,
+   ARMORPROF       => \&parseFile,
+   BIOSET          => \&parseFile,
+   CLASS           => \&parseFile,
+   COMPANIONMOD    => \&parseFile,
+   DATACONTROL     => \&parseFile,
+   DEITY           => \&parseFile,
+   DOMAIN          => \&parseFile,
+   EQUIPMENT       => \&parseFile,
+   EQUIPMOD        => \&parseFile,
+   FEAT            => \&parseFile,
+   GLOBALMODIFIER  => \&parseFile,
+   KIT             => \&parseFile,
+   LANGUAGE        => \&parseFile,
+   RACE            => \&parseFile,
+   SAVE            => \&parseFile,
+   SHIELDPROF      => \&parseFile,
+   SKILL           => \&parseFile,
+   SPELL           => \&parseFile,
+   STAT            => \&parseFile,
+   TEMPLATE        => \&parseFile,
+   VARIABLE        => \&parseFile,
+   WEAPONPROF      => \&parseFile,
 );
-
-
-
-
-
-=head2 setParseRoutine
-
-   placeholder, will be replaced when the script is split up.
-
-=cut
-
-sub setParseRoutine {
-   my ($ref) = @_;
-
-   # Replace the placeholder routines with the routine from the script
-   for my $key (keys %parsableFileType) {
-      if (ref $parsableFileType{$key} eq 'CODE') {
-         $parsableFileType{$key} = $ref;
-      }
-   }
-}
 
 
 
@@ -134,18 +108,20 @@ sub setParseRoutine {
 
 
 ###############################################################
-# FILETYPE_parse
+# parseFile
 # --------------
 #
 # This function uses the information of TidyLst::Parse::parseControl to
-# identify the curent line type and parse it.
+# parse the curent line type and parse it.
 #
 # Parameters: $fileType  = The type of the file has defined by the .PCC file
 #             $lines_ref = Reference to an array containing all the lines of the file
 #             $file      = File name to use with the logger
 
-sub FILETYPE_parse {
+sub parseFile {
    my ($fileType, $lines_ref, $file) = @_;
+
+   my $log = getLogger();
 
    ##################################################
    # Working variables
@@ -365,7 +341,7 @@ sub FILETYPE_parse {
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      processLine(\%line_tokens, $line);
+      processLine($line);
 
       ############################################################
       # Validate the line
@@ -375,7 +351,7 @@ sub FILETYPE_parse {
 
       ############################################################
       # .CLEAR order verification
-      check_clear_tag_order(\%line_tokens, $file, $lineNumi, $line);
+      check_clear_tag_order(\%line_tokens, $file, $lineNum, $line);
 
       #Last, we put the tokens and other line info in the @newlines array
       push @newlines, $newline;
@@ -403,7 +379,7 @@ sub FILETYPE_parse {
          my $nextIsHeader;
 
          if ($line_index + 1 <= $#newlines) {
-            my $next = $newlines[$line_index + 1][-1]
+            my $next = $newlines[$line_index + 1][-1];
 
             my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
             $nextIsHeader = $header && index($next->unsplit, $header) == 0;
@@ -428,7 +404,7 @@ sub FILETYPE_parse {
    ######################## Conversion #############################
    # We manipulate the tags for the whole file here
 
-   parseFile(\@newlines, $fileType, $file);
+   processFile(\@newlines, $fileType, $file);
 
    ##################################################
    ##################################################
@@ -1052,6 +1028,8 @@ sub check_clear_tag_order {
 
    my ($line_ref, $file_for_error, $line_for_error, $line) = @_;
 
+   my $log = getLogger();
+
    TAG:
    for my $tag (keys %$line_ref) {
 
@@ -1327,7 +1305,7 @@ sub normaliseFile {
 
 
 ###############################################################
-# parseFile
+# processFile
 # ------------------------
 #
 # This function does additional parsing on each file once
@@ -1357,9 +1335,11 @@ sub normaliseFile {
    my %class_spell;
    my %domain_spell;
 
-   sub parseFile {
+   sub processFile {
 
       my ( $lines_ref, $filetype, $filename ) = @_;
+
+      my $log = getLogger();
 
       ###############################################################
       # Reformat multiple lines to one line for RACE and TEMPLATE.
@@ -2102,7 +2082,7 @@ sub parseSystemFiles {
    # Set the header for the error messages
    $log->header(TidyLst::LogHeader::get('System'));
 
-   # Get the Unix direcroty separator even in a Windows environment
+   # Get the Unix directory separator even in a Windows environment
    $systemFilePath =~ tr{\\}{/};
 
    # Verify if the gameModes directory is present
@@ -2378,9 +2358,13 @@ sub process000 {
 
 sub processLine {
 
-   my ($lineTokens, $line) = @_;
+   my ($line) = @_;
 
    my $log = getLogger();
+
+   ############################################################
+   ######################## Conversion ########################
+   # We manipulate the tags for the line here
    
    doLineConversions($line);
 
@@ -2400,347 +2384,123 @@ sub processLine {
       }
    };
 
-
-
-
-   ##################################################################
-   #
-   #
-   # For items with TYPE:Boot, Glove, Bracer, we must check for plural
-   # form and add a SLOTS:2 tag is the item is plural.
-
-   if (   isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
-      && $line->isType('EQUIPMENT')
-      && !$line->hasColumn('SLOTS') )
-   {
-      my $equipment_name = getEntityName('EQUIPMENT', $lineTokens);
-
-      if ( $line->hasColumn('TYPE') ) {
-         my $type = $lineTokens->{'TYPE'}[0];
-         if ( $type =~ /(Boot|Glove|Bracer)/ ) {
-            if (   $1 eq 'Boot' && $equipment_name =~ /boots|sandals/i
-               || $1 eq 'Glove'  && $equipment_name =~ /gloves|gauntlets|straps/i
-               || $1 eq 'Bracer' && $equipment_name =~ /bracers|bracelets/i )
-            {
-               $lineTokens->{'SLOTS'} = ['SLOTS:2'];
-               $log->warning(
-                  qq{"SLOTS:2" added to "$equipment_name"},
-                  $line->file,
-                  $line->num
-               );
-            }
-            else {
-               $log->error( qq{"$equipment_name" is a $1}, $line->file, $line->num );
-            }
-         }
-      }
-      else {
-         $log->warning(
-            qq{$equipment_name has no TYPE.},
-            $line->file,
-            $line->num
-         ) unless $equipment_name =~ /.MOD$/i;
-      }
-   }
-
-   ##################################################################
-   # #[ 677962 ] The DMG wands have no charge.
-   #
-   # Any Wand that do not have a EQMOD tag most have one added.
-   #
-   # The syntax for the new tag is
-   # EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]SPELLLEVEL[$spell_level]CASTERLEVEL[$caster_level]CHARGES[50]
-   #
-   # The $spell_level will also be extracted from the CLASSES tag.
-   # The $caster_level will be $spell_level * 2 -1
-
-   if ( isConversionActive('EQUIPMENT: generate EQMOD') ) {
-      if (   $line->isType('SPELL')
-         && ( $line->hasColumn('CLASSES') ) )
-      {
-         my $spell_name  = $lineTokens->{'000SpellName'}[0];
-         my $spell_level = -1;
-
-         CLASS:
-         for ( split '\|', $lineTokens->{'CLASSES'}[0] ) {
-            if ( index( $_, 'Wizard' ) != -1 || index( $_, 'Cleric' ) != -1 ) {
-               $spell_level = (/=(\d+)$/)[0];
-               last CLASS;
-            }
-         }
-
-         $spellsForEQMOD{$spell_name} = $spell_level
-         if $spell_level > -1;
-
-      }
-      elsif ($line->isType('EQUIPMENT')
-         && ( !$line->hasColumn('EQMOD') ) )
-      {
-         my $equip_name = $lineTokens->{'000EquipmentName'}[0];
-         my $spell_name;
-
-         if ( $equip_name =~ m{^Wand \((.*)/(\d\d?)(st|rd|th) level caster\)} ) {
-            $spell_name = $1;
-            my $caster_level = $2;
-
-            if ( exists $spellsForEQMOD{$spell_name} ) {
-               my $spell_level = $spellsForEQMOD{$spell_name};
-               my $eqmod_tag   = "EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]"
-               . "SPELLLEVEL[$spell_level]"
-               . "CASTERLEVEL[$caster_level]CHARGES[50]";
-               $lineTokens->{'EQMOD'}    = [$eqmod_tag];
-               $lineTokens->{'BASEITEM'} = ['BASEITEM:Wand']
-               unless $line->hasColumn('BASEITEM');
-               delete $lineTokens->{'COST'} if $line->hasColumn('COST');
-               $log->warning(
-                  qq{$equip_name: removing "COST" and adding "$eqmod_tag"},
-                  $line->file,
-                  $line->num
-               );
-            }
-            else {
-               $log->warning(
-                  qq($equip_name: not enough information to add charges),
-                  $line->file,
-                  $line->num
-               );
-            }
-         }
-         elsif ( $equip_name =~ /^Wand \((.*)\)/ ) {
-            $spell_name = $1;
-            if ( exists $spellsForEQMOD{$spell_name} ) {
-               my $spell_level  = $spellsForEQMOD{$spell_name};
-               my $caster_level = $spell_level * 2 - 1;
-               my $eqmod_tag   = "EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]"
-               . "SPELLLEVEL[$spell_level]"
-               . "CASTERLEVEL[$caster_level]CHARGES[50]";
-               $lineTokens->{'EQMOD'} = [$eqmod_tag];
-               delete $lineTokens->{'COST'} if $line->hasColumn('COST');
-               $log->warning(
-                  qq{$equip_name: removing "COST" and adding "$eqmod_tag"},
-                  $line->file,
-                  $line->num
-               );
-            }
-            else {
-               $log->warning(
-                  qq{$equip_name: not enough information to add charges},
-                  $line->file,
-                  $line->num
-               );
-            }
-         }
-         elsif ( $equip_name =~ /^Wand/ ) {
-            $log->warning(
-               qq{$equip_name: not enough information to add charges},
-               $line->file,
-               $line->num
-            );
-         }
-      }
-   }
-
-
-   ##################################################################
-   # [ 653596 ] Add a TYPE tag for all SPELLs
-   # .
-
-   if (   isConversionActive('SPELL:Add TYPE tags')
-      && $line->hasColumn('SPELLTYPE')
-      && $line->istype('CLASS')
-   ) {
-
-      # We must keep a list of all the SPELLTYPE for each class.
-      # It is assumed that SPELLTYPE cannot be found more than once
-      # for the same class. It is also assumed that SPELLTYPE has only
-      # one value. SPELLTYPE:Any is ignored.
-
-      my $className = getEntityName('CLASS', $lineTokens);
-      SPELLTYPE_TAG:
-      for my $spelltype_tag ( values %{ $lineTokens->{'SPELLTYPE'} } ) {
-         my $spelltype = "";
-         ($spelltype) = ($spelltype_tag =~ /SPELLTYPE:(.*)/);
-         next SPELLTYPE_TAG if $spelltype eq "" or uc($spelltype) eq "ANY";
-         $classSpellTypes{$className}{$spelltype}++;
-      }
-   }
-
-   if (isConversionActive('SPELL:Add TYPE tags') 
-      && $line->isType('SPELL') 
-   ) {
-
-      # For each SPELL we build the TYPE tag or we add to the
-      # existing one.
-      # The .MOD SPELL are ignored.
-
-   }
-
-   # SOURCE line replacement
-   # =======================
-   # Replace the SOURCELONG:xxx|SOURCESHORT:xxx|SOURCEWEB:xxx
-   # with the values found in the .PCC of the same directory.
-   #
-   # Only the first SOURCE line found is replaced.
-
-   if (isConversionActive('SOURCE line replacement')
-      && $line->isType('SOURCE') 
-      && $sourceCurrentFile ne $line->file )
-   {
-
-      my $inputpath =  getOption('inputpath');
-      # Only the first SOURCE tag is replaced.
-      if ( dirHasSourceTags($line->file) ) {
-
-         # We replace the line with a concatanation of SOURCE tags found in
-         # the directory .PCC
-         my %line_tokens;
-         while ( my ( $tag, $value ) = each %{ getDirSourceTags($line->file) } )
-         {
-            $line_tokens{$tag} = [$value];
-            $sourceCurrentFile = $line->file;
-         }
-
-      } elsif ( $line->file =~ / \A ${inputpath} /xmsi ) {
-         # We give this notice only if the curent file is under getOption('inputpath').
-         # If -basepath is used, there could be files loaded outside of the -inputpath
-         # without their PCC.
-         $log->notice( "No PCC source information found", $line->file, $line->num );
-      }
-   }
-
    # Extract lists
    # ====================
    # Export each file name and log them with the filename and the
    # line number
 
-   if ( isConversionActive('Export lists') ) {
+   if (getOption('exportlist')) {
+
       my $filename = $line->file;
-      $filename =~ tr{/}{\\};
+      $filename =~ tr{/}{\\} if ($^O eq "MSWin32");
+
+      my $name = $line->entityName;
 
       if ( $line->isType('SPELL') ) {
 
-         # Get the spell name
-         my $spellname  = $lineTokens->{'000SpellName'}[0];
+         # Get the spell name and source page
          my $sourcepage = "";
-         $sourcepage = $lineTokens->{'SOURCEPAGE'}[0] if $line->hasColumn('SOURCEPAGE');
 
-
-
-
+         if ($line->hasColumn('SOURCEPAGE')) {
+            $sourcepage = $line->valueInFirstTokenInColumn('SOURCEPAGE');
+         }
 
          # Write to file
          TidyLst::Report::printToExportList('SPELL', 
-            makeExportListString($spellname, $sourcepage, $line->num, $filename));
+            makeExportListString($name, $sourcepage, $line->num, $filename));
       }
+
       if ( $line->isType('CLASS') ) {
-         my $class = ( $lineTokens->{'000ClassName'}[0] =~ /^CLASS:(.*)/ )[0];
-         if ($className ne $class) {
+
+         # Only one report per class
+         if ($className ne $name) {
             TidyLst::Report::printToExportList('CLASS', 
-               makeExportListString($class, $line->num, $filename));
+               makeExportListString($className, $line->num, $filename));
          };
-         $className = $class;
+         $className = $name;
       }
 
       if ( $line->isType('DEITY') ) {
          TidyLst::Report::printToExportList('DEITY', 
-            makeExportListString($lineTokens->{'000DeityName'}[0], $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('DOMAIN') ) {
          TidyLst::Report::printToExportList('DOMAIN', 
-            makeExportListString($lineTokens->{'000DomainName'}[0], $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMENT') ) {
-         my $equipname  = getEntityName($line->type, $lineTokens);
+
          my $outputname = "";
-         $outputname = substr( $lineTokens->{'OUTPUTNAME'}[0], 11 )
-         if $line->hasColumn('OUTPUTNAME');
-         my $replacementname = $equipname;
-         if ( $outputname && $equipname =~ /\((.*)\)/ ) {
-            $replacementname = $1;
+
+         if ($line->hasColumn('OUTPUTNAME')) {
+            $outputname = $line->valueInFirstTokenInColumn('OUTPUTNAME'); 
+
+            if ($outputname =~ /\[NAME\]/) {
+               my $rep = ($name =~ /\((.*)\)/) ? $1 : $name;
+               $outputname =~ s/\[NAME\]/$rep/;
+            }
          }
-         $outputname =~ s/\[NAME\]/$replacementname/;
+
          TidyLst::Report::printToExportList('EQUIPMENT', 
-            makeExportListString($equipname, $outputname, $line->num, $filename));
+            makeExportListString($name, $outputname, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMOD') ) {
-         my $equipmodname = getEntityName($line->type, $lineTokens);
-         my ( $key, $type ) = ( "", "" );
-         $key  = substr( $lineTokens->{'KEY'}[0],  4 ) if $line->hasColumn('KEY');
-         $type = substr( $lineTokens->{'TYPE'}[0], 5 ) if $line->hasColumn('TYPE');
+
+         my $key  = $line->hasColumn('KEY')  ? $line->valueInFirstTokenInColumn('KEY') : '';
+         my $type = $line->hasColumn('TYPE') ? $line->valueInFirstTokenInColumn('TYPE') : '';
+
          TidyLst::Report::printToExportList('EQUIPMOD', 
-            makeExportListString($equipmodname, $key, $type, $line->num, $filename));
+            makeExportListString($name, $key, $type, $line->num, $filename));
       }
 
       if ( $line->isType('FEAT') ) {
-         my $featname = getEntityName($line->type, $lineTokens);
          TidyLst::Report::printToExportList('FEAT', 
-            makeExportListString($featname, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT STARTPACK') ) {
-         my ($kitname) = (getEntityName($line->type, $lineTokens) =~ /\A STARTPACK: (.*) \z/xms );
          TidyLst::Report::printToExportList('KIT', 
-            makeExportListString($kitname, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT TABLE') ) {
-         my ($tablename) = ( getEntityName($line->type, $lineTokens) =~ /\A TABLE: (.*) \z/xms );
          TidyLst::Report::printToExportList('TABLE', 
-            makeExportListString($tablename, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('LANGUAGE') ) {
-         my $languagename = getEntityName($line->type, $lineTokens);
          TidyLst::Report::printToExportList('LANGUAGE', 
-            makeExportListString($languagename, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('RACE') ) {
-         my $racename = getEntityName($line->type, $lineTokens);
 
-         my $race_type = q{};
-         $race_type = $lineTokens->{'RACETYPE'}[0] if $line->hasColumn('RACETYPE');
-         $race_type =~ s{ \A RACETYPE: }{}xms;
-
-         my $race_sub_type = q{};
-         $race_sub_type = $lineTokens->{'RACESUBTYPE'}[0] if $line->hasColumn('RACESUBTYPE');
-         $race_sub_type =~ s{ \A RACESUBTYPE: }{}xms;
+         my $type    = $line->valueInFirstTokenInColumn('RACETYPE');
+         my $subType = $line->valueInFirstTokenInColumn('RACESUBTYPE');
 
          TidyLst::Report::printToExportList('RACE', 
-            makeExportListString($racename, $race_type, $race_sub_type, $line->num, $filename));
+            makeExportListString($name, $type, $subType, $line->num, $filename));
       }
 
       if ( $line->isType('SKILL') ) {
-         my $skillname = getEntityName($line->type, $lineTokens);
+
          TidyLst::Report::printToExportList('SKILL', 
-            makeExportListString($skillname, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('TEMPLATE') ) {
-         my $template_name = getEntityName($line->type, $lineTokens);
+
          TidyLst::Report::printToExportList('TEMPLATE', 
-            makeExportListString($template_name, $line->num, $filename));
+            makeExportListString($name, $line->num, $filename));
       }
    }
 
-   ############################################################
-   ######################## Conversion ########################
-   # We manipulate the tags for the line here
-
-   if ( isConversionActive('Generate BONUS and PRExxx report') ) {
-      for my $tag_type ( sort keys %$lineTokens ) {
-         if ( $tag_type =~ /^BONUS|^!?PRE/ ) {
-            addToBonusAndPreReport($lineTokens, $line->type, $tag_type);
-         }
-      }
+   if (getOption('bonusreport')) {
+      $line->addToBonusAndPreReport
    }
-
-   1;
 }
-
-
 
 1;

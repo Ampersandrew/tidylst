@@ -26,7 +26,6 @@ use TidyLst::Data qw(
    setEntityValid
    );
 use TidyLst::LogFactory qw(getLogger);
-use TidyLst::Options qw(getOption isConversionActive);
 
 
 =head2 scanForDeprecatedTokens
@@ -362,7 +361,7 @@ sub validateEQMODKey {
    if ( $line->hasColumn('KEY') ) {
 
       # We extract the key name
-      my $token = $line->getFirstTokenInColumn('KEY');
+      my $token = $line->firstTokenInColumn('KEY');
       my $key   = $token->value;
 
       setEntityValid("EQUIPMOD Key", $key);
@@ -503,7 +502,7 @@ sub validateLine {
 
       my $key;
       if ($line->hasColumn('KEY')) {
-         $key = $line->getFirstTokenInColumn('KEY');
+         $key = $line->firstTokenInColumn('KEY');
       }
 
       # We hunt for the bad comma.
@@ -549,7 +548,7 @@ sub validateLine {
       if ($line->hasColumn('CATEGORY')) {
 
          if (! $line->firstColumnMatches('CATEGORY', qr"CATEGORY:(?:Feat|Special Ability)")) {
-            my $token = $line->getFirstTokenInColumn('CATEGORY');
+            my $token = $line->firstTokenInColumn('CATEGORY');
 
             $log->info(
                q(The CATEGORY tag must have the value of Feat or Special Ability ) .
@@ -568,7 +567,7 @@ sub validateLine {
 
       if ( $line->hasColumn('CHOOSE') ) {
 
-         my $token = $line->getFirstTokenInColumn('CHOOSE');
+         my $token  = $line->firstTokenInColumn('CHOOSE');
          my $choose = $token->fullToken;
 
          if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(NUMBER[^|]*)/)) {

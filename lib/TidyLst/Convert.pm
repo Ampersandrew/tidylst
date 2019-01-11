@@ -22,6 +22,12 @@ use TidyLst::Data qw(incCountInvalidTags);
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 
+
+my $sourceCurrentFile = "";
+my %classSpellTypes   = ();
+my %spellsForEQMOD    = ();
+
+
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
    BIND            BLIND
@@ -316,6 +322,53 @@ sub addGenericDnDVersion {
       if ($token->origToken ne $token->fullRealToken) {
          reportReplacement($token);
       }
+   }
+}
+
+
+=head2 addSlotsToPlural
+
+   For items with TYPE:Boot, Glove, Bracer, we must check for plural form and
+   add a SLOTS:2 tag is the item is plural.
+
+=cut
+
+sub addSlotsToPlural {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+
+   my $equipment_name = $line->entityName;
+
+   if ( $line->hasColumn('TYPE') ) {
+
+      for my $toCheck (qw(Boot Glove Bracer)) {
+         if ($line->hasType($toCheck)) {
+            if (  $1 eq 'Boot'   && $equipment_name =~ /boots|sandals/i
+               || $1 eq 'Glove'  && $equipment_name =~ /gloves|gauntlets|straps/i
+               || $1 eq 'Bracer' && $equipment_name =~ /bracers|bracelets/i) {
+
+               my $token = $line->tokenFor(fullToken => 'SLOTS:2');
+
+               $log->warning(
+                  qq{"SLOTS:2" added to "$equipment_name"},
+                  $line->file,
+                  $line->num
+               )
+
+            } else {
+               $log->error( qq{"$equipment_name" is a $1}, $line->file, $line->num )
+            }
+         }
+      }
+
+   } elsif ($equipment_name !~ /.MOD$/i) {
+      $log->warning(
+         qq{$equipment_name has no TYPE.},
+         $line->file,
+         $line->num
+      ) 
    }
 }
 
@@ -743,7 +796,7 @@ sub convertNaturalAttack {
    # First we verify if if there is only one melee attack.
    if ($line->columnHasSingleToken('NATURALATTACKS')) {
 
-      my $token = $line->getFirstTokenInColumn('NATURALATTACKS');
+      my $token = $line->firstTokenInColumn('NATURALATTACKS');
       my @NatAttacks = split '\|', $token->value;
       my ($attackName, $types, $numAttacks, $damage) = split ',', $NatAttacks[0];
 
@@ -1143,66 +1196,66 @@ sub convertRaceClimbandSwim {
 
 =cut
 
-      sub convertRaceNoProfReq {
+sub convertRaceNoProfReq {
 
-         my ($line) = @_;
+   my ($line) = @_;
 
-      my $log = getLogger();
+   my $log = getLogger();
 
-      my $needNoProfReq = 1;
+   my $needNoProfReq = 1;
 
-      # Is NoProfReq already present?
-      if ($line->hasColumn('AUTO:WEAPONPROF')) {
-         if ($line->firstColumnMatches('AUTO:WEAPONPROF', /NoProfReq/) ) {
-            $needNoProfReq = 0
-         }
-      }
-
-      # Default when no HANDS tag is present
-      my $nbHands = 2;        
-
-      # How many hands?
-      if ($line->hasColumn('HANDS')) {
-
-         if ($line->firstColumnMatches('HANDS', /HANDS:(\d+)/) ) {
-            $nbHands = $1;
-
-         } else {
-            my $token = $line->getFirstTokenInColumn('HANDS');
-
-            $log->info(
-               q(Invalid value in tag ") . $token->fullToken . q("),
-               $line->file,
-               $line->num
-            );
-            $needNoProfReq = 0;
-         }
-      }
-
-      if ( $needNoProfReq && $nbHands ) {
-         if ($line->hasColumn('AUTO:WEAPONPROF')) {
-            my $token = $line->getFirstTokenInColumn('AUTO:WEAPONPROF');
-
-            $log->warning(
-               q(Adding "TYPE=NoProfReq" to tag ") . $token->fullToken . q("),
-               $line->file,
-               $line->num
-            );
-            $token->value($token->value . "|TYPE=NoProfReq");
-
-         } else {
-
-            # Create a new token for the lineType, line number and file name
-            $line->add($line->tokenFor(fullToken => "AUTO:WEAPONPROF|TYPE=NoProfReq"));
-
-            $log->warning(
-               q{Creating new token "AUTO:WEAPONPROF|TYPE=NoProfReq"},
-               $line->file,
-               $line->num
-            );
-         }
+   # Is NoProfReq already present?
+   if ($line->hasColumn('AUTO:WEAPONPROF')) {
+      if ($line->firstColumnMatches('AUTO:WEAPONPROF', /NoProfReq/) ) {
+         $needNoProfReq = 0
       }
    }
+
+   # Default when no HANDS tag is present
+   my $nbHands = 2;        
+
+   # How many hands?
+   if ($line->hasColumn('HANDS')) {
+
+      if ($line->firstColumnMatches('HANDS', /HANDS:(\d+)/) ) {
+         $nbHands = $1;
+
+      } else {
+         my $token = $line->firstTokenInColumn('HANDS');
+
+         $log->info(
+            q(Invalid value in tag ") . $token->fullToken . q("),
+            $line->file,
+            $line->num
+         );
+         $needNoProfReq = 0;
+      }
+   }
+
+   if ( $needNoProfReq && $nbHands ) {
+      if ($line->hasColumn('AUTO:WEAPONPROF')) {
+         my $token = $line->firstTokenInColumn('AUTO:WEAPONPROF');
+
+         $log->warning(
+            q(Adding "TYPE=NoProfReq" to tag ") . $token->fullToken . q("),
+            $line->file,
+            $line->num
+         );
+         $token->value($token->value . "|TYPE=NoProfReq");
+
+      } else {
+
+         # Create a new token for the lineType, line number and file name
+         $line->add($line->tokenFor(fullToken => "AUTO:WEAPONPROF|TYPE=NoProfReq"));
+
+         $log->warning(
+            q{Creating new token "AUTO:WEAPONPROF|TYPE=NoProfReq"},
+            $line->file,
+            $line->num
+         );
+      }
+   }
+}
 
 
 =head2 convertSpells
@@ -1343,7 +1396,7 @@ sub convertVisionCommaToBar {
    my ($line) = @_;
 
    my $log = getLogger();
-   my $token = $line->getFirstTokenInColumn('VISION');
+   my $token = $line->firstTokenInColumn('VISION');
 
    $log->warning(
       qq(Removing ") . $token->fullToken . q("),
@@ -1409,6 +1462,84 @@ sub convertVisionCommas {
       }
    }
 }
+
+
+=head2 convertWandForEqmod
+
+   Any Wand that does not have a EQMOD tag must have one added.
+
+   The syntax for the new tag is
+   EQMOD:SE_50TRIGGER|SPELLNAME[$spell_name]SPELLLEVEL[$spell_level]CASTERLEVEL[$caster_level]CHARGES[50]
+
+   $spell_level is extracted from the CLASSES tag.
+   $caster_level (if not explicitly given) is $spell_level * 2 - 1
+
+=cut
+
+sub convertWandForEqmod {
+
+   my ($line) = @_;
+
+   # If this is a spell line, populate the hash that is used by
+   # equipment lines. 
+   if ($line->isType('SPELL') && $line->hasColumn('CLASSES')) {
+
+      my $level = $line->levelForWizardOrCleric();
+
+      if ($level > -1) {
+         $spellsForEQMOD{$line->entityName} = $level
+      }
+
+   } elsif ($line->isType('EQUIPMENT') && !$line->hasColumn('EQMOD')) {
+
+      my $equip_name = $line->entityName;
+      my $doWarn     = 0;
+
+      if ( $equip_name =~ m{^Wand \((.*)/(\d\d?)(st|rd|th) level caster\)} ) {
+
+         my $name = $1;
+
+         if (exists $spellsForEQMOD{$name}) {
+
+            my $sl = $spellsForEQMOD{$name};
+            my $cl = $2;
+
+            replaceWithEqmod($line, $name, $sl, $cl);
+
+         } else {
+            $doWarn = 1;
+         }
+
+      } elsif ( $equip_name =~ /^Wand \((.*)\)/ ) {
+
+         my $name = $1;
+
+         if (exists $spellsForEQMOD{$name}) {
+
+            my $sl = $spellsForEQMOD{$name};
+            my $cl = $sl * 2 - 1;
+
+            replaceWithEqmod($line, $name, $sl, $cl);
+
+         } else {
+            $doWarn = 1;
+         }
+
+      } elsif ( $equip_name =~ /^Wand/ ) {
+         $doWarn = 1;
+      }
+
+      if ($doWarn) {
+         getLogger()->warning(
+            qq{$equip_name: not enough information to add charges},
+            $line->file,
+            $line->num
+         )
+      }
+   }
+}
+
+
 
 =head2 convertWeaponAuto
 
@@ -1487,6 +1618,13 @@ sub doLineConversions {
 
    my ($line) = @_;
 
+   if (isConversionActive('ALL: , to | in VISION')
+      && $line->hasColumn('VISION')
+      && $line->firstColumnMatches('VISION', /(\.ADD,|1,)(.*)/i)) {
+
+      convertVisionCommaToBar($line);
+   }
+
    if (isConversionActive('ALL:Convert ADD:SA to ADD:SAB')
       && $line->hasColumn('ADD:SA')) {
 
@@ -1540,11 +1678,24 @@ sub doLineConversions {
       replaceAltCritical($line)
    }
 
+   if (isConversionActive('EQUIPMENT: generate EQMOD')) {
+
+      convertWandForEqmod($line);
+   }
+
    if (isConversionActive('EQUIP:no more MOVE')
       && $line->isType("EQUIPMENT")
       && $line->hasColumn('MOVE')) {
 
       $line->replaceTag('MOVE')
+   }
+
+   if (isConversionActive('EQUIPMENT: SLOTS:2 for plurals')
+      && $line->isType('EQUIPMENT')
+      && !$line->hasColumn('SLOTS') )
+   {
+
+      addSlotsToPlural($line);
    }
 
    if (isConversionActive('RACE:BONUS SKILL Climb and Swim')
@@ -1597,18 +1748,32 @@ sub doLineConversions {
       $line->replaceTag('TYPE', 'RACETYPE')
    }
 
+   if (isConversionActive('SOURCE line replacement')
+      && $line->isType('SOURCE') 
+      && $sourceCurrentFile ne $line->file ) {
+
+      sourceReplacement($line);
+   }
+
+   if (isConversionActive('SPELL:Add TYPE tags')
+      && $line->istype('CLASS')
+      && $line->hasColumn('SPELLTYPE')) {
+
+      populateSpellType($line);
+   }
+
+   if (isConversionActive('SPELL:Add TYPE tags') 
+      && $line->isType('SPELL')) {
+
+      # For each SPELL we build the TYPE tag or we add to the existing one.
+      # The .MOD SPELL are ignored.
+   }
+
    if (isConversionActive('WEAPONPROF:No more SIZE')
       && $line->isType("WEAPONPROF")
       && $line->hasColumn('SIZE')) {
 
       $line->replaceTag('SIZE')
-   }
-
-   if (isConversionActive('ALL: , to | in VISION')
-      && $line->hasColumn('VISION')
-      && $line->firstColumnMatches('VISION', /(\.ADD,|1,)(.*)/i)) {
-
-      convertVisionCommaToBar($line);
    }
 
 
@@ -1668,6 +1833,30 @@ sub ensureLeadingDigit {
       # There is no ',', we need to add one
       $token->value($token->value =~ s/ PRERACE: (?!\d) /PRERACE:1,/xmsgr);
       reportReplacement($token);
+   }
+}
+
+
+=head2 populateSpellType
+
+   We must keep a list of all the SPELLTYPE for each class.  It is assumed that
+   SPELLTYPE cannot be found more than once for the same class. It is also
+   assumed that SPELLTYPE has only one value. SPELLTYPE:Any is ignored.
+
+=cut
+
+sub populateSpellType {
+
+   my ($line) = @_;
+
+   SPELLTYPE_TAG:
+   for my $token (@{$line->column('SPELLTYPE')}) {
+
+      if ($token->value eq "" or uc($token->value) eq "ANY") {
+         next SPELLTYPE_TAG 
+      }
+
+      $classSpellTypes{$line->entityName}{$token->value}++;
    }
 }
 
@@ -1869,6 +2058,41 @@ sub replaceAltCritical {
    }
 }
 
+=head2 replaceWithEqmod
+
+   Replace the cost Tag in wands with an EQMOD and BASEITEM
+
+=cut
+
+sub replaceWithEqmod {
+
+   my ($line, $name, $sl, $cl) = @_;
+
+   my $tag   = "EQMOD";
+   my $value = "SE_50TRIGGER|SPELLNAME[$name]SPELLLEVEL[$sl]" 
+      . "CASTERLEVEL[$cl]CHARGES[50]";
+
+   my $token = $line->tokenFor(tag => $tag, value => $value);
+   $line->add($token);
+
+   if (! $line->hasColumn('BASEITEM')) {
+      $line->add($line->tokenFor(tag => 'BASEITEM', value => 'Wand'));
+   }
+
+   if ($line->hasColumn('COST')) {
+      $line->replaceTag('COST');
+   }
+
+   getLogger()->warning(
+      qq($name: removing "COST" and adding ") 
+      . $token->fullToken . q("),
+      $line->file,
+      $line->num
+   )
+}
+
+
+
 =head2 reportRaceCSkill
 
    In the RACE files, all the CSKILL must be replaced with MONCSKILL but only
@@ -1898,8 +2122,9 @@ sub reportRaceCSkill {
 sub reportReplacement {
 
    my ($token, $suffix) = @_;
-   my $output = (defined $suffix) ? qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . qq(" $suffix)
-                                  : qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . q(");
+   my $output = (defined $suffix) 
+      ? qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . qq(" $suffix)
+      : qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . q(");
 
    getLogger()->warning($output, $token->file, $token->line);
 }
@@ -1920,6 +2145,45 @@ sub reportWillpower {
       my $output = q{"} . $token->fullToken . q{","} . $token->line . q{","} . $token->file . qq{"\n};
 
       TidyLst::Report::printToExportList($output);
+   }
+}
+
+
+=head2 sourceReplacement
+
+   Replace the SOURCELONG:xxx|SOURCESHORT:xxx|SOURCEWEB:xxx
+   with the values found in the .PCC of the same directory.
+
+   Only the first SOURCE line found is replaced.
+
+=cut
+
+sub sourceReplacement {
+
+   my ($line) = @_;
+
+   my $inputpath = getOption('inputpath');
+
+   if (dirHasSourceTags($line->file) ) {
+
+      # Only the first SOURCE tag is replaced.
+      $sourceCurrentFile = $line->file;
+
+      # We replace the line with a concatanation of SOURCE tags found in
+      # the directory .PCC
+      $line->clearTokens;
+
+      my %tokens = %{getDirSourceTags($line->file)};
+      for my $token (values %tokens) {
+         $line->add($token);
+      }
+
+   } elsif ( $line->file =~ / \A ${inputpath} /xmsi ) {
+
+      # We give this notice only if the curent file is under getOption('inputpath').
+      # If -basepath is used, there could be files loaded outside of the -inputpath
+      # without their PCC.
+      getLogger()->notice( "No PCC source information found", $line->file, $line->num );
    }
 }
 
