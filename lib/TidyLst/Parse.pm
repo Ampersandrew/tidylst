@@ -55,7 +55,6 @@ use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
 
-sub check_clear_tag_order;
 
 my $className = "";
 
@@ -351,7 +350,7 @@ sub parseFile {
 
       ############################################################
       # .CLEAR order verification
-      check_clear_tag_order(\%line_tokens, $file, $lineNum, $line);
+      check_clear_tag_order($line);
 
       #Last, we put the tokens and other line info in the @newlines array
       push @newlines, $newline;
@@ -1018,106 +1017,21 @@ our %parseControl = (
    Verify that the .CLEAR tags are correctly put before the
    tags that they clear.
 
-   Parameter:  $line_ref         : Hash reference to the line
-               $file_for_error
-               $line_for_error
+   Parameter: $line
 
 =cut
 
 sub check_clear_tag_order {
 
-   my ($line_ref, $file_for_error, $line_for_error, $line) = @_;
-
-   my $log = getLogger();
+   my ($line) = @_;
 
    TAG:
-   for my $tag (keys %$line_ref) {
-
-      # if the current value is not an array, there is only one
-      # tag and no order to check.
-      next unless ref($line_ref->{$tag});
+   for my $column ($line->columns) {
 
       # if only one of a kind, skip the rest
-      next TAG if scalar @{$line_ref->{$tag}} <= 1;
+      next TAG if $line->columnHasSingleToken;
 
-      my %value_found;
-
-      if ( $tag eq "SA" ) {
-
-         # The SA tag is special because it is only checked
-         # up to the first (
-
-         for ( @{$line_ref->{$tag}} ) {
-
-            if (/:\.?CLEAR.?([^(]*)/) {
-
-               # clear tag either clear the whole thing,
-               # in which case it must be the very beginning,
-               # or it clear a particular value, in which case
-               # it must be before any such value.
-               if ( $1 ne "" ) {
-
-                  # Let's check if the value was found before
-                  if (exists $value_found{$1}) {
-                     $log->notice(  qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error )
-                  }
-
-               } else {
-
-                  # Let's check if any value was found before
-                  if (keys %value_found) {
-                     $log->notice(  qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error )
-                  }
-               }
-
-            } elsif ( / : ([^(]*) /xms ) {
-
-               # Let's store the value
-               $value_found{$1} = 1;
-
-            } else {
-               $log->error(
-                  "Didn't anticipate this tag: $_",
-                  $file_for_error,
-                  $line_for_error
-               );
-            }
-         }
-
-      } else {
-
-         for ( @{ $line_ref->{$tag} } ) {
-            if (/:\.?CLEAR.?(.*)/) {
-
-               # clear tag either clear the whole thing,
-               # in which case it must be the very beginning,
-               # or it clear a particular value, in which case
-               # it must be before any such value.
-               if ($1 ne "") {
-
-                  # Let's check if the value was found before
-                  if (exists $value_found{$1}) {
-                     $log->notice(qq{"$tag:$1" found before "$_"}, $file_for_error, $line_for_error)
-                  }
-
-               } else {
-
-                  # Let's check if any value was found before
-                  if (keys %value_found) {
-                     $log->notice(qq{"$tag" tag found before "$_"}, $file_for_error, $line_for_error)
-                  }
-               }
-
-            } elsif (/:(.*)/) {
-
-               # Let's store the value
-               $value_found{$1} = 1;
-
-            } else {
-               $log->error("Didn't anticipate this tag: $_", $file_for_error, $line_for_error)
-            }
-         }
-      }
+      $line->checkClear($column);
    }
 }
 

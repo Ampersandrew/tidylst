@@ -167,6 +167,83 @@ sub columnLength {
 
 
 
+=head2 checkClear
+
+   Check that the tags in this column are in the correct order for any CLEAR
+   tags that may be present.   
+
+=cut
+
+sub checkClear {
+
+   my ($self, $column) = @_;
+
+   my $log = getLogger();
+
+   my ($clearPat, $valPat);
+
+   if ($column eq "SA") {
+
+      # The SA tag is special because it is only checked
+      # up to the first (
+
+      $clearPat =  /\.?CLEAR.?([^(]*)/;
+      $valPat   =  /^([^(]*)/;
+
+   } else {
+
+      $clearPat =  /\.?CLEAR.?(.*)/;
+      $valPat   =  /(.*)/;
+   }
+
+   for my $token ( @{$self->column($column)} ) {
+
+      my %value_found;
+
+      if ($token->value =~ $clearPat) {
+
+         # A clear tag either clears the whole thing, in which case it
+         # must be at the very beginning, or it clears a particular
+         # value, in which case it must be before any such value.
+         if ( $1 ne "" ) {
+
+            # Let's check if the value was found before
+            if (exists $value_found{$1}) {
+               $log->notice(
+                  qq{"$column:$1" found before "} 
+                  . $token->fullRealValue . q{"},
+                  $self->file, 
+                  $self->num )
+            }
+
+         } else {
+
+            # Let's check if any value was found before
+            if (keys %value_found) {
+               $log->notice(
+                  qq{"$column" tag found before "} 
+                  . $token->fullRealValue . q{"}, 
+                  $self->file, 
+                  $self->num )
+            }
+         }
+
+      } elsif ($token->value =~ $valPat) {
+
+         # Let's store the value
+         $value_found{$1} = 1;
+
+      } else {
+         $log->error(
+            "Didn't anticipate this tag: " . $token->fullRealValue, 
+            $self->file, 
+            $self->num);
+      }
+   }
+}
+
+
+
 =head2 entityToken
 
    Return the token that holds the name of this entity
