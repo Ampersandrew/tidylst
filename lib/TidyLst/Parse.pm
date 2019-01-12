@@ -103,320 +103,6 @@ my %parsableFileType = (
 
 
 
-
-
-
-###############################################################
-# parseFile
-# --------------
-#
-# This function uses the information of TidyLst::Parse::parseControl to
-# parse the curent line type and parse it.
-#
-# Parameters: $fileType  = The type of the file has defined by the .PCC file
-#             $lines_ref = Reference to an array containing all the lines of the file
-#             $file      = File name to use with the logger
-
-sub parseFile {
-   my ($fileType, $lines_ref, $file) = @_;
-
-   my $log = getLogger();
-
-   ##################################################
-   # Working variables
-
-   my $curent_linetype = "";
-   my $lastMainLine  = -1;
-
-   my $curent_entity;
-
-   my @newlines;   # New line generated
-
-   ##################################################
-   ##################################################
-   # Phase I - Split line in tokens and parse
-   #               the tokens
-
-   my $lineNum = 1;
-   LINE:
-   for my $thisLine (@ {$lines_ref} ) {
-
-      my $line_info;
-
-      # Convert the non-ascii character in the line
-      my $newLine = convertEntities($thisLine);
-
-      # Remove spaces at the end of the line
-      $newLine =~ s/\s+$//;
-
-      # Remove spaces at the begining of the line
-      $newLine =~ s/^\s+//;
-
-      my $line = TidyLst::Line->new(
-         type     => $curent_linetype,
-         file     => $file,
-         unsplit  => $newLine,
-         entity   => $curent_entity,
-         num      => $lineNum,
-         lastMain => $lastMainLine,
-      );
-
-      # Skip comments and empty lines
-      if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
-
-         # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
-         next LINE;
-      }
-
-      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
-
-      # If we didn't find a record with info how to parse this line
-      if ( ! defined $line_info ) {
-         $log->warning(
-            qq(Can\'t find the line type for "$newLine"),
-            $file,
-            $lineNum
-         );
-
-         # We push the line as is.
-         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
-         next LINE;
-      }
-
-      # What type of line is it?
-      $curent_linetype = $line_info->{Linetype};
-
-      if ( $line_info->{Mode} == MAIN ) {
-
-         $lastMainLine = $lineNum - 1;
-
-      } elsif ( $line_info->{Mode} == SUB ) {
-
-         if ($lastMainLine == -1) {
-            $log->warning(
-               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
-               $file,
-               $lineNum
-            )
-         }
-
-      } elsif ( $line_info->{Mode} == SINGLE ) {
-
-         $lastMainLine = -1;
-
-      } else {
-
-         die qq(Invalid type for $curent_linetype);
-      }
-
-      # Got a line info hash, so update the entity and type in the line
-      $line->entity($curent_entity);
-      $line->type($line_info->{Linetype});
-      $line->lastMain($lastMainLine);
-
-      # Identify the deprecated tags.
-      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
-
-      # Split the line in tokens
-      my %line_tokens;
-
-      # By default, the tab character is used
-      my $sep = $line_info->{SepRegEx} || qr(\t+);
-
-      # We split the tokens, strip the spaces and silently remove the empty tags
-      # (empty tokens are the result of [tab][space][tab] type of chracter
-      # sequences).
-      # [ 975999 ] [tab][space][tab] breaks prettylst
-      my @tokens = 
-         grep { $_ ne q{} } 
-         map { s{ \A \s* | \s* \z }{}xmsg; $_ } 
-         split $sep, $newLine;
-
-      #First, we deal with the tag-less columns
-      COLUMN:
-      for my $column ( getEntityNameTag($curent_linetype) ) {
-
-         # If this line type does not have tagless first entry
-         if (not defined $column) {
-            last COLUMN;
-         }
-
-         # If the line has no tokens
-         if ( scalar @tokens == 0 ) {
-            last COLUMN;
-         }
-
-         # Grab the token from the front of the line
-         my $value = shift @tokens;
-
-         # We remove the enclosing quotes if any
-         if ($value =~ s/^"(.*)"$/$1/) {
-            $log->warning(
-               qq{Removing quotes around the '$value' tag},
-               $file,
-               $lineNum
-            )
-         }
-
-         # and add it to line_tokens
-         $line_tokens{$column} = [$value];
-
-         my $token =  TidyLst::Token->new(
-            tag       => $column,
-            value     => $value,
-            lineType  => $curent_linetype,
-            file      => $file,
-            line      => $lineNum,
-         );
-
-         $line->add($token);
-
-         # Statistic gathering
-         incCountValidTags($curent_linetype, $column);
-
-         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
-            last COLUMN if $exit;
-         }
-      }
-
-      # Second, let's parse the regular columns
-      for my $rawToken (@tokens) {
-
-         my ($extractedToken, $value) = 
-            extractTag($rawToken, $curent_linetype, $file, $lineNum);
-
-         # if extractTag returns a defined value, no further processing is
-         # neeeded. If tag is defined but value is not, then the tag that was
-         # returned is the cleaned token and should be processed further.
-         if ($extractedToken && not defined $value) {
-
-            my $token =  TidyLst::Token->new(
-               fullToken => $extractedToken,
-               lineType  => $curent_linetype,
-               file      => $file,
-               line      => $lineNum,
-            );
-
-            # Potentally modify the tag
-            $token->process();
-
-            my $tag = $token->tag;
-
-            if (exists $line_tokens{$tag} && ! isValidMultiTag($curent_linetype, $tag)) {
-               $log->notice(
-                  qq{The tag "$tag" should not be used more than once on the same } 
-                  . $curent_linetype . qq{ line.\n},
-                  $file,
-                  $lineNum
-               );
-            }
-
-            $line_tokens{$tag} = exists $line_tokens{$tag} 
-               ? [ @{ $line_tokens{$tag} }, $token->fullRealToken ] 
-               : [$token->fullRealToken];
-         
-            $line->add($token);
-
-         } else {
-
-            $log->warning( "No tags in \"$rawToken\"\n", $file, $lineNum );
-            $line_tokens{$rawToken} = $rawToken;
-         }
-      }
-
-      my $newline = [
-         $curent_linetype,
-         \%line_tokens,
-         $lastMainLine,
-         $line,
-      ];
-
-
-      ############################################################
-      ######################## Conversion ########################
-      # We manipulate the tags for the line here
-      # This function call will parse individual lines, which will
-      # in turn parse the tags within the lines.
-
-      processLine($line);
-
-      ############################################################
-      # Validate the line
-      if (getOption('xcheck')) {
-         validateLine($line)
-      };
-
-      ############################################################
-      # .CLEAR order verification
-      check_clear_tag_order($line);
-
-      #Last, we put the tokens and other line info in the @newlines array
-      push @newlines, $newline;
-
-   }
-   continue { $lineNum++ }
-
-   #####################################################
-   #####################################################
-   # We find all the header lines
-
-   for (my $line_index = 0; $line_index < @newlines; $line_index++) {
-
-      my $line = $newlines[$line_index][-1];
-
-      # A header line either begins with the curent line_type header
-      # or the next line header.
-      #
-      # Only comment lines (unsplit lines with no tokens) can be header lines
-      if ($line->noTokens) {
-
-         my $header = getHeader(getEntityFirstTag($line->type), $line->type);
-
-         my $thisIsHeader = $header && index($line->unsplit, $header) == 0;
-         my $nextIsHeader;
-
-         if ($line_index + 1 <= $#newlines) {
-            my $next = $newlines[$line_index + 1][-1];
-
-            my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
-            $nextIsHeader = $header && index($next->unsplit, $header) == 0;
-         }
-
-         # if this line or the next starts with the header for its type, 
-         if ($thisIsHeader || $nextIsHeader) {
-
-            # It is a header, let's tag it as such.
-            $line->type('HEADER');
-
-         } else {
-
-            # It is just a comment, we won't botter with it ever again.
-            $line->type('COMMENT');
-         }
-      }
-   }
-
-
-   #################################################################
-   ######################## Conversion #############################
-   # We manipulate the tags for the whole file here
-
-   processFile(\@newlines, $fileType, $file);
-
-   ##################################################
-   ##################################################
-   # Phase II - Reformating the lines
-
-   # No reformating needed?
-   return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
-
-   reformatFile(\@newlines);
-}
-
-
-
 # The file type that will be rewritten.
 my %writefiletype = (
    '#EXTRAFILE'      => 0,
@@ -1012,7 +698,7 @@ our %parseControl = (
 );
 
 
-=head2 check_clear_tag_order
+=head2 checkClearTokenOrder
 
    Verify that the .CLEAR tags are correctly put before the
    tags that they clear.
@@ -1021,7 +707,7 @@ our %parseControl = (
 
 =cut
 
-sub check_clear_tag_order {
+sub checkClearTokenOrder {
 
    my ($line) = @_;
 
@@ -1218,6 +904,316 @@ sub normaliseFile {
 
 
 
+=head2 parseFile
+
+   This function uses the information of TidyLst::Parse::parseControl to
+   parse the curent line type and parse it.
+   
+   Parameters: $fileType  The type of the file has defined by the .PCC file
+               $lines_ref Reference to an array containing all the lines of
+                          the file
+               $file      File name to use with the logger
+
+=cut
+
+sub parseFile {
+   my ($fileType, $lines_ref, $file) = @_;
+
+   my $log = getLogger();
+
+   ##################################################
+   # Working variables
+
+   my $curent_linetype = "";
+   my $lastMainLine  = -1;
+
+   my $curent_entity;
+
+   my @newlines;   # New line generated
+
+   ##################################################
+   ##################################################
+   # Phase I - Split line in tokens and parse
+   #               the tokens
+
+   my $lineNum = 1;
+   LINE:
+   for my $thisLine (@ {$lines_ref} ) {
+
+      my $line_info;
+
+      # Convert the non-ascii character in the line
+      my $newLine = convertEntities($thisLine);
+
+      # Remove spaces at the end of the line
+      $newLine =~ s/\s+$//;
+
+      # Remove spaces at the begining of the line
+      $newLine =~ s/^\s+//;
+
+      my $line = TidyLst::Line->new(
+         type     => $curent_linetype,
+         file     => $file,
+         unsplit  => $newLine,
+         entity   => $curent_entity,
+         num      => $lineNum,
+         lastMain => $lastMainLine,
+      );
+
+      # Skip comments and empty lines
+      if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
+
+         # We push the line as is.
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
+         next LINE;
+      }
+
+      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
+
+      # If we didn't find a record with info how to parse this line
+      if ( ! defined $line_info ) {
+         $log->warning(
+            qq(Can\'t find the line type for "$newLine"),
+            $file,
+            $lineNum
+         );
+
+         # We push the line as is.
+         push @newlines, [ $curent_linetype, $newLine, $lastMainLine, $line, ];
+         next LINE;
+      }
+
+      # What type of line is it?
+      $curent_linetype = $line_info->{Linetype};
+
+      if ( $line_info->{Mode} == MAIN ) {
+
+         $lastMainLine = $lineNum - 1;
+
+      } elsif ( $line_info->{Mode} == SUB ) {
+
+         if ($lastMainLine == -1) {
+            $log->warning(
+               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
+               $file,
+               $lineNum
+            )
+         }
+
+      } elsif ( $line_info->{Mode} == SINGLE ) {
+
+         $lastMainLine = -1;
+
+      } else {
+
+         die qq(Invalid type for $curent_linetype);
+      }
+
+      # Got a line info hash, so update the entity and type in the line
+      $line->entity($curent_entity);
+      $line->type($line_info->{Linetype});
+      $line->lastMain($lastMainLine);
+
+      # Identify the deprecated tags.
+      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
+
+      # Split the line in tokens
+      my %line_tokens;
+
+      # By default, the tab character is used
+      my $sep = $line_info->{SepRegEx} || qr(\t+);
+
+      # We split the tokens, strip the spaces and silently remove the empty tags
+      # (empty tokens are the result of [tab][space][tab] type of chracter
+      # sequences).
+      # [ 975999 ] [tab][space][tab] breaks prettylst
+      my @tokens = 
+         grep { $_ ne q{} } 
+         map { s{ \A \s* | \s* \z }{}xmsg; $_ } 
+         split $sep, $newLine;
+
+      #First, we deal with the tag-less columns
+      COLUMN:
+      for my $column ( getEntityNameTag($curent_linetype) ) {
+
+         # If this line type does not have tagless first entry
+         if (not defined $column) {
+            last COLUMN;
+         }
+
+         # If the line has no tokens
+         if ( scalar @tokens == 0 ) {
+            last COLUMN;
+         }
+
+         # Grab the token from the front of the line
+         my $value = shift @tokens;
+
+         # We remove the enclosing quotes if any
+         if ($value =~ s/^"(.*)"$/$1/) {
+            $log->warning(
+               qq{Removing quotes around the '$value' tag},
+               $file,
+               $lineNum
+            )
+         }
+
+         # and add it to line_tokens
+         $line_tokens{$column} = [$value];
+
+         my $token =  TidyLst::Token->new(
+            tag       => $column,
+            value     => $value,
+            lineType  => $curent_linetype,
+            file      => $file,
+            line      => $lineNum,
+         );
+
+         $line->add($token);
+
+         # Statistic gathering
+         incCountValidTags($curent_linetype, $column);
+
+         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
+            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
+            last COLUMN if $exit;
+         }
+      }
+
+      # Second, let's parse the regular columns
+      for my $rawToken (@tokens) {
+
+         my ($extractedToken, $value) = 
+            extractTag($rawToken, $curent_linetype, $file, $lineNum);
+
+         # if extractTag returns a defined value, no further processing is
+         # neeeded. If tag is defined but value is not, then the tag that was
+         # returned is the cleaned token and should be processed further.
+         if ($extractedToken && not defined $value) {
+
+            my $token =  TidyLst::Token->new(
+               fullToken => $extractedToken,
+               lineType  => $curent_linetype,
+               file      => $file,
+               line      => $lineNum,
+            );
+
+            # Potentally modify the tag
+            $token->process();
+
+            my $tag = $token->tag;
+
+            if (exists $line_tokens{$tag} && ! isValidMultiTag($curent_linetype, $tag)) {
+               $log->notice(
+                  qq{The tag "$tag" should not be used more than once on the same } 
+                  . $curent_linetype . qq{ line.\n},
+                  $file,
+                  $lineNum
+               );
+            }
+
+            $line_tokens{$tag} = exists $line_tokens{$tag} 
+               ? [ @{ $line_tokens{$tag} }, $token->fullRealToken ] 
+               : [$token->fullRealToken];
+         
+            $line->add($token);
+
+         } else {
+
+            $log->warning( "No tags in \"$rawToken\"\n", $file, $lineNum );
+            $line_tokens{$rawToken} = $rawToken;
+         }
+      }
+
+      my $newline = [
+         $curent_linetype,
+         \%line_tokens,
+         $lastMainLine,
+         $line,
+      ];
+
+
+      # We manipulate the tags for the line here
+      # This function call will parse individual lines, which will
+      # in turn parse the tags within the lines.
+
+      processLine($line);
+
+      ############################################################
+      # Validate the line
+      if (getOption('xcheck')) {
+         validateLine($line)
+      };
+
+      ############################################################
+      # .CLEAR order verification
+      checkClearTokenOrder($line);
+
+      #Last, we put the tokens and other line info in the @newlines array
+      push @newlines, $newline;
+
+   }
+   continue { $lineNum++ }
+
+   #####################################################
+   #####################################################
+   # We find all the header lines
+
+   for (my $line_index = 0; $line_index < @newlines; $line_index++) {
+
+      my $line = $newlines[$line_index][-1];
+
+      # A header line either begins with the curent line_type header
+      # or the next line header.
+      #
+      # Only comment lines (unsplit lines with no tokens) can be header lines
+      if ($line->noTokens) {
+
+         my $header = getHeader(getEntityFirstTag($line->type), $line->type);
+
+         my $thisIsHeader = $header && index($line->unsplit, $header) == 0;
+         my $nextIsHeader;
+
+         if ($line_index + 1 <= $#newlines) {
+            my $next = $newlines[$line_index + 1][-1];
+
+            my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
+            $nextIsHeader = $header && index($next->unsplit, $header) == 0;
+         }
+
+         # if this line or the next starts with the header for its type, 
+         if ($thisIsHeader || $nextIsHeader) {
+
+            # It is a header, let's tag it as such.
+            $line->type('HEADER');
+
+         } else {
+
+            # It is just a comment, we won't botter with it ever again.
+            $line->type('COMMENT');
+         }
+      }
+   }
+
+
+   #################################################################
+   ######################## Conversion #############################
+   # We manipulate the tags for the whole file here
+
+   processFile(\@newlines, $fileType, $file);
+
+   ##################################################
+   ##################################################
+   # Phase II - Reformating the lines
+
+   # No reformating needed?
+   return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
+
+   reformatFile(\@newlines);
+}
+
+
+
 ###############################################################
 # processFile
 # ------------------------
@@ -1244,10 +1240,8 @@ sub normaliseFile {
 #
 
 {
-
    my %class_skill;
    my %class_spell;
-   my %domain_spell;
 
    sub processFile {
 
@@ -1262,13 +1256,16 @@ sub normaliseFile {
       # with multiple lines (for clarity) and then want them formatted
       # properly for submission.
 
-      if ( isConversionActive('ALL:Multiple lines to one') ) {
+      if (isConversionActive('ALL:Multiple lines to one')) {
+
+         # File types RACE and TEMPLATE each only have one line type (RACE and TEMPLATE)
          my %valid_line_type = (
-            'RACE'  => 1,
+            'RACE'     => 1,
             'TEMPLATE' => 1,
          );
 
-         if ( exists $valid_line_type{$filetype} ) {
+         if (exists $valid_line_type{$filetype}) {
+
             my $lastMainLine = -1;
 
             # Find all the lines with the same identifier
@@ -1857,7 +1854,7 @@ sub normaliseFile {
                 #
                 # For every CLASSSKILL found, an extra line must be added after
                 # the CLASS line with the class name and the list of
-                # CSKILL in the first CLASS file on the same directory as the
+                # CSKILL in the first CLASS file in the same directory as the
                 # CLASSSKILL.
                 #
                 # If no CLASS with the same name can be found in the same
