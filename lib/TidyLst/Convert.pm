@@ -7,10 +7,12 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
+   CURRENTENTITY LASTMAIN LINEINFO LINEOBJECT LINETOKENS LINETYPE
    convertAddTokens
    convertEntities
-   doTokenConversions
+   doFileConversions
    doLineConversions
+   doTokenConversions
 );
 
 # expand library path so we can find TidyLst modules
@@ -18,7 +20,10 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Data qw(incCountInvalidTags);
+use TidyLst::Data qw(
+   BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
+   NO NO_HEADER SINGLE SUB YES
+   incCountInvalidTags);
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 
@@ -26,6 +31,16 @@ use TidyLst::Options qw(getOption isConversionActive);
 my $sourceCurrentFile = "";
 my %classSpellTypes   = ();
 my %spellsForEQMOD    = ();
+
+
+use constant {
+   LINETYPE      => 0,
+   LINETOKENS    => 1,
+   LASTMAIN      => 2,
+   CURRENTENTITY => 3,
+   LINEINFO      => 4,
+   LINEOBJECT    => 5,
+};
 
 
 # KEYS entries were changed in the main files
@@ -290,6 +305,55 @@ my %tokenAddTag = (
 );
 
 
+=head2 addCasterLevel
+               
+   [ 876536 ] All spell casting classes need CASTERLEVEL
+               
+   BONUS:CASTERLEVEL|<class name>|CL will be added to all classes
+   that have a SPELLTYPE tag except if there is also an
+   ITEMCREATE tag present.
+
+=cut
+
+sub addCasterLevel {
+
+   my ($line) = @_;
+
+   my $log = getLogger();
+
+   my $class = $line->entityName;
+
+   if ( $line->hasColumn('ITEMCREATE') ) {
+
+      my $token = $line->firstTokenInColumn('ITEMCREATE');
+
+      # ITEMCREATE is present, we do not convert but we warn.
+      $log->warning(
+         qq(Can't add BONUS:CASTERLEVEL for class "$class", ")
+         . $token->fullToken . q(" was found.), 
+         $line->file,
+         $line->num,
+      );
+
+   } else {
+
+      # We add the missing BONUS:CASTERLEVEL
+      my $token = $line->tokenFor(
+         tag   => 'BONUS:CASTERLEVEL',
+         value => "|$class|CL"
+      );
+
+      $line->add($token);
+
+      $log->warning(
+         qq{Adding missing "BONUS:CASTERLEVEL|$class|CL"},
+         $line->file,
+         $line->num,
+      );
+   }
+}
+
+
 
 =head2 addGenericDnDVersion
 
@@ -368,7 +432,7 @@ sub addSlotsToPlural {
          qq{$equipment_name has no TYPE.},
          $line->file,
          $line->num
-      ) 
+      )
    }
 }
 
@@ -600,6 +664,174 @@ sub convertBonusMove {
 }
 
 
+=head2 convertClassLines
+
+   [ 626133 ] Convert CLASS lines into 4 lines
+
+   The four lines are:
+
+   General (all tags not put in the two other lines)
+   Prereq. (all the PRExxx tags)
+   Class skills (the STARTSKILLPTS, the CKSILL and the CCSKILL tags)
+   SPELL related tags (expanded from the 3 line version 2003.07.11)
+
+=cut
+
+sub convertClassLines {
+
+   my ($lines_ref, $filetype, $filename) = @_;
+
+   my $lastMainLine = -1;
+
+   # Find all the CLASS lines
+   ENTITY:
+   for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
+
+      my $line = $lines_ref->[$i][LINEOBJECT];
+      my $info = $lines_ref->[$i][LINEINFO];
+
+      # Is this a CLASS line?
+      if (ref $line eq 'TidyLst::Line' && $line->type eq 'CLASS') {
+         my $first_line = $i;
+         my $last_line  = $i;
+         my $old_length;
+         my $j          = $i + 1;
+         my @newLines;
+         
+         $lastMainLine  = $i;
+
+         #Find the next line that is not empty or of the same CLASS
+         ENTITY_LINE:
+         for ( ; $j < @{$lines_ref}; $j++ ) {
+
+            my $jLine = $lines_ref->[$i][LINEOBJECT];
+
+            # if this isn't a line
+            if (! defined $jLine || ref $jLine ne 'TidyLst::Line' ) {
+               next ENTITY_LINE
+            }
+
+            # Is this line blank or a comment?
+            if ($jLine->type =~ qr{^(?:HEADER|COMMENT|BLANK)$}) {
+               next ENTITY_LINE
+            }
+
+            # Is it a CLASS line of the same CLASS?
+            if ($jLine->isType('CLASS') 
+               && $jLine->entityName eq $line->entityName) {
+
+               $last_line = $j;
+               $line->mergeLines($jLine);
+
+            } else {
+               last ENTITY_LINE;
+            }
+         }
+
+         # If there was only one line for the entity, we do nothing
+         next ENTITY if $last_line == $i;
+
+         # Number of lines included in the CLASS
+         $old_length = $last_line - $first_line + 1;
+
+         # extract the other lines
+         my $skillLine = extractSkillLine($line);
+         my $spellLine = extractSpellLine($line);
+         my $preLine   = extractPreLine($line);
+
+         # We prepare the replacement lines
+         $j = 0;
+
+         # The main line
+         if ($line->columns > 1 || ( 
+               $preLine->columns   == 1 && 
+               $skillLine->columns == 1 && 
+               $spellLine->columns == 1 )) {
+
+            my $newLine;
+            $newLine->[LINETYPE]      = 'CLASS';
+            $newLine->[LINETOKENS]    = {};
+            $newLine->[LASTMAIN]      = $lastMainLine;
+            $newLine->[CURRENTENTITY] = $line->entityName;
+            $newLine->[LINEINFO]      = $info;
+            $newLine->[LINEOBJECT]    = $line;
+
+            push @newLines, $newLine;
+            $j++;
+         }
+
+         if ($preLine->columns > 1) {
+
+            my $newLine;
+            $newLine->[LINETYPE]      = 'CLASS';
+            $newLine->[LINETOKENS]    = {};
+            $newLine->[LASTMAIN]      = ++$lastMainLine;
+            $newLine->[CURRENTENTITY] = $line->entityName;
+            $newLine->[LINEINFO]      = $info;
+            $newLine->[LINEOBJECT]    = $preLine;
+
+            push @newLines, $newLine;
+            $j++;
+         }
+
+         if ($skillLine->columns > 1) {
+
+            my $newLine;
+            $newLine->[LINETYPE]      = 'CLASS';
+            $newLine->[LINETOKENS]    = {};
+            $newLine->[LASTMAIN]      = ++$lastMainLine;
+            $newLine->[CURRENTENTITY] = $line->entityName;
+            $newLine->[LINEINFO]      = $info;
+            $newLine->[LINEOBJECT]    = $skillLine;
+
+            push @newLines, $newLine;
+            $j++;
+         }
+
+         # The spell line
+         if ($spellLine->columns > 1) {
+
+            my $newLine;
+            $newLine->[LINETYPE]      = 'CLASS';
+            $newLine->[LINETOKENS]    = {};
+            $newLine->[LASTMAIN]      = ++$lastMainLine;
+            $newLine->[CURRENTENTITY] = $line->entityName;
+            $newLine->[LINEINFO]      = $info;
+            $newLine->[LINEOBJECT]    = $spellLine;
+
+            push @newLines, $newLine;
+            $j++;
+         }
+
+         # We splice the new class lines in place
+         splice @{$lines_ref}, $first_line, $old_length, @newLines;
+
+         # Continue with the rest
+         $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
+
+      } elsif (ref $line eq 'TidyLst::Line'
+         && $line->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)
+         && exists $info->{Mode} 
+         && $info->{Mode} == SUB) {
+
+         # We must replace the lastMainLine with the correct value
+         $lines_ref->[$i][LASTMAIN] = $lastMainLine;
+         $line->lastMain($lastMainLine);
+
+      } elsif (ref $line eq 'TidyLst::Line'
+         && $line->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)
+         && exists $info->{Mode} 
+         && $info->{Mode} == MAIN) {
+
+         # We update the lastMainLine value and
+         # put the correct value in the curent line
+         $lines_ref->[$i][LASTMAIN] = $lastMainLine = $i;
+         $line->lastMain($lastMainLine);
+      }
+   }
+}
+
+
 =head2 convertCountFeatType
 
    # [ 737718 ] COUNT[FEATTYPE] data change
@@ -818,7 +1050,7 @@ sub convertNaturalAttack {
             ($attackName) = ( $attackName =~ /:(.*)/ );
 
             my $WPtoken = $token->clone(
-               tag   => 'BONUS:WEAPONPROF', 
+               tag   => 'BONUS:WEAPONPROF',
                value => "=$attackName|DAMAGE|STR/2");
 
             # is the potential new bonus already there.
@@ -837,7 +1069,7 @@ sub convertNaturalAttack {
                $line->add($WPtoken);
 
                getLogger()->warning(
-                  qq(Added ") . $WPtoken->fullToken 
+                  qq(Added ") . $WPtoken->fullToken
                   . qq(" to go with ") . $token->fullToken . q("),
                   $line->file,
                   $line->num
@@ -974,7 +1206,7 @@ sub convertPreSpellType {
          }
 
          getLogger()->notice(
-            qq{Invalid standalone PRESPELLTYPE token "PRESPELLTYPE:} 
+            qq{Invalid standalone PRESPELLTYPE token "PRESPELLTYPE:}
             . $token->value . qq{" found and converted in } . $token->lineType,
             $token->file,
             $token->line
@@ -993,7 +1225,7 @@ sub convertPreSpellType {
       $token->value($token->value =~ s/PRESPELLTYPE:([^\d,]+),(\d+),(\d+)/PRESPELLTYPE:$2,$1=$3/gr);
 
       getLogger()->notice(
-         qq{Invalid embedded PRESPELLTYPE token "} 
+         qq{Invalid embedded PRESPELLTYPE token "}
          . $token->fullToken . q{" found and converted } . $token->lineType . q{.},
          $token->file,
          $token->line
@@ -1023,7 +1255,7 @@ sub convertPreStat {
 =head2 convertRaceClimbandSwim
 
    Every RACE that has a Climb or a Swim MOVE must have a
-   BONUS:SKILL|Climb|8|TYPE=Racial. 
+   BONUS:SKILL|Climb|8|TYPE=Racial.
 
    If there is a BONUS:SKILLRANK|Swim|8|PREDEFAULTMONSTER:Y present, it must be
    removed or lowered by 8.
@@ -1082,7 +1314,7 @@ sub convertRaceClimbandSwim {
 
                if ( ( $need_climb || $need_swim ) && $skill_rank != 8 ) {
                   $log->info(
-                     qq(You\'ll have to deal with this one yourself ") 
+                     qq(You\'ll have to deal with this one yourself ")
                      . $token->origToken . q("),
                      $line->file,
                      $line->num
@@ -1181,7 +1413,7 @@ sub convertRaceClimbandSwim {
          # delete all the current BONUS:SKILLRANK tokens
          $line->deleteColumn('BONUS:SKILLRANK');
 
-         # put any we didn't delete above back 
+         # put any we didn't delete above back
          for my $token (@keepTokens) {
             $line->add($token);
          }
@@ -1212,7 +1444,7 @@ sub convertRaceNoProfReq {
    }
 
    # Default when no HANDS tag is present
-   my $nbHands = 2;        
+   my $nbHands = 2;
 
    # How many hands?
    if ($line->hasColumn('HANDS')) {
@@ -1403,7 +1635,7 @@ sub convertVisionCommaToBar {
       $line->file,
       $line->num
    );
-   
+
    $line->deleteColumn('VISION');
 
    my $newvision = "VISION:";
@@ -1434,7 +1666,7 @@ sub convertVisionCommaToBar {
          );
       }
    }
-   
+
    $log->warning( qq{Adding "$newvision"}, $line->file, $line->num );
    $line->add($line->tokenFor(fullToken => $newvision));
 }
@@ -1481,7 +1713,7 @@ sub convertWandForEqmod {
    my ($line) = @_;
 
    # If this is a spell line, populate the hash that is used by
-   # equipment lines. 
+   # equipment lines.
    if ($line->isType('SPELL') && $line->hasColumn('CLASSES')) {
 
       my $level = $line->levelForWizardOrCleric();
@@ -1605,6 +1837,35 @@ sub convertWillpower{
    }
 }
 
+
+=head2 doFileConversions
+
+   This function does conversion on the entire file after it has been assembled into
+   Lines of parsed Tokens.
+
+=cut
+
+sub doFileConversions {
+
+   my ($lines_ref, $filetype, $filename) = @_;
+
+   if (isConversionActive('ALL:Multiple lines to one')
+      && ($filetype eq 'RACE' || $filetype eq 'TEMPLATE')) {
+
+      multiLineToSingle($lines_ref, $filetype, $filename);
+   }
+
+   if (isConversionActive('CLASS:Four lines')
+      && $filetype eq 'CLASS' ) {
+
+      convertClassLines($lines_ref, $filetype, $filename);
+   }
+
+
+}
+
+
+
 =head2 doLineConversions
 
    This function does token conversion. It is called on individual tags after
@@ -1643,7 +1904,7 @@ sub doLineConversions {
       convertNaturalAttack($line);
    }
 
-   if (isConversionActive('ALL:CMP remove PREALIGN') 
+   if (isConversionActive('ALL:CMP remove PREALIGN')
       && $line->hasColumn('PREALIGN')) {
 
       $line->replaceTag('PREALIGN')
@@ -1653,6 +1914,13 @@ sub doLineConversions {
       && $line->hasColumn('SOURCELONG')) {
 
       $line->_splitToken('SOURCELONG')
+   }
+
+   if (isConversionActive('CLASS:CASTERLEVEL for all casters')
+      && $line->hasColumn('SPELLTYPE')
+      && !$line->hasColumn('BONUS:CASTERLEVEL')) {
+
+      addCasterLevel($line);
    }
 
    if (isConversionActive('CLASS:no more HASSPELLFORMULA')
@@ -1749,7 +2017,7 @@ sub doLineConversions {
    }
 
    if (isConversionActive('SOURCE line replacement')
-      && $line->isType('SOURCE') 
+      && $line->isType('SOURCE')
       && $sourceCurrentFile ne $line->file ) {
 
       sourceReplacement($line);
@@ -1762,7 +2030,7 @@ sub doLineConversions {
       populateSpellType($line);
    }
 
-   if (isConversionActive('SPELL:Add TYPE tags') 
+   if (isConversionActive('SPELL:Add TYPE tags')
       && $line->isType('SPELL')) {
 
       # For each SPELL we build the TYPE tag or we add to the existing one.
@@ -1837,6 +2105,114 @@ sub ensureLeadingDigit {
 }
 
 
+=head2 multiLineToSingle
+
+   Reformat multiple lines to one line for RACE and TEMPLATE.
+   
+   This is only useful for those who like to start new entries
+   with multiple lines (for clarity) and then want them formatted
+   properly for submission.
+
+=cut
+
+sub multiLineToSingle {
+
+   my ($lines_ref, $filetype, $filename) = @_;
+
+   my $lastMainLine = -1;
+
+   # Find all the lines with the same identifier
+   ENTITY:
+   for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
+
+      my $line = $lines_ref->[$i][LINEOBJECT];
+      my $info = $lines_ref->[$i][LINEINFO];
+
+      # Is this a linetype we are interested in?
+      if (ref $lines_ref->[$i] eq 'ARRAY' && ($line-isType('RACE') || $line-isType('TEMPLATE'))) {
+         my $first_line   = $i;
+         my $last_line    = $i;
+         my $old_length;
+         my $j            = $i + 1;
+         my @newLines;
+
+         $lastMainLine = $i;
+
+         #Find all the line with the same entity name
+         ENTITY_LINE:
+         for ( ; $j < @{$lines_ref}; $j++ ) {
+
+            my $jLine = $lines_ref->[$j][LINEOBJECT];
+
+            # if this isn't a line
+            if (! defined $jLine || ref $jLine ne 'TidyLst::Line' ) {
+               next ENTITY_LINE
+            }
+
+            # Is this line blank or a comment?
+            if ($jLine->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)) {
+               next ENTITY_LINE
+            }
+
+            # Is it an entity of the same name?
+            if ($jLine->type eq $line->type
+               && $jLine->entityName eq $line->entityName) {
+
+               $last_line = $j;
+               $line->mergeLines($jLine);
+
+            } else {
+               last ENTITY_LINE;
+            }
+         }
+
+         # If there was only one line for the entity, we do nothing
+         next ENTITY if $last_line == $i;
+
+         # Number of lines included in the ENTITY
+         $old_length = $last_line - $first_line + 1;
+
+         # We prepare the replacement lines
+         $j = 0;
+
+         # The main line
+         if (scalar @{$line->columns} > 1) {
+            push @newLines,
+            [
+               $line->type,
+               {},
+               $lastMainLine,
+               $line->entityName,
+               $info,
+               $line,
+            ];
+            $j++;
+         }
+
+         # We splice the new class lines in place
+         splice @$lines_ref, $first_line, $old_length, @newLines;
+
+         # Continue with the rest
+         $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
+
+      } elsif ($line->type ne 'HEADER' && exists $info->{Mode} && $info->{Mode} == SUB) {
+
+         # We must replace the lastMainLine with the correct value
+
+         $lines_ref->[$i][LASTMAIN] = $lastMainLine;
+         $line->lastMain($lastMainLine);
+
+      } elsif ($line->type ne 'HEADER' && exists $info->{Mode} && $info->{Mode} == MAIN) {
+
+         # We update the lastMainLine value and
+         # put the correct value in the curent line
+         $lines_ref->[$i][LASTMAIN] = $lastMainLine = $i;
+         $line->lastMain($lastMainLine);
+      }
+   }
+}
+
+
 =head2 populateSpellType
 
    We must keep a list of all the SPELLTYPE for each class.  It is assumed that
@@ -1853,7 +2229,7 @@ sub populateSpellType {
    for my $token (@{$line->column('SPELLTYPE')}) {
 
       if ($token->value eq "" or uc($token->value) eq "ANY") {
-         next SPELLTYPE_TAG 
+         next SPELLTYPE_TAG
       }
 
       $classSpellTypes{$line->entityName}{$token->value}++;
@@ -2069,7 +2445,7 @@ sub replaceWithEqmod {
    my ($line, $name, $sl, $cl) = @_;
 
    my $tag   = "EQMOD";
-   my $value = "SE_50TRIGGER|SPELLNAME[$name]SPELLLEVEL[$sl]" 
+   my $value = "SE_50TRIGGER|SPELLNAME[$name]SPELLLEVEL[$sl]"
       . "CASTERLEVEL[$cl]CHARGES[50]";
 
    my $token = $line->tokenFor(tag => $tag, value => $value);
@@ -2084,7 +2460,7 @@ sub replaceWithEqmod {
    }
 
    getLogger()->warning(
-      qq($name: removing "COST" and adding ") 
+      qq($name: removing "COST" and adding ")
       . $token->fullToken . q("),
       $line->file,
       $line->num
@@ -2122,7 +2498,7 @@ sub reportRaceCSkill {
 sub reportReplacement {
 
    my ($token, $suffix) = @_;
-   my $output = (defined $suffix) 
+   my $output = (defined $suffix)
       ? qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . qq(" $suffix)
       : qq(Replacing ") . $token->origToken  . q(" with ") . $token->fullToken . q(");
 

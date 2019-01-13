@@ -218,13 +218,6 @@ if (getOption('inputpath')) {
    }
 
    ##########################################################
-   # Cross-checking must be activated for the CLASSSPELL
-   # conversion to work
-   if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
-      setOption('xcheck', 1);
-   }
-
-   ##########################################################
    # Parse all the .pcc file to find the other file to parse
 
    # First, we list the .pcc files in the directory
@@ -375,7 +368,6 @@ if (getOption('inputpath')) {
                } elsif (
                      $token->tag eq 'ALIGNMENT'
                   || $token->tag eq 'CLASS'
-                  || $token->tag eq 'CLASSSKILL'
                   || $token->tag eq 'CLASSSPELL'
                   || $token->tag eq 'DOMAIN'
                   || $token->tag eq 'SAVE'
@@ -384,27 +376,11 @@ if (getOption('inputpath')) {
                ) {
 
                   $files{$token->tag}{$lstFile} = 1;
-
-                  my $commentOutPCC =
-                     (isConversionActive('CLASSSPELL conversion to SPELL') && $tag eq 'CLASSSPELL') ||
-                     (isConversionActive('CLASSSKILL conversion to CLASS') && $tag eq 'CLASSSKILL');
-
-                  # When doing either of these two conversions, the original
-                  # PCC line must be commented out
-                  if ($commentOutPCC) {
-
-                     push @pccLines, q{#} . pop @pccLines;
-                     $mustWrite = 1;
-
-                     $log->warning(
-                        qq{Commenting out "$pccLines[$#pccLines]"},
-                        $filename,
-                        $INPUT_LINE_NUMBER
-                     );
-                  }
                }
 
-               delete $fileListNotPCC{$lstFile} if exists $fileListNotPCC{$lstFile};
+               if (exists $fileListNotPCC{$lstFile}) {
+                  delete $fileListNotPCC{$lstFile}
+               }
                $found{'lst'} = 1;
 
             } elsif ( $token->tag =~ m/^\#/ ) {
@@ -526,26 +502,6 @@ if (getOption('inputpath')) {
 
       close $pcc_fh;
 
-      if (isConversionActive('CLASSSPELL conversion to SPELL')) {
-
-         if ($foundFileType{'CLASSSPELL'} && !$foundFileType{'SPELL'}) {
-            $log->warning(
-               'No SPELL file found, create one.',
-               $filename
-            );
-         }
-      }
-
-      if (isConversionActive('CLASSSKILL conversion to CLASS')) {
-
-         if ( $foundFileType{'CLASSSKILL'} && !$foundFileType{'CLASS'} ) {
-            $log->warning(
-               'No CLASS file found, create one.',
-               $filename
-            );
-         }
-      }
-
       if ( !$found{'book type'} && $found{'lst'} ) {
          $log->notice( 'No BOOKTYPE tag found', $filename );
       }
@@ -645,52 +601,25 @@ $log->header(TidyLst::LogHeader::get('LST'));
 my @filesToParse_sorted = ();
 my %temp_filesToParse   = %filesToParse;
 
-if ( isConversionActive('SPELL:Add TYPE tags') ) {
+# This bit used to be separate checks and it only pulled files forward if
+# certain conversions were active. It turns out that that ordering was
+# mututally exclusive and we can just do it all, all the time. I've left the
+# separate comments explaining why some files are pulled tot he front of the
+# list.
 
-   # The CLASS files must be put at the start of the
-   # filesToParse_sorted array in order for them
-   # to be dealt with before the SPELL files.
+# The CLASS files must be put at the start of the filesToParse_sorted array in
+# order for them to be dealt with before the SPELL files.
 
-   for my $class_file ( sort keys %{ $files{CLASS} } ) {
-      push @filesToParse_sorted, $class_file;
-      delete $temp_filesToParse{$class_file};
-   }
-}
+# The CLASS and DOMAIN files must be put at the start of the
+# filesToParse_sorted array in order for them to be dealt with before the
+# CLASSSPELL files. The CLASSSPELL needs to be processed before the SPELL
+# files.
 
-if ( isConversionActive('CLASSSPELL conversion to SPELL') ) {
+# The SPELL file must be loaded before the EQUIPMENT in order to properly
+# generate the EQMOD tags
 
-   # The CLASS and DOMAIN files must be put at the start of the
-   # filesToParse_sorted array in order for them
-   # to be dealt with before the CLASSSPELL files.
-   # The CLASSSPELL needs to be processed before the SPELL files.
-
-   # CLASS first
-   for my $filetype (qw(CLASS DOMAIN CLASSSPELL)) {
-      for my $file_name ( sort keys %{ $files{$filetype} } ) {
-         push @filesToParse_sorted, $file_name;
-         delete $temp_filesToParse{$file_name};
-      }
-   }
-}
-
-if ( keys %{ $files{SPELL} } ) {
-
-   # The SPELL file must be loaded before the EQUIPMENT
-   # in order to properly generate the EQMOD tags or do
-   # the Spell.MOD conversion to SPELLLEVEL.
-
-   for my $file_name ( sort keys %{ $files{SPELL} } ) {
-      push @filesToParse_sorted, $file_name;
-      delete $temp_filesToParse{$file_name};
-   }
-}
-
-if ( isConversionActive('CLASSSKILL conversion to CLASS') ) {
-
-   # The CLASSSKILL files must be put at the start of the
-   # filesToParse_sorted array in order for them
-   # to be dealt with before the CLASS files
-   for my $file_name ( sort keys %{ $files{CLASSSKILL} } ) {
+for my $filetype (qw(CLASS DOMAIN CLASSSPELL SPELL)) {
+   for my $file_name ( sort keys %{ $files{$filetype} } ) {
       push @filesToParse_sorted, $file_name;
       delete $temp_filesToParse{$file_name};
    }

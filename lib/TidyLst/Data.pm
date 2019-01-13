@@ -1564,7 +1564,7 @@ our %masterOrder = (
       'ALIGNMENT',
       'ARMORPROF',
       'CLASS',
-      'CLASSSKILL',
+      # 'CLASSSKILL',
       'CLASSSPELL',
       'COMPANIONMOD',
       'DATACONTROL',

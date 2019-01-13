@@ -66,6 +66,24 @@ has 'lastMain' => (
    predicate => 'hasLastMain',
 );
 
+has 'mode' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasMode',
+);
+
+has 'format' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasFormat',
+);
+
+has 'header' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasHeader',
+);
+
 
 =head2 appendToValue
 
@@ -117,6 +135,18 @@ sub add {
    $self->column($token->tag, []) unless $self->column($token->tag); 
 
    push @{ $self->column($token->tag) }, $token;
+}
+
+
+sub cloneNoTokens {
+   my ($self) = @_;
+
+   my $newLine = $self->meta->clone_object($self);
+
+   $newLine->clearTokens;
+   $newLine->unsplit('');
+
+   return $newLine;
 }
 
 
@@ -276,6 +306,105 @@ sub entityName {
 }
 
 
+=head2 extractPreLine
+
+   Extract all the Deity and standalone PRE tags from a line and create a new
+   line from them
+
+=cut
+
+sub extractPreLine {
+
+   my ($self) = @_;
+
+   my $line = $self->cloneNoTokens;
+   $line->add($self->entityToken);
+
+   COLUMNS:
+   for my $column ($self->columns) {
+      if ($column !~ /^\!?PRE/ &&  $column !~ /^DEITY/) {
+         next COLUMNS;
+      }
+      for my $token ($self->column($column)) {
+         $line->add($token);
+      }
+      $self->deleteColumn($column);
+   }
+
+   $line;
+}
+
+
+=head2 extractSkillLine
+
+   Extract all the skill related tags from a line and create a new line from them
+
+=cut
+
+sub extractSkillLine {
+
+   my ($self) = @_;
+
+   my $line = $self->cloneNoTokens;
+   $line->add($self->entityToken);
+
+   for my $column (qw(
+      CSKILL:.CLEAR     CCSKILL
+      CSKILL            MODTOSKILLS
+      MONSKILL          MONNONSKILLHD
+      SKILLLIST         STARTSKILLPTS
+      )) {
+
+      if ($self->hasColumn($column)) {
+         for my $token ($self->column($column)) {
+            $line->add($token);
+         }
+         $self->deleteColumn($column);
+      }
+   }
+   $line;
+}
+
+
+=head2 extractSpellLine
+
+   Extract all the spell related tags from a line and create a new line from
+   them
+
+=cut
+
+sub extractSpellLine {
+
+   my ($self) = @_;
+
+   my $line = $self->cloneNoTokens;
+   $line->add($self->entityToken);
+
+   for my $column ( qw(
+      BONUS:CASTERLEVEL    BONUS:DC
+      BONUS:SCHOOL         BONUS:SPECIALTYSPELLKNOWN
+      BONUS:SPELL          BONUS:SPELLCAST
+      BONUS:SPELLCASTMULT  BONUS:SPELLKNOWN
+      BONUSSPELLSTAT       CASTAS
+      HASSPELLFORMULA      ITEMCREATE
+      KNOWNSPELLS          KNOWNSPELLSFROMSPECIALTY
+      MEMORIZE             PROHIBITED
+      SPELLBOOK            SPELLKNOWN
+      SPELLLEVEL           SPELLLIST
+      SPELLSTAT            SPELLTYPE
+      )) {
+
+      if ($self->hasColumn($column)) {
+         for my $token ($self->column($column)) {
+            $line->add($token);
+         }
+         $self->deleteColumn($column);
+      }
+   }
+   $line;
+}
+
+
 =head2 firstColumnMatches
 
    Returns true if this line has the given token and the full token matches the
@@ -417,6 +546,24 @@ sub levelForWizardOrCleric {
       }
 
       return -1
+   }
+}
+
+
+=head2 mergeLines
+
+   Merge the tokens of the other line (oLine) into this line.
+
+=cut
+
+sub mergeLines {
+
+   my ($self, $oLine) = @_;
+
+   for my $column (grep {$_ ne $self->entityName} $oLine->columns) {
+      for my $token (@{$oLine->column($column)}) {
+         $self->add($token);
+      }
    }
 }
 

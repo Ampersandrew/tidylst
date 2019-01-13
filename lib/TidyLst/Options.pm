@@ -28,8 +28,6 @@ my $errorMessage;
 %activate = (
   'ADD:SAB'          => 'ALL:Convert ADD:SA to ADD:SAB',
   'ASCII'            => 'ALL:Fix Common Extended ASCII',
-  'classskill'       => 'CLASSSKILL conversion to CLASS',
-  'classspell'       => 'CLASSSPELL conversion to SPELL',
   'foldbacklines'    => 'ALL:Multiple lines to one',
   'Followeralign'    => 'DEITY:Followeralign conversion',
   'gmconv'           => 'PCC:GAMEMODE Add to the CMP DnD_',
@@ -90,8 +88,6 @@ my $errorMessage;
    'CLASS: SPELLLIST from Spell.MOD'    => 0,    # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
    'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
    'CLASS:no more HASSPELLFORMULA'      => 0,    # [ 1973497 ] HASSPELLFORMULA is deprecated
-   'CLASSSKILL conversion to CLASS'     => 0,
-   'CLASSSPELL conversion to SPELL'     => 0,    # [ 641912 ] Convert CLASSSPELL to SPELL
    'DEITY:Followeralign conversion'     => 0,    # [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
    'EQUIP:no more MOVE'                 => 0,    # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
    'EQUIPMENT: SLOTS:2 for plurals'     => 0,    # [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots

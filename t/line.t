@@ -11,16 +11,18 @@ use lib dirname(dirname abs_path $0) . '/lib';
 use TidyLst::Token;
 use TidyLst::Options qw(getOption parseOptions);
 
-use Test::More tests => 15;
+use Test::More tests => 16;
 use Test::Warn;
 
 use_ok ('TidyLst::Line');
 
 my $line = TidyLst::Line->new (
-   type => 'ABILITY',
-   file => 'foo_ability',
+   type    => 'ABILITY',
+   file    => 'foo_ability',
+   unsplit => "Sneak Attack\tKEY:Rogue ~ Sneak Attack\tCATEGORY:Special Ability",
 );
 
+is(ref $line, 'TidyLst::Line', "Ref works as expected");
 is($line->type, 'ABILITY', 'type is ABILITY');
 is($line->file, 'foo_ability', 'file is foo_ability');
 
@@ -40,7 +42,7 @@ is($line->hasColumn('KEY'), 1, 'Column KEY is populated');
 my $column = $line->column('KEY');
 
 is($column->[0]->value, 'Rogue ~ Sneak Attack', 'first token in column is correct');
-is($line->_columnLength('KEY'), 24, "Column length correct for single entry");
+is($line->columnLength('KEY'), 24, "Column length correct for single entry");
 
 parseOptions(@ARGV);
 
@@ -68,9 +70,9 @@ $column = $line->column('ABILITY');
 
 is($column->[0]->value, 'FEAT|AUTOMATIC|Acrobatic', 'First FEAT is correct');
 is($column->[1]->value, 'FEAT|AUTOMATIC|Toughness', 'Second FEAT is correct');
-is($line->_columnLength('ABILITY'), 68, "Column length correct for two entries");
+is($line->columnLength('ABILITY'), 68, "Column length correct for two entries");
 
-is($line->_columnLength('ABILITY'), 68, "Column length does not destroy the data");
+is($line->columnLength('ABILITY'), 68, "Column length does not destroy the data");
 
 $token1 = TidyLst::Token->new(
    fullToken => 'TYPE:Magic.Medium',

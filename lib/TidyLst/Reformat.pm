@@ -87,6 +87,10 @@ sub reformatFile {
             . $line->type . qq(:$mode:$header);
          }
 
+
+
+
+
       } elsif ( $mode == MAIN ) {
 
          if ( $format == BLOCK ) {
