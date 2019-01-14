@@ -963,18 +963,18 @@ sub parseFile {
       );
 
       # Skip comments and empty lines
-      if ( length($newLine) == 0 || $newLine =~ /^\#/ ) {
+      if (length($newLine) == 0 || $newLine =~ /^\#/) {
 
-         my $newLine;
-         $newLine->[LINETYPE]      = $curent_linetype; 
-         $newLine->[LINETOKENS]    = $newLine;         
-         $newLine->[LASTMAIN]      = $lastMainLine;    
-         $newLine->[CURRENTENTITY] = undef;            
-         $newLine->[LINEINFO]      = undef;            
-         $newLine->[LINEOBJECT]    = $line;            
+         my $lineRef;
+         $lineRef->[LINETYPE]      = $curent_linetype; 
+         $lineRef->[LINETOKENS]    = $newLine;         
+         $lineRef->[LASTMAIN]      = $lastMainLine;    
+         $lineRef->[CURRENTENTITY] = undef;            
+         $lineRef->[LINEINFO]      = undef;            
+         $lineRef->[LINEOBJECT]    = $line;            
 
          # We push the line as is.
-         push @newLines, $newLine;
+         push @newLines, $lineRef;
          next LINE;
       }
 
@@ -988,18 +988,19 @@ sub parseFile {
             $lineNum
          );
 
-         my $newLine;
-         $newLine->[LINETYPE]      = $curent_linetype; 
-         $newLine->[LINETOKENS]    = $newLine;         
-         $newLine->[LASTMAIN]      = $lastMainLine;    
-         $newLine->[CURRENTENTITY] = undef;            
-         $newLine->[LINEINFO]      = undef;            
-         $newLine->[LINEOBJECT]    = $line;            
+         my $lineRef;
+         $lineRef->[LINETYPE]      = $curent_linetype; 
+         $lineRef->[LINETOKENS]    = $newLine;         
+         $lineRef->[LASTMAIN]      = $lastMainLine;    
+         $lineRef->[CURRENTENTITY] = undef;            
+         $lineRef->[LINEINFO]      = undef;            
+         $lineRef->[LINEOBJECT]    = $line;            
 
          # We push the line as is.
-         push @newLines, $newLine;
+         push @newLines, $lineRef;
          next LINE;
       }
+
       $line->mode($line_info->{Mode});
       $line->format($line_info->{Format});
       $line->header($line_info->{Header});
@@ -1146,14 +1147,13 @@ sub parseFile {
          }
       }
 
-      my $newline = [
-         $curent_linetype,
-         \%line_tokens,
-         $lastMainLine,
-         $curent_entity,
-         $line_info,
-         $line,
-      ];
+      my $lineRef;
+      $lineRef->[LINETYPE]      = $curent_linetype;
+      $lineRef->[LINETOKENS]    = \%line_tokens;   
+      $lineRef->[LASTMAIN]      = $lastMainLine;   
+      $lineRef->[CURRENTENTITY] = $curent_entity;  
+      $lineRef->[LINEINFO]      = $line_info;      
+      $lineRef->[LINEOBJECT]    = $line;           
 
       # We manipulate the tags for the line here
       # This function call will parse individual lines, which will
@@ -1170,7 +1170,7 @@ sub parseFile {
       checkClearTokenOrder($line);
 
       # Populate the lines array
-      push @newLines, $newline;
+      push @newLines, $lineRef;
 
    }
    continue { $lineNum++ }
@@ -1179,6 +1179,7 @@ sub parseFile {
    #####################################################
    # We find all the header lines
 
+   CATEGORIZE_COMMENTS:
    for (my $line_index = 0; $line_index < @newLines; $line_index++) {
 
       my $line = $newLines[$line_index][LINEOBJECT];
@@ -1188,6 +1189,16 @@ sub parseFile {
       #
       # Only comment lines (unsplit lines with no tokens) can be header lines
       if ($line->noTokens) {
+
+         if (index(lc($line->unsplit), '###block') == 0) {
+            $line->type('BLOCK_COMMENT');
+            next CATEGORIZE_COMMENTS;
+         }
+
+         if ($line->unsplit eq '') {
+            $line->type('BLANK');
+            next CATEGORIZE_COMMENTS;
+         }
 
          my $header = getHeader(getEntityFirstTag($line->type), $line->type);
 
@@ -1209,7 +1220,9 @@ sub parseFile {
 
          } else {
 
-            # It is just a comment, we won't botter with it ever again.
+            # This is either a comment or a line we couldn't find a parse record for. 
+            # Either way we aren't going to be able to process it further, mark it to
+            # be included verbatim in the new file.
             $line->type('COMMENT');
          }
       }

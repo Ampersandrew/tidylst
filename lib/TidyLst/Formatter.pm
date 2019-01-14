@@ -114,7 +114,7 @@ sub constructHeaderLine {
 
          # calculate the maximum length of this column, as a whole number of tabs
          my $max = _roundUpToTabLength($columnLength, $tabLength);
-         
+
          my $header   = getHeader($col, $self->type);
          my $leftover = _roundUpToTabLength($max - length $header, $tabLength);
          my $toAdd    = int($leftover / $tabLength);
@@ -176,7 +176,7 @@ sub constructLine {
 
          # calculate the maximum length of this column, as a whole number of tabs
          my $max = _roundUpToTabLength($columnLength, $tabLength);
-         
+
          my $column   = $line->joinwith($col, "\t");
          my $leftover = _roundUpToTabLength($max - $line->columnLength($col), $tabLength);
          my $toAdd    = int($leftover / $tabLength);

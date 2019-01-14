@@ -73,7 +73,7 @@ use constant {
    # Line importance (Mode)
    MAIN           => 1, # Main line type for the file
    SUB            => 2, # Sub line type, must be linked to a MAIN
-   SINGLE         => 3, # Idependant line type
+   SINGLE         => 3, # Independant line type
    COMMENT        => 4, # Comment or empty line.
 
    # Line formatting option (Format)
@@ -90,9 +90,6 @@ use constant {
    NO             => 0,
    YES            => 1,
 };
-
-
-
 
 
 my %columnWithNoTag = (
@@ -124,7 +121,6 @@ my %columnWithNoTag = (
    'VARIABLE'          => '000VariableName',
    'WEAPONPROF'        => '000WeaponName',
 );
-
 
 
 # The global BONUS:xxx tags are used in many of the line types.  They are

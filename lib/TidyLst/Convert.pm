@@ -27,6 +27,7 @@ use TidyLst::Data qw(
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 
+our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLANK)$);
 
 my $sourceCurrentFile = "";
 my %classSpellTypes   = ();
@@ -712,7 +713,8 @@ sub convertClassLines {
             }
 
             # Is this line blank or a comment?
-            if ($jLine->type =~ qr{^(?:HEADER|COMMENT|BLANK)$}) {
+            if ($jLine->type =~ $tokenlessRegex) {
+
                next ENTITY_LINE
             }
 
@@ -810,7 +812,7 @@ sub convertClassLines {
          $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
 
       } elsif (ref $line eq 'TidyLst::Line'
-         && $line->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)
+         && $line->type !~ $tokenlessRegex
          && exists $info->{Mode} 
          && $info->{Mode} == SUB) {
 
@@ -819,7 +821,7 @@ sub convertClassLines {
          $line->lastMain($lastMainLine);
 
       } elsif (ref $line eq 'TidyLst::Line'
-         && $line->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)
+         && $line->type !~ $tokenlessRegex
          && exists $info->{Mode} 
          && $info->{Mode} == MAIN) {
 
@@ -2150,7 +2152,7 @@ sub multiLineToSingle {
             }
 
             # Is this line blank or a comment?
-            if ($jLine->type !~ qr(^(?:HEADER|COMMENT|BLANK)$)) {
+            if ($jLine->type !~ $tokenlessRegex) {
                next ENTITY_LINE
             }
 
