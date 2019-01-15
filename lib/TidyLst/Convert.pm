@@ -26,7 +26,7 @@ use TidyLst::Data qw(
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 
-our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLANK)$);
+our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLOCK_COMMENT|BLANK)$);
 
 my $sourceCurrentFile = "";
 my %classSpellTypes   = ();
@@ -688,7 +688,7 @@ sub convertClassLines {
          ENTITY_LINE:
          for ( ; $j < @{$lines_ref}; $j++ ) {
 
-            my $jLine = $lines_ref->[$i];
+            my $jLine = $lines_ref->[$j];
 
             # if this isn't a line
             if (! defined $jLine || ref $jLine ne 'TidyLst::Line' ) {
@@ -720,9 +720,9 @@ sub convertClassLines {
          $old_length = $last_line - $first_line + 1;
 
          # extract the other lines
-         my $skillLine = extractSkillLine($line);
-         my $spellLine = extractSpellLine($line);
-         my $preLine   = extractPreLine($line);
+         my $skillLine = $line->extractSkillLine();
+         my $spellLine = $line->extractSpellLine();
+         my $preLine   = $line->extractPreLine();
 
          # We prepare the replacement lines
          $j = 0;
@@ -1783,6 +1783,7 @@ sub convertWillpower{
 sub doFileConversions {
 
    my ($lines_ref, $filetype, $filename) = @_;
+
 
    if (isConversionActive('ALL:Multiple lines to one')
       && ($filetype eq 'RACE' || $filetype eq 'TEMPLATE')) {

@@ -7,6 +7,7 @@ use Data::Dumper;
 use Scalar::Util;
 
 use Carp;
+use YAML;
 
 require Exporter;
 
@@ -3495,6 +3496,10 @@ sub getDirSourceTags {
 sub getEntityFirstTag {
 
    my ($entity) = @_;
+
+   confess "Opps comment\n" unless $entity ne 'COMMENT';
+
+   print STDERR Dump $entity;
 
    @{getOrderForLineType($entity)}[0];
 }

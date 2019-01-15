@@ -17,7 +17,6 @@ our @EXPORT_OK = qw(
 
 use Carp;
 
-
 # expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
@@ -52,6 +51,7 @@ use TidyLst::Data qw(
 use TidyLst::Line;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
+use TidyLst::Reformat qw(reformatFile);
 use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
@@ -707,8 +707,7 @@ sub checkClearTokenOrder {
    for my $column ($line->columns) {
 
       # if only one of a kind, skip the rest
-      next TAG if $line->columnHasSingleToken;
-
+      next TAG if $line->columnHasSingleToken($column);
       $line->checkClear($column);
    }
 }
@@ -722,8 +721,7 @@ sub checkClearTokenOrder {
    Paramter: $tagText   The text of the tag
              $linetype  The Type of the current line
              $file      The name of the current file
-             $line      The number of the current line
-
+             $line      The number of 
    Return: Tag and value, if value is defined the tag needs no further
            parsing.
 
@@ -947,7 +945,6 @@ sub parseFile {
          type     => $curent_linetype,
          file     => $file,
          unsplit  => $newLine,
-         entity   => $curent_entity,
          num      => $lineNum,
       );
 
@@ -1004,15 +1001,11 @@ sub parseFile {
          die qq(Invalid type for $curent_linetype);
       }
 
-      # Got a line info hash, so update the entity and type in the line
-      $line->entity($curent_entity);
+      # Got a line info hash, so update the line type in the line
       $line->type($line_info->{Linetype});
 
       # Identify the deprecated tags.
       scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
-
-      # Split the line in tokens
-      my %line_tokens;
 
       # By default, the tab character is used
       my $sep = $line_info->{SepRegEx} || qr(\t+);
@@ -1051,9 +1044,6 @@ sub parseFile {
                $lineNum
             )
          }
-
-         # and add it to line_tokens
-         $line_tokens{$column} = [$value];
 
          my $token =  TidyLst::Token->new(
             tag       => $column,
@@ -1097,7 +1087,7 @@ sub parseFile {
 
             my $tag = $token->tag;
 
-            if (exists $line_tokens{$tag} && ! isValidMultiTag($curent_linetype, $tag)) {
+            if ($line->hasColumn($tag) && ! isValidMultiTag($curent_linetype, $tag)) {
                $log->notice(
                   qq{The tag "$tag" should not be used more than once on the same }
                   . $curent_linetype . qq{ line.\n},
@@ -1105,17 +1095,10 @@ sub parseFile {
                   $lineNum
                );
             }
-
-            $line_tokens{$tag} = exists $line_tokens{$tag}
-               ? [ @{ $line_tokens{$tag} }, $token->fullRealToken ]
-               : [$token->fullRealToken];
-
             $line->add($token);
 
          } else {
-
             $log->warning( "No tags in \"$rawToken\"\n", $file, $lineNum );
-            $line_tokens{$rawToken} = $rawToken;
          }
       }
 
@@ -1192,7 +1175,6 @@ sub parseFile {
       }
    }
 
-
    #################################################################
    ######################## Conversion #############################
    # We manipulate the tags for the whole file here
@@ -1206,7 +1188,7 @@ sub parseFile {
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
 
-   reformatFile(\@newLines);
+   reformatFile($fileType, \@newLines);
 }
 
 

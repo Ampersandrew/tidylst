@@ -3,7 +3,8 @@ package TidyLst::Formatter;
 use strict;
 use warnings;
 
-use Mouse;
+use Moose;
+use YAML;
 
 # expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
@@ -67,7 +68,7 @@ sub adjustLengthsForHeaders {
    # next time we format a line or header line.
    $self->clear;
 
-   for my $col (@{$self->columns}) {
+   for my $col ($self->columns) {
 
       my $len = length getHeader($col, $self->type);
 
@@ -98,7 +99,9 @@ sub adjustLengths {
    # next time we format a line or header line.
    $self->clear;
 
-   for my $col (@{$line->columns}) {
+   print STDERR Dump $line;
+
+   for my $col ($line->columns) {
 
       my $len = $line->columnLength($col, $self->tabLength);
 
@@ -144,9 +147,9 @@ sub constructFirstColumnLine {
          my $columnLength = $self->column($col) + $self->tabLength;
 
          # calculate the maximum length of this column, as a whole number of tabs
-         my $max = _roundUpToTabLength($columnLength, $self->tabLength);
+         my $max = roundUpToTabLength($columnLength, $self->tabLength);
 
-         my $leftover = _roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
+         my $leftover = roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
 
          $toAdd = int($leftover / $self->tabLength);
 
@@ -156,7 +159,7 @@ sub constructFirstColumnLine {
 
       }
 
-      my $column   = $line->joinwith($col, "\t");
+      my $column   = $line->joinWith($col, "\t");
       $fileLine .= $column . "\t" x $toAdd;
    }
 
@@ -192,10 +195,10 @@ sub constructHeaderLine {
       my $columnLength = $self->column($col) + $self->tabLength;
 
       # calculate the maximum length of this column, as a whole number of tabs
-      my $max = _roundUpToTabLength($columnLength, $self->tabLength);
+      my $max = roundUpToTabLength($columnLength, $self->tabLength);
 
       my $header   = getHeader($col, $self->type);
-      my $leftover = _roundUpToTabLength($max - length $header, $self->tabLength);
+      my $leftover = roundUpToTabLength($max - length $header, $self->tabLength);
       my $toAdd    = int($leftover / $self->tabLength);
 
       $headerLine .= $header . "\t" x $toAdd;
@@ -234,10 +237,10 @@ sub constructLine {
       my $columnLength = $self->column($col) + $self->tabLength;
 
       # calculate the maximum length of this column, as a whole number of tabs
-      my $max = _roundUpToTabLength($columnLength, $self->tabLength);
+      my $max = roundUpToTabLength($columnLength, $self->tabLength);
 
-      my $column   = $line->joinwith($col, "\t");
-      my $leftover = _roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
+      my $column   = $line->joinWith($col, "\t");
+      my $leftover = roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
       my $toAdd    = int($leftover / $self->tabLength);
 
       $fileLine .= $column . "\t" x $toAdd;
@@ -268,9 +271,9 @@ sub orderColumns {
    # Do the defined columns first
    for my $col (@{$order}) {
 
-      # if the column is in this object add it ot the order and then delete it
+      # if the column is in this object add it to the order and then delete it
       # from %columns so we can put the left overs at the end
-      if ($self->hascolumn($col)) {
+      if ($self->hasColumn($col)) {
          $self->add($col);
          delete $columns{$col};
       }
@@ -281,7 +284,7 @@ sub orderColumns {
    }
 }
 
-=head2 _roundUpToTabLength
+=head2 roundUpToTabLength
 
    Round this length to the smallest multiple of tabLength that can hold it.
 

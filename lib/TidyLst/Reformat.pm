@@ -7,13 +7,13 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
+   reformatFile
    );
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Convert qw(LINEOBJECT);
 use TidyLst::Data qw(
    BLOCK FIRST_COLUMN LINE LINE_HEADER MAIN NO_HEADER SINGLE SUB
    );
@@ -33,14 +33,11 @@ sub reformatFile {
    my @oldLines = @{ $lines };
    my @newLines;
 
+   my $lastInBlock;
    my $tabLength = getOption('tabLength');
 
    CORE_LINE:
    for ( my $index = 0; $index < @oldLines; $index++ ) {
-
-      if (! ref $oldLines[$index] eq 'ARRAY') {
-         die 'Oops not an array';
-      }
 
       my $line = $oldLines[$index];
 
@@ -60,7 +57,7 @@ sub reformatFile {
       if ($line->mode == SINGLE || $line->format == LINE) {
 
          # if the previous line was a header, remove it.
-         if ($lastLine->type eq 'HEADER') {
+         if (defined $lastLine && $lastLine->type eq 'HEADER') {
             pop @newLines;
          }
 
@@ -83,7 +80,7 @@ sub reformatFile {
             # Add an empty line in front of the header unless there is already
             # one or the previous line matches the line entity.
 
-            if ($lastLine->type ne 'BLANK' && $lastLine->entityName ne $line->entityName) {
+            if (defined $lastLine && $lastLine->type ne 'BLANK' && $lastLine->entityName ne $line->entityName) {
                my $blankLine = $line->cloneNoTokens;
                $blankLine->type('BLANK');
                push @newLines, $blankLine;
@@ -140,7 +137,7 @@ sub reformatFile {
             # All the main lines must be found up until a different main line
             # type or a ###Block comment.
 
-            my $lastInBlock = $index;
+            $lastInBlock = $index;
 
             BLOCK_LINE:
             for ( ; $lastInBlock < @oldLines; $lastInBlock++) {
@@ -242,7 +239,7 @@ sub reformatFile {
             # All the main lines must be found up until a different main line
             # type or a ###Block comment.
 
-            my $lastInBlock = $index;
+            $lastInBlock = $index;
 
             BLOCK_LINE:
             for ( ; $lastInBlock < @oldLines; $lastInBlock++) {
@@ -324,7 +321,7 @@ sub reformatFile {
          }
       }
 
-      $index == $lastInBlock;
+      $index = $lastInBlock;
    }
 
    my @lines = map {$_->unsplit} @newLines;

@@ -3,7 +3,8 @@ package TidyLst::Line;
 use strict;
 use warnings;
 
-use Mouse;
+use Moose;
+use Carp;
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
@@ -15,9 +16,8 @@ use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Token;
 use TidyLst::Options qw(getOption);
 
-has 'columns' => (
+has 'tagColumns' => (
    traits   => ['Hash'],
-#   is       => 'ro',
    isa      => 'HashRef[ArrayRef[TidyLst::Token]]',
    default  => sub { {} },
    handles  => {
@@ -46,12 +46,6 @@ has 'unsplit' => (
    is       => 'rw',
    isa      => 'Str',
    required => 1,
-);
-
-has 'entity' => (
-   is       => 'rw',
-   isa      => 'Str',
-   predicate => 'hasEntity',
 );
 
 has 'num' => (
@@ -109,7 +103,7 @@ sub addToBonusAndPreReport {
    for my $column ($self->columns) {
       if ($column !~ qr{^BONUS|^PRE}) {
          next COLUMNS;
-         for my $token ($self->column($column)) {
+         for my $token (@{$self->column($column)}) {
             addToBonusAndPreReport($token, $self->type);
          }
       }
@@ -126,22 +120,29 @@ sub addToBonusAndPreReport {
 sub add {
    my ($self, $token) = @_;
 
-   $self->column($token->tag, []) unless $self->column($token->tag); 
+   if (!$self->column($token->tag)) {
+      $self->column($token->tag, []) 
+   }
 
    push @{ $self->column($token->tag) }, $token;
 }
 
-
 sub cloneNoTokens {
    my ($self) = @_;
 
-   my $newLine = $self->meta->clone_object($self);
+   my $line = TidyLst::Line->new(
+      'type'    => $self->type, 
+      'file'    => $self->file,
+      'unsplit' => '',
+      'format'  => $self->format,
+      'header'  => $self->header,
+      'mode'    => $self->mode,
+      'num'     => $self->num,
+   );
 
-   $newLine->clearTokens;
-   $newLine->unsplit('');
-
-   return $newLine;
+   $line;
 }
+
 
 
 =head2 columnHasSingleToken
@@ -152,9 +153,9 @@ sub cloneNoTokens {
 
 sub columnHasSingleToken {
 
-   my ($self, $token) = @_;
+   my ($self, $column) = @_;
 
-   $self->hasColumn($token) && scalar $self->column($token->tag) == 1;
+   $self->hasColumn($column) && scalar @{$self->column($column)} == 1;
 }
 
 
@@ -209,13 +210,13 @@ sub checkClear {
       # The SA tag is special because it is only checked
       # up to the first (
 
-      $clearPat =  /\.?CLEAR.?([^(]*)/;
-      $valPat   =  /^([^(]*)/;
+      $clearPat =  qr/\.?CLEAR.?([^(]*)/;
+      $valPat   =  qr/^([^(]*)/;
 
    } else {
 
-      $clearPat =  /\.?CLEAR.?(.*)/;
-      $valPat   =  /(.*)/;
+      $clearPat =  qr/\.?CLEAR.?(.*)/;
+      $valPat   =  qr/(.*)/;
    }
 
    for my $token ( @{$self->column($column)} ) {
@@ -277,7 +278,8 @@ sub entityToken {
 
    # Look up the name of the column that holds the name
    my $nameTag = getEntityFirstTag($self->type);
-   $self->hasColumn($nameTag) && @{$self->column($nameTag)}[0];
+
+   $self->hasColumn($nameTag) && $self->firstTokenInColumn($nameTag)
 }
 
 
@@ -310,16 +312,22 @@ sub extractPreLine {
    my ($self) = @_;
 
    my $line = $self->cloneNoTokens;
-   $line->add($self->entityToken);
+
+   my $token = $self->entityToken;
+
+   $line->add($token);
 
    COLUMNS:
    for my $column ($self->columns) {
+
       if ($column !~ /^\!?PRE/ &&  $column !~ /^DEITY/) {
          next COLUMNS;
       }
-      for my $token ($self->column($column)) {
+
+      for my $token (@{$self->column($column)}) {
          $line->add($token);
       }
+
       $self->deleteColumn($column);
    }
 
@@ -338,7 +346,10 @@ sub extractSkillLine {
    my ($self) = @_;
 
    my $line = $self->cloneNoTokens;
-   $line->add($self->entityToken);
+
+   my $token = $self->entityToken;
+
+   $line->add($token);
 
    for my $column (qw(
       CSKILL:.CLEAR     CCSKILL
@@ -348,7 +359,7 @@ sub extractSkillLine {
       )) {
 
       if ($self->hasColumn($column)) {
-         for my $token ($self->column($column)) {
+         for my $token (@{$self->column($column)}) {
             $line->add($token);
          }
          $self->deleteColumn($column);
@@ -387,7 +398,7 @@ sub extractSpellLine {
       )) {
 
       if ($self->hasColumn($column)) {
-         for my $token ($self->column($column)) {
+         for my $token (@{$self->column($column)}) {
             $line->add($token);
          }
          $self->deleteColumn($column);
@@ -552,7 +563,9 @@ sub mergeLines {
 
    my ($self, $oLine) = @_;
 
-   for my $column (grep {$_ ne $self->entityName} $oLine->columns) {
+   my $entTok = $self->entityToken;
+
+   for my $column (grep {$_ ne $entTok->tag} $oLine->columns) {
       for my $token (@{$oLine->column($column)}) {
          $self->add($token);
       }
