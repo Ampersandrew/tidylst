@@ -10,6 +10,8 @@ our @EXPORT_OK = qw(
    reformatFile
    );
 
+use YAML;
+
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
@@ -59,6 +61,7 @@ sub reformatFile {
          # if the previous line was a header, remove it.
          if (defined $lastLine && $lastLine->type eq 'HEADER') {
             pop @newLines;
+            $lastLine = $newLines[-1];
          }
 
          my $formatter = TidyLst::Formatter->new(
@@ -79,8 +82,13 @@ sub reformatFile {
 
             # Add an empty line in front of the header unless there is already
             # one or the previous line matches the line entity.
+            
+            my $addBlank = 
+               ((defined $lastLine && $lastLine->type !~ $TidyLst::Convert::tokenlessRegex) 
+                  && ($lastLine->entityName ne $line->entityName))
+               || (defined $lastLine && $lastLine->type ne 'BLANK');
 
-            if (defined $lastLine && $lastLine->type ne 'BLANK' && $lastLine->entityName ne $line->entityName) {
+            if ($addBlank) {
                my $blankLine = $line->cloneNoTokens;
                $blankLine->type('BLANK');
                push @newLines, $blankLine;
@@ -260,7 +268,7 @@ sub reformatFile {
                   next BLOCK_LINE
                }
 
-               if ($this->type != $line->type) {
+               if ($this->type ne $line->type) {
 
                   # Don't include this line in the block
                   $lastInBlock--;
@@ -321,7 +329,10 @@ sub reformatFile {
          }
       }
 
-      $index = $lastInBlock;
+      if (defined $lastInBlock) {
+         $index = $lastInBlock;
+      }
+
    }
 
    my @lines = map {$_->unsplit} @newLines;

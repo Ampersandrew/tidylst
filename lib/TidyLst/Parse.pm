@@ -1149,18 +1149,18 @@ sub parseFile {
 
          my $header = getHeader(getEntityFirstTag($line->type), $line->type);
 
-         my $thisIsHeader = $header && index($line->unsplit, $header) == 0;
-         my $nextIsHeader;
+         my $headerForCurrent = $header && index($line->unsplit, $header) == 0;
+         my $headerForNext;
 
          if ($line_index + 1 <= $#newLines) {
             my $next = $newLines[$line_index + 1];
 
             my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
-            $nextIsHeader = $header && index($next->unsplit, $header) == 0;
+            $headerForNext = $header && index($line->unsplit, $header) == 0;
          }
 
          # if this line or the next starts with the header for its type,
-         if ($thisIsHeader || $nextIsHeader) {
+         if ($headerForCurrent || $headerForNext) {
 
             # It is a header, let's tag it as such.
             $line->type('HEADER');

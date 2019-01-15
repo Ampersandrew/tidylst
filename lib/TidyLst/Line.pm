@@ -3,14 +3,15 @@ package TidyLst::Line;
 use strict;
 use warnings;
 
-use Moose;
+use Mouse;
 use Carp;
+use YAML;
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Data qw(getEntityFirstTag getEntityNameTag);
+use TidyLst::Data qw(getEntityFirstTag getEntityNameTag isFauxTag);
 use TidyLst::Log;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Token;
@@ -173,15 +174,24 @@ sub columnLength {
 
    if ($self->hasColumn($key)) {
 
-      my @column = @{ $self->column($key) };
-      my $final  = pop @column;
+      # Anything with a faux tag only hads the legnth of the value of its first column
+      if (isFauxTag($key)) {
 
-      # The final item is not rounded to the tab length
-      $length = defined $final ? length $final->fullRealToken : 0;
+         my $value = $self->valueInFirstTokenInColumn($key);
+         $length = defined $value ? length $value : 0;
 
-      # All other elements must be rounded to the next tab
-      for my $token ( @column ) {
-         $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
+      } else {
+
+         my @column = @{ $self->column($key) };
+         my $final  = pop @column;
+
+         # The final item is not rounded to the tab length
+         $length = defined $final ? length $final->fullRealToken : 0;
+
+         # All other elements must be rounded to the next tab
+         for my $token ( @column ) {
+            $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
+         }
       }
    }
 
@@ -451,8 +461,8 @@ sub firstTokenInColumn {
 
 =head2 valueInFirstTokenInColumn
 
-   Get the token which is first in the column, returns undef if the column is
-   not present in the line.
+   Get the value of the token which is first in the column, returns undef if
+   the column is not present in the line.
 
 =cut
 
@@ -461,8 +471,8 @@ sub valueInFirstTokenInColumn {
    my ($self, $column) = @_;
 
    if ($self->hasColumn($column)) {
-      my $token = $self->firstTokenInColumn;
-      $token->value
+      my $token = $self->firstTokenInColumn($column);
+      return $token->value
    }
 
    return undef;   

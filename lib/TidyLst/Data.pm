@@ -7,7 +7,6 @@ use Data::Dumper;
 use Scalar::Util;
 
 use Carp;
-use YAML;
 
 require Exporter;
 
@@ -40,6 +39,7 @@ our @EXPORT_OK = qw(
    getValidSystemArr
    incCountInvalidTags
    incCountValidTags
+   isFauxTag
    isValidCategory
    isValidCheck
    isValidEntity
@@ -122,6 +122,8 @@ my %columnWithNoTag = (
    'VARIABLE'          => '000VariableName',
    'WEAPONPROF'        => '000WeaponName',
 );
+
+my %fauxTag = map {$_ => 1} values %columnWithNoTag;
 
 
 # The global BONUS:xxx tags are used in many of the line types.  They are
@@ -3499,8 +3501,6 @@ sub getEntityFirstTag {
 
    confess "Opps comment\n" unless $entity ne 'COMMENT';
 
-   print STDERR Dump $entity;
-
    @{getOrderForLineType($entity)}[0];
 }
 
@@ -3675,6 +3675,20 @@ sub getValidSystemArr {
    }->{$type};
 
    defined $arr ? @{$arr} : ();
+}
+
+
+=head2 isFauxTag
+
+   Returns true if the given tag is a Faux tag (doesn't exist in the files, but
+   the value appears at the start of the line).
+
+=cut
+
+sub isFauxTag {
+   my ($tag) = @_;
+
+   exists $fauxTag{$tag};
 }
 
 

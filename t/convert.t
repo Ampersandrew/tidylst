@@ -10,7 +10,7 @@ use lib dirname(dirname abs_path $0) . '/lib';
 
 use TidyLst::Token;
 
-use Test::More tests => 23;
+use Test::More tests => 28;
 use Test::Warn;
 
 use_ok ('TidyLst::Convert');
@@ -95,3 +95,12 @@ warnings_like { TidyLst::Convert::convertPreSpellType($token) }
 
 is($token->tag, 'FEAT', "Tag has not changed (FEAT)");
 is($token->value, 'Foo|PRESPELLTYPE:2,Arcane=3', "Value is now Foo|PRESPELLTYPE:2,Arcane=3"); 
+
+# Test $tokenlessRegex 
+
+is('COMMENT' =~ $TidyLst::Convert::tokenlessRegex, 1, "Regex matches COMMENT");
+is('HEADER' =~ $TidyLst::Convert::tokenlessRegex, 1, "Regex matches HEADER");
+is('BLOCK_COMMENT' =~ $TidyLst::Convert::tokenlessRegex, 1, "Regex matches BLOCK_COMMENT");
+is('BLANK' =~ $TidyLst::Convert::tokenlessRegex, 1, "Regex matches BLANK");
+is('RANDOM' =~ $TidyLst::Convert::tokenlessRegex, '', "Regex does not match RANDOM");
+

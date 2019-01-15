@@ -3,7 +3,7 @@ package TidyLst::Token;
 use strict;
 use warnings;
 
-use Moose;
+use Mouse;
 use Carp;
 use Text::Balanced ();
 

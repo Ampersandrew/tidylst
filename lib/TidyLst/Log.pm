@@ -11,8 +11,8 @@ use constant {
 # have deleted informational (who's going to type that on the command line?)
 our $wlPattern = qr{^(?:d|debug|e|err|error|i|info|n|notice|w|warn|warning)}i;
 
-use Moose;
-use Moose::Util::TypeConstraints;
+use Mouse;
+use Mouse::Util::TypeConstraints;
 use Scalar::Util;
 
 # Make a type that we will use to coerce a string warning level

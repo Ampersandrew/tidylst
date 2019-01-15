@@ -3,15 +3,18 @@ package TidyLst::Formatter;
 use strict;
 use warnings;
 
-use Moose;
-use YAML;
+use Mouse;
 
 # expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Data qw(getOrderForLineType);
+use TidyLst::Data qw(
+   getHeader
+   getOrderForLineType
+   isFauxTag
+   );
 
 has 'columns' => (
    traits   => ['Hash'],
@@ -99,8 +102,6 @@ sub adjustLengths {
    # next time we format a line or header line.
    $self->clear;
 
-   print STDERR Dump $line;
-
    for my $col ($line->columns) {
 
       my $len = $line->columnLength($col, $self->tabLength);
@@ -139,32 +140,42 @@ sub constructFirstColumnLine {
    for my $col ($self->order) {
 
       next COLUMNS unless $self->hasColumn($col);
+      
+      my $column;
 
       if (! $fileLine) {
 
+         my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
+         
          # Make sure there is a tab between the widest value in this column and
          # the next column (if it happens to be a multiple of tablength).
-         my $columnLength = $self->column($col) + $self->tabLength;
+         if ($columnLength == $self->column($col)) {
+            $columnLength += $self->tabLength;
+         }
 
-         # calculate the maximum length of this column, as a whole number of tabs
-         my $max = roundUpToTabLength($columnLength, $self->tabLength);
+         if (isFauxTag($col)) {
+            $column = $line->valueInFirstTokenInColumn($col);
+         } else {
+            $column = $line->joinWith($col, "\t");
+         }
 
-         my $leftover = roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
+         my $padding        = $columnLength - length $column;
+         my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
 
-         $toAdd = int($leftover / $self->tabLength);
+         $toAdd  = int($roundedPadding / $self->tabLength);
 
       } else {
 
-         $toAdd = 1;
+         $toAdd  = 1;
+         $column = $line->joinWith($col, "\t");
 
       }
 
-      my $column   = $line->joinWith($col, "\t");
       $fileLine .= $column . "\t" x $toAdd;
    }
 
    # Remove the extra tabs at the end
-   $fileLine =~ s/"\t"+$//;
+   $fileLine =~ s/\t+$//;
 
    $fileLine;
 }
@@ -190,22 +201,25 @@ sub constructHeaderLine {
    # Do the defined columns first
    for my $col ($self->order) {
 
+      my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
+
       # Make sure there is a tab between the widest value in this column and
       # the next column (if it happens to be a multiple of tablength).
-      my $columnLength = $self->column($col) + $self->tabLength;
+      if ($columnLength == $self->column($col)) {
+         $columnLength += $self->tabLength;
+      }
 
-      # calculate the maximum length of this column, as a whole number of tabs
-      my $max = roundUpToTabLength($columnLength, $self->tabLength);
+      my $header         = getHeader($col, $self->type);
+      my $padding        = $columnLength - length $header;
+      my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
 
-      my $header   = getHeader($col, $self->type);
-      my $leftover = roundUpToTabLength($max - length $header, $self->tabLength);
-      my $toAdd    = int($leftover / $self->tabLength);
+      my $toAdd  = int($roundedPadding / $self->tabLength);
 
       $headerLine .= $header . "\t" x $toAdd;
    }
 
    # Remove the extra tabs at the end
-   $headerLine =~ s/"\t"+$//;
+   $headerLine =~ s/\t+$//;
 
    $headerLine;
 }
@@ -231,23 +245,29 @@ sub constructLine {
 
    # Do the defined columns first
    for my $col ($self->order) {
+      
+      my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
 
       # Make sure there is a tab between the widest value in this column and
       # the next column (if it happens to be a multiple of tablength).
-      my $columnLength = $self->column($col) + $self->tabLength;
+      if ($columnLength == $self->column($col)) {
+         $columnLength += $self->tabLength;
+      }
 
-      # calculate the maximum length of this column, as a whole number of tabs
-      my $max = roundUpToTabLength($columnLength, $self->tabLength);
+      my $column = isFauxTag($col)
+         ? $line->valueInFirstTokenInColumn($col)
+         : $line->joinWith($col, "\t");
 
-      my $column   = $line->joinWith($col, "\t");
-      my $leftover = roundUpToTabLength($max - $line->columnLength($col), $self->tabLength);
-      my $toAdd    = int($leftover / $self->tabLength);
+      my $padding        = $columnLength - length $column;
+      my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
+
+      my $toAdd  = int($roundedPadding / $self->tabLength);
 
       $fileLine .= $column . "\t" x $toAdd;
    }
 
    # Remove the extra tabs at the end
-   $fileLine =~ s/"\t"+$//;
+   $fileLine =~ s/\t+$//;
 
    $fileLine;
 }
