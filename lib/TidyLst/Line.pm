@@ -60,12 +60,6 @@ has 'num' => (
    predicate => 'hasNum',
 );
 
-has 'lastMain' => (
-   is        => 'rw',
-   isa       => 'Int',
-   predicate => 'hasLastMain',
-);
-
 has 'mode' => (
    is       => 'rw',
    isa      => 'Str',

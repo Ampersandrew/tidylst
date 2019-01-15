@@ -7,7 +7,6 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
-   CURRENTENTITY LASTMAIN LINEINFO LINEOBJECT LINETOKENS LINETYPE
    convertAddTokens
    convertEntities
    doFileConversions
@@ -32,17 +31,6 @@ our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLANK)$);
 my $sourceCurrentFile = "";
 my %classSpellTypes   = ();
 my %spellsForEQMOD    = ();
-
-
-use constant {
-   LINETYPE      => 0,
-   LINETOKENS    => 1,
-   LASTMAIN      => 2,
-   CURRENTENTITY => 3,
-   LINEINFO      => 4,
-   LINEOBJECT    => 5,
-};
-
 
 # KEYS entries were changed in the main files
 my %convertEquipmodKey = qw(
@@ -682,14 +670,11 @@ sub convertClassLines {
 
    my ($lines_ref, $filetype, $filename) = @_;
 
-   my $lastMainLine = -1;
-
    # Find all the CLASS lines
    ENTITY:
    for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
 
-      my $line = $lines_ref->[$i][LINEOBJECT];
-      my $info = $lines_ref->[$i][LINEINFO];
+      my $line = $lines_ref->[$i];
 
       # Is this a CLASS line?
       if (ref $line eq 'TidyLst::Line' && $line->type eq 'CLASS') {
@@ -698,14 +683,12 @@ sub convertClassLines {
          my $old_length;
          my $j          = $i + 1;
          my @newLines;
-         
-         $lastMainLine  = $i;
 
          #Find the next line that is not empty or of the same CLASS
          ENTITY_LINE:
          for ( ; $j < @{$lines_ref}; $j++ ) {
 
-            my $jLine = $lines_ref->[$i][LINEOBJECT];
+            my $jLine = $lines_ref->[$i];
 
             # if this isn't a line
             if (! defined $jLine || ref $jLine ne 'TidyLst::Line' ) {
@@ -750,58 +733,26 @@ sub convertClassLines {
                $skillLine->columns == 1 && 
                $spellLine->columns == 1 )) {
 
-            my $newLine;
-            $newLine->[LINETYPE]      = 'CLASS';
-            $newLine->[LINETOKENS]    = {};
-            $newLine->[LASTMAIN]      = $lastMainLine;
-            $newLine->[CURRENTENTITY] = $line->entityName;
-            $newLine->[LINEINFO]      = $info;
-            $newLine->[LINEOBJECT]    = $line;
-
-            push @newLines, $newLine;
+            push @newLines, $line;
             $j++;
          }
 
          if ($preLine->columns > 1) {
 
-            my $newLine;
-            $newLine->[LINETYPE]      = 'CLASS';
-            $newLine->[LINETOKENS]    = {};
-            $newLine->[LASTMAIN]      = ++$lastMainLine;
-            $newLine->[CURRENTENTITY] = $line->entityName;
-            $newLine->[LINEINFO]      = $info;
-            $newLine->[LINEOBJECT]    = $preLine;
-
-            push @newLines, $newLine;
+            push @newLines, $preLine;
             $j++;
          }
 
          if ($skillLine->columns > 1) {
 
-            my $newLine;
-            $newLine->[LINETYPE]      = 'CLASS';
-            $newLine->[LINETOKENS]    = {};
-            $newLine->[LASTMAIN]      = ++$lastMainLine;
-            $newLine->[CURRENTENTITY] = $line->entityName;
-            $newLine->[LINEINFO]      = $info;
-            $newLine->[LINEOBJECT]    = $skillLine;
-
-            push @newLines, $newLine;
+            push @newLines, $skillLine;
             $j++;
          }
 
          # The spell line
          if ($spellLine->columns > 1) {
 
-            my $newLine;
-            $newLine->[LINETYPE]      = 'CLASS';
-            $newLine->[LINETOKENS]    = {};
-            $newLine->[LASTMAIN]      = ++$lastMainLine;
-            $newLine->[CURRENTENTITY] = $line->entityName;
-            $newLine->[LINEINFO]      = $info;
-            $newLine->[LINEOBJECT]    = $spellLine;
-
-            push @newLines, $newLine;
+            push @newLines, $spellLine;
             $j++;
          }
 
@@ -811,24 +762,6 @@ sub convertClassLines {
          # Continue with the rest
          $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
 
-      } elsif (ref $line eq 'TidyLst::Line'
-         && $line->type !~ $tokenlessRegex
-         && exists $info->{Mode} 
-         && $info->{Mode} == SUB) {
-
-         # We must replace the lastMainLine with the correct value
-         $lines_ref->[$i][LASTMAIN] = $lastMainLine;
-         $line->lastMain($lastMainLine);
-
-      } elsif (ref $line eq 'TidyLst::Line'
-         && $line->type !~ $tokenlessRegex
-         && exists $info->{Mode} 
-         && $info->{Mode} == MAIN) {
-
-         # We update the lastMainLine value and
-         # put the correct value in the curent line
-         $lines_ref->[$i][LASTMAIN] = $lastMainLine = $i;
-         $line->lastMain($lastMainLine);
       }
    }
 }
@@ -2121,14 +2054,11 @@ sub multiLineToSingle {
 
    my ($lines_ref, $filetype, $filename) = @_;
 
-   my $lastMainLine = -1;
-
    # Find all the lines with the same identifier
    ENTITY:
    for ( my $i = 0; $i < @{$lines_ref}; $i++ ) {
 
-      my $line = $lines_ref->[$i][LINEOBJECT];
-      my $info = $lines_ref->[$i][LINEINFO];
+      my $line = $lines_ref->[$i];
 
       # Is this a linetype we are interested in?
       if (ref $lines_ref->[$i] eq 'ARRAY' && ($line-isType('RACE') || $line-isType('TEMPLATE'))) {
@@ -2138,13 +2068,11 @@ sub multiLineToSingle {
          my $j            = $i + 1;
          my @newLines;
 
-         $lastMainLine = $i;
-
          #Find all the line with the same entity name
          ENTITY_LINE:
          for ( ; $j < @{$lines_ref}; $j++ ) {
 
-            my $jLine = $lines_ref->[$j][LINEOBJECT];
+            my $jLine = $lines_ref->[$j];
 
             # if this isn't a line
             if (! defined $jLine || ref $jLine ne 'TidyLst::Line' ) {
@@ -2179,15 +2107,7 @@ sub multiLineToSingle {
 
          # The main line
          if (scalar @{$line->columns} > 1) {
-            push @newLines,
-            [
-               $line->type,
-               {},
-               $lastMainLine,
-               $line->entityName,
-               $info,
-               $line,
-            ];
+            push @newLines, $line;
             $j++;
          }
 
@@ -2197,19 +2117,6 @@ sub multiLineToSingle {
          # Continue with the rest
          $i = $first_line + $j - 1;      # -1 because the $i++ happen right after
 
-      } elsif ($line->type ne 'HEADER' && exists $info->{Mode} && $info->{Mode} == SUB) {
-
-         # We must replace the lastMainLine with the correct value
-
-         $lines_ref->[$i][LASTMAIN] = $lastMainLine;
-         $line->lastMain($lastMainLine);
-
-      } elsif ($line->type ne 'HEADER' && exists $info->{Mode} && $info->{Mode} == MAIN) {
-
-         # We update the lastMainLine value and
-         # put the correct value in the curent line
-         $lines_ref->[$i][LASTMAIN] = $lastMainLine = $i;
-         $line->lastMain($lastMainLine);
       }
    }
 }

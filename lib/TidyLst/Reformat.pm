@@ -42,10 +42,9 @@ sub reformatFile {
          die 'Oops not an array';
       }
 
-      my $lineRef = $oldLines[$index];
-      my $line    = $lineRef->[LINEOBJECT];
+      my $line = $oldLines[$index];
 
-      if (!defined $line || ref $line ne 'TidyLst::Line') {
+      if (ref $line ne 'TidyLst::Line') {
          die 'Oops not a line object';
       }
 

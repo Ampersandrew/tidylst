@@ -24,7 +24,6 @@ use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
 use TidyLst::Convert qw(
-   CURRENTENTITY LASTMAIN LINEINFO LINEOBJECT LINETOKENS LINETYPE
    convertAddTokens
    convertEntities
    doFileConversions
@@ -56,15 +55,6 @@ use TidyLst::Options qw(getOption isConversionActive);
 use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
-
-#use constant {
-#   LINETYPE      => 0,
-#   LINETOKENS    => 1,
-#   LASTMAIN      => 2,
-#   CURRENTENTITY => 3,
-#   LINEINFO      => 4,
-#   LINEOBJECT    => 5,
-#};
 
 my $className = "";
 
@@ -959,22 +949,13 @@ sub parseFile {
          unsplit  => $newLine,
          entity   => $curent_entity,
          num      => $lineNum,
-         lastMain => $lastMainLine,
       );
 
       # Skip comments and empty lines
       if (length($newLine) == 0 || $newLine =~ /^\#/) {
 
-         my $lineRef;
-         $lineRef->[LINETYPE]      = $curent_linetype; 
-         $lineRef->[LINETOKENS]    = $newLine;         
-         $lineRef->[LASTMAIN]      = $lastMainLine;    
-         $lineRef->[CURRENTENTITY] = undef;            
-         $lineRef->[LINEINFO]      = undef;            
-         $lineRef->[LINEOBJECT]    = $line;            
-
          # We push the line as is.
-         push @newLines, $lineRef;
+         push @newLines, $line;
          next LINE;
       }
 
@@ -988,16 +969,8 @@ sub parseFile {
             $lineNum
          );
 
-         my $lineRef;
-         $lineRef->[LINETYPE]      = $curent_linetype; 
-         $lineRef->[LINETOKENS]    = $newLine;         
-         $lineRef->[LASTMAIN]      = $lastMainLine;    
-         $lineRef->[CURRENTENTITY] = undef;            
-         $lineRef->[LINEINFO]      = undef;            
-         $lineRef->[LINEOBJECT]    = $line;            
-
          # We push the line as is.
-         push @newLines, $lineRef;
+         push @newLines, $line;
          next LINE;
       }
 
@@ -1034,7 +1007,6 @@ sub parseFile {
       # Got a line info hash, so update the entity and type in the line
       $line->entity($curent_entity);
       $line->type($line_info->{Linetype});
-      $line->lastMain($lastMainLine);
 
       # Identify the deprecated tags.
       scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
@@ -1147,14 +1119,6 @@ sub parseFile {
          }
       }
 
-      my $lineRef;
-      $lineRef->[LINETYPE]      = $curent_linetype;
-      $lineRef->[LINETOKENS]    = \%line_tokens;   
-      $lineRef->[LASTMAIN]      = $lastMainLine;   
-      $lineRef->[CURRENTENTITY] = $curent_entity;  
-      $lineRef->[LINEINFO]      = $line_info;      
-      $lineRef->[LINEOBJECT]    = $line;           
-
       # We manipulate the tags for the line here
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
@@ -1170,7 +1134,7 @@ sub parseFile {
       checkClearTokenOrder($line);
 
       # Populate the lines array
-      push @newLines, $lineRef;
+      push @newLines, $line;
 
    }
    continue { $lineNum++ }
@@ -1182,7 +1146,7 @@ sub parseFile {
    CATEGORIZE_COMMENTS:
    for (my $line_index = 0; $line_index < @newLines; $line_index++) {
 
-      my $line = $newLines[$line_index][LINEOBJECT];
+      my $line = $newLines[$line_index];
 
       # A header line either begins with the curent line_type header
       # or the next line header.
@@ -1206,7 +1170,7 @@ sub parseFile {
          my $nextIsHeader;
 
          if ($line_index + 1 <= $#newLines) {
-            my $next = $newLines[$line_index + 1][LINEOBJECT];
+            my $next = $newLines[$line_index + 1];
 
             my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
             $nextIsHeader = $header && index($next->unsplit, $header) == 0;
