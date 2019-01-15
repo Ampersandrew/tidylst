@@ -172,7 +172,7 @@ sub columnHasSingleToken {
 =cut
 
 sub columnLength {
-   my ($self, $key) = @_;
+   my ($self, $key, $tabLength) = @_;
 
    my $length = 0;
 
@@ -183,8 +183,6 @@ sub columnLength {
 
       # The final item is not rounded to the tab length
       $length = defined $final ? length $final->fullRealToken : 0;
-
-      my $tabLength = getOption('tabLength');
 
       # All other elements must be rounded to the next tab
       for my $token ( @column ) {

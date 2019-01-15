@@ -13,7 +13,11 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Formater;
+use TidyLst::Convert qw(LINEOBJECT);
+use TidyLst::Data qw(
+   BLOCK FIRST_COLUMN LINE LINE_HEADER MAIN NO_HEADER SINGLE SUB
+   );
+use TidyLst::Formatter;
 use TidyLst::Options qw(getOption);
 
 =head2 reformatFile
@@ -61,13 +65,16 @@ sub reformatFile {
             pop @newLines;
          }
 
-         my $formatter = TidyLst::Formatter->new(type => $line->type);
+         my $formatter = TidyLst::Formatter->new(
+            type      => $line->type,
+            tabLength => $tabLength,
+         );
          $formatter->adjustLengths($line);
 
          if ($line->header == NO_HEADER) {
 
             # Rewrite the unsplit version of this line
-            $line->unsplit($formatter->constructLine($line, $tabLength));
+            $line->unsplit($formatter->constructLine($line));
 
             push @newLines, $line;
             next CORE_LINE
@@ -87,10 +94,10 @@ sub reformatFile {
 
             my $headerLine = $line->cloneNoTokens;
             $headerLine->type('HEADER');
-            $headerLine->unsplit($formatter->constructHeaderLine($tabLength));
+            $headerLine->unsplit($formatter->constructHeaderLine());
             push @newLines, $headerLine;
 
-            $line->unsplit($formatter->constructLine($line, $tabLength));
+            $line->unsplit($formatter->constructLine($line));
             push @newLines, $line;
 
          } else {
@@ -126,7 +133,10 @@ sub reformatFile {
 
          } else {
 
-            my $formatter = TidyLst::Formatter->new(type => $line->type);
+            my $formatter = TidyLst::Formatter->new(
+               type      => $line->type,
+               tabLength => $tabLength,
+            );
 
             # All the main lines must be found up until a different main line
             # type or a ###Block comment.
@@ -161,7 +171,6 @@ sub reformatFile {
                }
             }
 
-
             # If the first line of this block has some kind of header, make a
             # header line for it
             if ($line->header != NO_HEADER) {
@@ -169,7 +178,7 @@ sub reformatFile {
 
                my $headerLine = $line->cloneNoTokens;
                $headerLine->type('HEADER');
-               $headerLine->unsplit($formatter->constructHeaderLine($tabLength));
+               $headerLine->unsplit($formatter->constructHeaderLine());
                push @newLines, $headerLine;
             }
 
@@ -192,7 +201,7 @@ sub reformatFile {
                   if ($previous->type ne 'HEADER') {
                      my $headerLine = $this->cloneNoTokens;
                      $headerLine->type('HEADER');
-                     $headerLine->unsplit($formatter->constructHeaderLine($tabLength));
+                     $headerLine->unsplit($formatter->constructHeaderLine());
                      push @newLines, $headerLine;
                   }
 
@@ -208,12 +217,16 @@ sub reformatFile {
 
                # reformat the unsplit version of this line and push it onto new
                # lines
-               $this->unsplit($formatter->constructLine($this, $tabLength));
+               $this->unsplit($formatter->constructLine($this));
                push @newLines, $this;
             }
          }
 
       } elsif ( $line->mode == SUB ) {
+
+         if ($line->header != NO_HEADER) {
+            die "SUB imay not have a heeader";
+         }
 
          if ( $line->format == LINE ) {
 
@@ -221,7 +234,11 @@ sub reformatFile {
 
          } elsif ( $line->format == BLOCK || $line->format == FIRST_COLUMN ) {
 
-            my $formatter = TidyLst::Formatter->new(type => $line->type);
+
+            my $formatter = TidyLst::Formatter->new(
+               type      => $line->type,
+               tabLength => $tabLength,
+            );
 
             # All the main lines must be found up until a different main line
             # type or a ###Block comment.
@@ -233,11 +250,9 @@ sub reformatFile {
 
                my $this = $oldLines[$lastInBlock];
 
-               # If a Main line or a '###Block' comment is found, we are out of
-               # the block
-               if ($this->type eq 'BLOCK_COMMENT' || $this->mode == MAIN) {
+               if ($this->type eq 'BLOCK_COMMENT') {
 
-                  # type has changed, don't include this line in the block
+                  # Don't include this line in the block
                   $lastInBlock--;
                   last BLOCK_LINE
                }
@@ -249,194 +264,73 @@ sub reformatFile {
                   next BLOCK_LINE
                }
 
-               # This line has tokens
-               if ($this->mode == MAIN) {
-                  $formatter->adjustLengths($this);
+               if ($this->type != $line->type) {
+
+                  # Don't include this line in the block
+                  $lastInBlock--;
+                  last BLOCK_LINE
                }
+
+               # This line has tokens
+               $formatter->adjustLengths($this);
             }
 
+            if ( $line->format == BLOCK) {
 
+               BLOCK_LINE:
+               for my $inx ($index .. $lastInBlock) {
 
+                  # When $inx is 0, previous is the last line of the file. This is
+                  # unlikely to create problems since neither the first nor the
+                  # last line will be a header. Previous is only used to decide
+                  # whether to add a header before $this.
+                  my $this = $oldLines[$inx];
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            #####################################
-            # Need to find all the file in the SUB BLOCK i.e. same line type
-            # within two MAIN lines.
-            # If we encounter a ###Block comment, that's the end of the block
-
-            # Each of the block lines must be reformated
-            if ( $line->format == BLOCK ) {
-               for my $block_line (@sub_lines) {
-                  my $newline;
-
-                  for my $tag (@col_order) {
-                     my $col_max_length
-                     = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-
-                     # Is the tag present in this line?
-                     if ( exists $oldLines[$block_line][LINETOKENS]{$tag} ) {
-                        my $curent_length = mylength( $oldLines[$block_line][LINETOKENS]{$tag} );
-
-                        my $tab_to_add
-                        = int( ( $col_max_length - $curent_length ) / $tablength )
-                        + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                        $newline .= join $sep, @{ $oldLines[$block_line][LINETOKENS]{$tag} };
-                        $newline .= $sep x $tab_to_add;
-
-                     } else {
-
-                        # We pad with tabs
-                        $newline .= $sep x ( $col_max_length / $tablength );
-                     }
+                  # At this point Comments, block comments and blanks, push them
+                  # unmodified.
+                  if ($this->type =~ $TidyLst::Convert::tokenlessRegex) {
+                     push @newLines, $this;
+                     next BLOCK_LINE;
                   }
 
-                  # We replace the array with the new line
-                  $oldLines[$block_line] = $newline;
+                  # reformat the unsplit version of this line and push it onto new
+                  # lines
+                  $this->unsplit($formatter->constructLine($this));
+                  push @newLines, $this;
                }
-
             } else {
 
-               # $line->format == FIRST_COLUMN
+               BLOCK_LINE:
+               for my $inx ($index .. $lastInBlock) {
 
-               for my $block_line (@sub_lines) {
+                  # When $inx is 0, previous is the last line of the file. This is
+                  # unlikely to create problems since neither the first nor the
+                  # last line will be a header. Previous is only used to decide
+                  # whether to add a header before $this.
+                  my $this = $oldLines[$inx];
 
-                  my $newline;
-                  my $first_column = YES;
-                  my $tab_to_add;
-
-                  TAG:
-                  for my $tag (@col_order) {
-
-                     # Is the tag present in this line?
-                     next TAG if !exists $oldLines[$block_line][LINETOKENS]{$tag};
-
-                     if ($first_column) {
-                        my $col_max_length
-                        = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                        my $curent_length = mylength( $oldLines[$block_line][LINETOKENS]{$tag} );
-
-                        $tab_to_add
-                        = int( ( $col_max_length - $curent_length ) / $tablength )
-                        + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-
-                        # It's no longer the first column
-                        $first_column = NO;
-
-                     } else {
-                        $tab_to_add = 1;
-                     }
-
-                     $newline .= join $sep, @{ $oldLines[$block_line][LINETOKENS]{$tag} };
-                     $newline .= $sep x $tab_to_add;
+                  # At this point Comments, block comments and blanks, push them
+                  # unmodified.
+                  if ($this->type =~ $TidyLst::Convert::tokenlessRegex) {
+                     push @newLines, $this;
+                     next BLOCK_LINE;
                   }
 
-                  # We replace the array with the new line
-                  $oldLines[$block_line] = $newline;
+                  # reformat the unsplit version of this line and push it onto new
+                  # lines
+                  $this->unsplit($formatter->constructFirstColumnLine($this));
+                  push @newLines, $this;
                }
             }
+         }
+      }
 
-                        if ( $line->header == NO_HEADER ) {
+      $index == $lastInBlock;
+   }
 
-                                # If there are header before any of the block line,
-                                # we need to remove them
-                                for my $block_line ( reverse @sub_lines ) {
-                                if ( ref( $oldLines[ $block_line - 1 ] ) eq 'ARRAY'
-                                        && $oldLines[ $block_line - 1 ][LINETYPE] eq 'HEADER' )
-                                {
-                                        splice( @oldLines, $block_line - 1, 1 );
-                                        $index--;
-                                }
-                                }
-                        } elsif ( $line->header == LINE_HEADER ) {
-                                die "SUB:BLOCK:LINE_HEADER not implemented yet";
-                        } elsif ( $line->header == BLOCK_HEADER ) {
+   my @lines = map {$_->unsplit} @newLines;
 
-                                # We must add the header line at the top of the block
-                                # and anywhere else we find them whitin the block.
-
-                                my $header_line;
-                                for my $tag (@col_order) {
-
-                                # Round the col_length up to the next tab
-                                my $col_max_length
-                                        = $tablength * ( int( $col_length{$tag} / $tablength ) + 1 );
-                                my $current_header = getHeader( $tag, $sub_linetype );
-                                my $current_length = mylength($current_header);
-                                my $tab_to_add  = int( ( $col_max_length - $current_length ) / $tablength )
-                                        + ( ( $col_max_length - $curent_length ) % $tablength ? 1 : 0 );
-                                $header_line .= $current_header . $sep x $tab_to_add;
-                                }
-
-                                # Before the top of the block
-                                my $need_top_header = NO;
-                                if ( ref( $oldLines[ $sub_lines[0] - 1 ] ) ne 'ARRAY'
-                                || $oldLines[ $sub_lines[0] - 1 ][LINETYPE] ne 'HEADER' )
-                                {
-                                $need_top_header = YES;
-                                }
-
-                                # Anywhere in the block
-                                for my $block_line (@sub_lines) {
-                                   if ( ref( $oldLines[ $block_line - 1 ] ) eq 'ARRAY'
-                                      && $oldLines[ $block_line - 1 ][LINETYPE] eq 'HEADER' ) {
-
-                                      $oldLines[ $block_line - 1 ] = $header_line;
-                                   }
-                                }
-
-                                # Add a header line at the top of the block
-                                if ($need_top_header) {
-                                   splice( @oldLines, $sub_lines[0], 0, $header_line );
-                                   $index++;
-                                }
-
-                        } else {
-                                die qq(Invalid \%TidyLst::Parse::parseControl )
-                                . $line->type . q(:)
-                                . $line->mode . q(:)
-                                . $line->format . q(:)
-                                . $line->header;
-                        }
-
-                } else {
-                        die qq(Invalid \%TidyLst::Parse::parseControl )
-                        . $line->type . q(:)
-                        . $line->mode . q(:)
-                        . $line->format . q(:)
-                        . $line->header;
-                }
-
-             } else {
-                die qq(Invalid \%TidyLst::Parse::parseControl mode: )
-                . $fileType . q(:)
-                . $line->type . q(:)
-                . $line->mode;
-             }
-        }
-
-        # If there are header lines remaining, we keep the old value
-        for (@oldLines) {
-           $_ = $_->[LINETOKENS] if ref($_) eq 'ARRAY' && $_->[LINETYPE] eq 'HEADER';
-        }
-
-        return \@oldLines;
+   return \@lines;
 }
 
 
