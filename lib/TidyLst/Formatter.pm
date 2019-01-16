@@ -153,22 +153,26 @@ sub constructFirstColumnLine {
             $columnLength += $self->tabLength;
          }
 
-         if (isFauxTag($col)) {
-            $column = $line->valueInFirstTokenInColumn($col);
-         } else {
-            $column = $line->joinWith($col, "\t");
-         }
+         my $column = isFauxTag($col)
+            ? $line->valueInFirstTokenInColumn($col)
+            : $line->joinWith($col, "\t");
 
-         my $padding        = $columnLength - length $column;
+         $column = defined $column ? $column : "";
+
+         my $padding = $columnLength - length $column;
          my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
 
-         $toAdd  = int($roundedPadding / $self->tabLength);
+         $toAdd = int($roundedPadding / $self->tabLength);
 
       } else {
 
          $toAdd  = 1;
-         $column = $line->joinWith($col, "\t");
+         $column = $line->hasColumn($col) ? $line->joinWith($col, "\t") : "";
 
+      }
+
+      if (!defined $column) {
+         $column = "";
       }
 
       $fileLine .= $column . "\t" x $toAdd;
@@ -243,7 +247,7 @@ sub constructLine {
 
    my $fileLine;
 
-   # Do the defined columns first
+   ALL_COLUMNS:
    for my $col ($self->order) {
       
       my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
@@ -258,7 +262,10 @@ sub constructLine {
          ? $line->valueInFirstTokenInColumn($col)
          : $line->joinWith($col, "\t");
 
-      my $padding        = $columnLength - length $column;
+
+      $column //= "";
+
+      my $padding = $columnLength - length $column;
       my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
 
       my $toAdd  = int($roundedPadding / $self->tabLength);

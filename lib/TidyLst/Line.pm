@@ -57,19 +57,19 @@ has 'num' => (
 
 has 'mode' => (
    is       => 'rw',
-   isa      => 'Str',
+   isa      => 'Int',
    predicate => 'hasMode',
 );
 
 has 'format' => (
    is       => 'rw',
-   isa      => 'Str',
+   isa      => 'Int',
    predicate => 'hasFormat',
 );
 
 has 'header' => (
    is       => 'rw',
-   isa      => 'Str',
+   isa      => 'Int',
    predicate => 'hasHeader',
 );
 

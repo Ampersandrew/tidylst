@@ -678,11 +678,11 @@ sub convertClassLines {
 
       # Is this a CLASS line?
       if (ref $line eq 'TidyLst::Line' && $line->type eq 'CLASS') {
+
          my $first_line = $i;
          my $last_line  = $i;
          my $old_length;
          my $j          = $i + 1;
-         my @newLines;
 
          #Find the next line that is not empty or of the same CLASS
          ENTITY_LINE:
@@ -702,8 +702,7 @@ sub convertClassLines {
             }
 
             # Is it a CLASS line of the same CLASS?
-            if ($jLine->isType('CLASS') 
-               && $jLine->entityName eq $line->entityName) {
+            if ($jLine->isType('CLASS') && $jLine->entityName eq $line->entityName) {
 
                $last_line = $j;
                $line->mergeLines($jLine);
@@ -726,6 +725,7 @@ sub convertClassLines {
 
          # We prepare the replacement lines
          $j = 0;
+         my @newLines;
 
          # The main line
          if ($line->columns > 1 || ( 

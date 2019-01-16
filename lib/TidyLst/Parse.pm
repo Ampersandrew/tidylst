@@ -82,6 +82,8 @@ my %parsableFileType = (
    CLASS           => \&parseFile,
    COMPANIONMOD    => \&parseFile,
    DATACONTROL     => \&parseFile,
+   DATATABLE       => \&parseFile,
+   DYNAMIC         => \&parseFile,
    DEITY           => \&parseFile,
    DOMAIN          => \&parseFile,
    EQUIPMENT       => \&parseFile,
@@ -93,6 +95,7 @@ my %parsableFileType = (
    RACE            => \&parseFile,
    SAVE            => \&parseFile,
    SHIELDPROF      => \&parseFile,
+   SIZE            => \&parseFile,
    SKILL           => \&parseFile,
    SPELL           => \&parseFile,
    STAT            => \&parseFile,
@@ -116,10 +119,11 @@ my %writefiletype = (
    'ALIGNMENT'       => 1,
    'ARMORPROF'       => 1,
    'BIOSET'          => 1,
-   'CLASS Level'     => 1,
    'CLASS'           => 1,
    'COMPANIONMOD'    => 1,
    'DATACONTROL'     => 1,
+   'DATATABLE'       => 1,
+   'DYNAMIC'         => 1,
    'DEITY'           => 1,
    'DOMAIN'          => 1,
    'EQUIPMENT'       => 1,
@@ -946,6 +950,9 @@ sub parseFile {
          file     => $file,
          unsplit  => $newLine,
          num      => $lineNum,
+         mode     => COMMENT,
+         header   => NO_HEADER, # No header
+         format   => LINE,
       );
 
       # Skip comments and empty lines

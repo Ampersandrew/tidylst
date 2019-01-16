@@ -260,8 +260,8 @@ sub validateAbilityLine {
    my $log = getLogger();
 
    my $hasCHOOSE = 1 if $line->hasColumn('CHOOSE');
-   my $hasMULT   = 1 if $line->hasColumn('MULT')  && $line->firstColumnMatches('MULT', /^MULT:Y/i);
-   my $hasSTACK  = 1 if $line->hasColumn('STACK') && $line->firstColumnMatches('STACK', /^STACK:Y/i);
+   my $hasMULT   = 1 if $line->hasColumn('MULT')  && $line->firstColumnMatches('MULT', qr/^MULT:Y/i);
+   my $hasSTACK  = 1 if $line->hasColumn('STACK') && $line->firstColumnMatches('STACK', qr/^STACK:Y/i);
 
    # 1) if it has MULT:YES, it  _has_ to have CHOOSE
    # 2) if it has CHOOSE, it _has_ to have MULT:YES
@@ -276,7 +276,7 @@ sub validateAbilityLine {
          $line->num
       );
 
-   } elsif ( $hasCHOOSE && !$hasMULT && $line->firstColumnMatches('CHOOSE', /CHOOSE:(?:SPELLLEVEL|NUMBER)/i)) {
+   } elsif ( $hasCHOOSE && !$hasMULT && $line->firstColumnMatches('CHOOSE', qr/CHOOSE:(?:SPELLLEVEL|NUMBER)/i)) {
 
       # CHOOSE:SPELLLEVEL and CHOOSE:NUMBER are exempted from this particular rule.
       $log->info(
@@ -303,38 +303,38 @@ sub validateAbilityLine {
 
       # The CHOOSE type tells us the type of sub-entities
 
-      if ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/) ) {
+      if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/) ) {
 
          addValidSubEntity($line->type, $entityName, $1)
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/)) {
 
          addValidSubEntity($line->type, $entityName, 'FEAT')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/)) {
 
          addValidSubEntity($line->type, $entityName, 'WEAPONPROF')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/)) {
 
          addValidSubEntity($line->type, $entityName, 'SKILL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/)) {
 
          addValidSubEntity($line->type, $entityName, 'SPELL_SCHOOL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/)) {
 
          addValidSubEntity($line->type, $entityName, 'SPELL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/)
-               ||$line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/)
+               ||$line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/)) {
 
          # Ad-Lib is a special case that means "Don't look for
          # anything else".
          addValidSubEntity($line->type, $entityName, 'Ad-Lib')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', /^CHOOSE:(?:COUNT=\d+\|)?(.*)/)) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:COUNT=\d+\|)?(.*)/)) {
 
          # ad-hod/special list of thingy It adds to the valid
          # entities instead of the valid sub-entities.  We do

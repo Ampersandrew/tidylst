@@ -696,7 +696,7 @@ for my $file (@filesToParse_sorted) {
 
    my $headerRemoved = 0;
 
-   # While the first line is any sort of commant about pretty lst or TidyLst,
+   # While the first line is any sort of comment about pretty lst or TidyLst,
    # we remove it
    REMOVE_HEADER:
    while ( $lines[0] =~ $CVSPattern || $lines[0] =~ $newHeaderPattern ) {
@@ -725,7 +725,7 @@ for my $file (@filesToParse_sorted) {
       # The overwhelming majority of checking, correcting and reformatting happens in this operation
       my ($newlines_ref) = &{ $parser }( $filesToParse{$file}, \@lines, $file);
 
-      # Let's remove the tralling white spaces
+      # Let's remove any tralling white spaces
       for my $line (@$newlines_ref) {
          $line =~ s/\s+$//;
       }

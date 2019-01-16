@@ -103,6 +103,7 @@ sub reformatFile {
 
             $line->unsplit($formatter->constructLine($line));
             push @newLines, $line;
+            next CORE_LINE
 
          } else {
 
@@ -175,6 +176,10 @@ sub reformatFile {
                }
             }
 
+            if ($lastInBlock > $#oldLines) {
+               $lastInBlock = $#oldLines;
+            }
+
             # If the first line of this block has some kind of header, make a
             # header line for it
             if ($line->header != NO_HEADER) {
@@ -229,23 +234,18 @@ sub reformatFile {
       } elsif ( $line->mode == SUB ) {
 
          if ($line->header != NO_HEADER) {
-            die "SUB imay not have a heeader";
+            die "SUB must not have a header";
          }
 
-         if ( $line->format == LINE ) {
-
-            die "SUB:LINE not implemented yet";
-
-         } elsif ( $line->format == BLOCK || $line->format == FIRST_COLUMN ) {
-
+         if ( $line->format == BLOCK || $line->format == FIRST_COLUMN ) {
 
             my $formatter = TidyLst::Formatter->new(
                type      => $line->type,
                tabLength => $tabLength,
             );
 
-            # All the main lines must be found up until a different main line
-            # type or a ###Block comment.
+            # All the sub lines must be found up until a different sub line
+            # type, a main line type, or a ###Block comment is encountered.
 
             $lastInBlock = $index;
 
@@ -279,6 +279,10 @@ sub reformatFile {
                $formatter->adjustLengths($this);
             }
 
+            if ($lastInBlock > $#oldLines) {
+               $lastInBlock = $#oldLines;
+            }
+
             if ( $line->format == BLOCK) {
 
                BLOCK_LINE:
@@ -302,6 +306,7 @@ sub reformatFile {
                   $this->unsplit($formatter->constructLine($this));
                   push @newLines, $this;
                }
+
             } else {
 
                BLOCK_LINE:

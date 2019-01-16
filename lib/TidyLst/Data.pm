@@ -3501,7 +3501,11 @@ sub getEntityFirstTag {
 
    confess "Opps comment\n" unless $entity ne 'COMMENT';
 
-   @{getOrderForLineType($entity)}[0];
+   my $arrayRef = getOrderForLineType($entity);
+
+   return "" unless defined $arrayRef;
+
+   $arrayRef->[0];
 }
 
 
@@ -4004,6 +4008,8 @@ sub setValidSystemArr {
 
 sub splitAndAddToValidEntities {
    my ($entitytype, $ability, $value) = @_;
+
+   return unless defined $value;
 
    for my $abil ( split '\|', $value ) {
       $validEntities{'ABILITY'}{"$ability($abil)"}  = $value;
