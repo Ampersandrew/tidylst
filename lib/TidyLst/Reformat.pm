@@ -56,13 +56,13 @@ sub reformatFile {
       my $newline  = "";
       my $lastLine = $newLines[-1];
 
-      if ($line->mode == SINGLE || $line->format == LINE) {
+      # if the previous line was a header, remove it.
+      if (defined $lastLine && $lastLine->type eq 'HEADER') {
+         pop @newLines;
+         $lastLine = $newLines[-1];
+      }
 
-         # if the previous line was a header, remove it.
-         if (defined $lastLine && $lastLine->type eq 'HEADER') {
-            pop @newLines;
-            $lastLine = $newLines[-1];
-         }
+      if ($line->mode == SINGLE || $line->format == LINE) {
 
          my $formatter = TidyLst::Formatter->new(
             type      => $line->type,
@@ -73,7 +73,11 @@ sub reformatFile {
          if ($line->header == NO_HEADER) {
 
             # Rewrite the unsplit version of this line
-            $line->unsplit($formatter->constructLine($line));
+            if ($line->format == FIRST_COLUMN) {
+               $line->unsplit($formatter->constructFirstColumnLine($line));
+            } else {
+               $line->unsplit($formatter->constructLine($line));
+            }
 
             push @newLines, $line;
             next CORE_LINE

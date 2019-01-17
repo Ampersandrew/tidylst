@@ -1488,15 +1488,15 @@ sub _domainsOnDeity {
 
    my ($self) = @_;
 
+   my $value;
 
    # Only DOMAINS in DEITY
    if ($self->value =~ /\|/ ) {
       my $value = substr($self->value, 0, rindex($self->value, "\|"));
-      $self->value($value);
    }
 
    DOMAIN_FOR_DEITY:
-   for my $domain ( split ',', $self->value ) {
+   for my $domain ( split ',', $value ) {
 
       # ALL is valid here
       next DOMAIN_FOR_DEITY if $domain eq 'ALL';

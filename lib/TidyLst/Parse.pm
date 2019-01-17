@@ -16,6 +16,7 @@ our @EXPORT_OK = qw(
    );
 
 use Carp;
+use YAML;
 
 # expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
@@ -919,7 +920,7 @@ sub parseFile {
    # Working variables
 
    my $curent_linetype = "";
-   my $lastMainLine  = -1;
+   my $lastMainLine    = -1;
 
    my $curent_entity;
 
@@ -1134,9 +1135,9 @@ sub parseFile {
    # We find all the header lines
 
    CATEGORIZE_COMMENTS:
-   for (my $line_index = 0; $line_index < @newLines; $line_index++) {
+   for (my $i = 0; $i < @newLines; $i++) {
 
-      my $line = $newLines[$line_index];
+      my $line = $newLines[$i];
 
       # A header line either begins with the curent line_type header
       # or the next line header.
@@ -1156,18 +1157,33 @@ sub parseFile {
 
          my $header = getHeader(getEntityFirstTag($line->type), $line->type);
 
-         my $headerForCurrent = $header && index($line->unsplit, $header) == 0;
-         my $headerForNext;
+         my $isHeader = $header && index($line->unsplit, $header) == 0;
 
-         if ($line_index + 1 <= $#newLines) {
-            my $next = $newLines[$line_index + 1];
+         # If this line is not a header line for its own line type, try the
+         # next different line type, is it a header for it?
+         if (! $isHeader) {
 
-            my $header    = getHeader(getEntityFirstTag($next->type), $next->type);
-            $headerForNext = $header && index($line->unsplit, $header) == 0;
+            FIND_LINETYPE:
+            for my $j ($i + 1 .. $#newLines) {
+               my $next = $newLines[$j];
+
+               # find the first non-blank line type that doesn't match the current
+               # line's type
+               if (! $next->type || $next->type eq $line->type) {
+                  next FIND_LINETYPE;
+               }
+
+               my $header = getHeader(getEntityFirstTag($next->type), $next->type);
+               $isHeader = $header && index($line->unsplit, $header) == 0;
+               last FIND_LINETYPE;
+            }
          }
 
-         # if this line or the next starts with the header for its type,
-         if ($headerForCurrent || $headerForNext) {
+         # If this line starts with the header for its line type, or if it
+         # starts with a header for the line type of the next line with a
+         # different line type.
+         
+         if ($isHeader) {
 
             # It is a header, let's tag it as such.
             $line->type('HEADER');
@@ -1191,6 +1207,8 @@ sub parseFile {
    ##################################################
    ##################################################
    # Phase II - Reformating the lines
+   
+   print STDERR Dump @newLines;
 
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);

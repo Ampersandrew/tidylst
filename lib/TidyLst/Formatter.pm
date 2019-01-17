@@ -133,7 +133,7 @@ sub constructFirstColumnLine {
       $self->orderColumns;
    }
 
-   my $fileLine;
+   my $fileLine = "";
    my $toAdd;
 
    COLUMNS:
@@ -153,7 +153,7 @@ sub constructFirstColumnLine {
             $columnLength += $self->tabLength;
          }
 
-         my $column = isFauxTag($col)
+         $column = isFauxTag($col)
             ? $line->valueInFirstTokenInColumn($col)
             : $line->joinWith($col, "\t");
 
