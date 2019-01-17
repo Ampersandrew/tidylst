@@ -1207,8 +1207,6 @@ sub parseFile {
    ##################################################
    ##################################################
    # Phase II - Reformating the lines
-   
-   print STDERR Dump @newLines;
 
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);

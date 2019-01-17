@@ -1492,7 +1492,7 @@ sub _domainsOnDeity {
 
    # Only DOMAINS in DEITY
    if ($self->value =~ /\|/ ) {
-      my $value = substr($self->value, 0, rindex($self->value, "\|"));
+      $value = substr($self->value, 0, rindex($self->value, "\|"));
    }
 
    DOMAIN_FOR_DEITY:

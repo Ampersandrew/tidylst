@@ -867,7 +867,7 @@ if ($dumpValidEntities) {
 
 if (getOption('outputerror')) {
    close STDERR;
-#   print STDOUT "\cG"; # An audible indication that PL has finished.
+   print STDOUT "\cG"; # An audible indication that PL has finished.
 }
 
 ###############################################################################
