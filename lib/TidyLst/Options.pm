@@ -1,4 +1,4 @@
-package LstTidy::Options;
+package TidyLst::Options;
 
 use 5.008_001;		# Perl 5.8.1 or better is now mandantory
 use strict;
@@ -8,12 +8,12 @@ use Scalar::Util qw(reftype);
 use Getopt::Long;
 use Exporter qw(import);
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Log;
+use TidyLst::Log;
 
 our (@ISA, @EXPORT_OK);
 
@@ -28,8 +28,6 @@ my $errorMessage;
 %activate = (
   'ADD:SAB'          => 'ALL:Convert ADD:SA to ADD:SAB',
   'ASCII'            => 'ALL:Fix Common Extended ASCII',
-  'classskill'       => 'CLASSSKILL conversion to CLASS',
-  'classspell'       => 'CLASSSPELL conversion to SPELL',
   'foldbacklines'    => 'ALL:Multiple lines to one',
   'Followeralign'    => 'DEITY:Followeralign conversion',
   'gmconv'           => 'PCC:GAMEMODE Add to the CMP DnD_',
@@ -60,14 +58,13 @@ my $errorMessage;
 # The active conversions
 %conversionEnabled =
 (
-   'Generate BONUS and PRExxx report'   => 0,
-
    'ALL:Fix Common Extended ASCII'      => 1,    # [ 1324519 ] ASCII characters
    'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
    'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
    'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
 
-   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types # [ 728038 ] BONUS:VISION must replace VISION:
+   'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types 
+                                                 # [ 728038 ] BONUS:VISION must replace VISION:
    'ALL: 4.3.3 Weapon name change'      => 0,    # Bunch of name changed for SRD compliance
    'ALL:ADD Syntax Fix'                 => 0,    # [ 1678577 ] ADD: syntax no longer uses parens
    'ALL:Add TYPE=Base.REPLACE'          => 0,    # [ 784363 ] Add TYPE=Base.REPLACE to most BONUS:COMBAT|BAB
@@ -91,14 +88,11 @@ my $errorMessage;
    'CLASS: SPELLLIST from Spell.MOD'    => 0,    # [ 779341 ] Spell Name.MOD to CLASS's SPELLLEVEL
    'CLASS:CASTERLEVEL for all casters'  => 0,    # [ 876536 ] All spell casting classes need CASTERLEVEL
    'CLASS:no more HASSPELLFORMULA'      => 0,    # [ 1973497 ] HASSPELLFORMULA is deprecated
-   'CLASSSKILL conversion to CLASS'     => 0,
-   'CLASSSPELL conversion to SPELL'     => 0,    # [ 641912 ] Convert CLASSSPELL to SPELL
    'DEITY:Followeralign conversion'     => 0,    # [ 1689538 ] Conversion: Deprecation of FOLLOWERALIGN
    'EQUIP:no more MOVE'                 => 0,    # [ 865826 ] Remove the deprecated MOVE tag in EQUIPMENT files
    'EQUIPMENT: SLOTS:2 for plurals'     => 0,    # [ 695677 ] EQUIPMENT: SLOTS for gloves, bracers and boots
    'EQUIPMENT: generate EQMOD'          => 0,    # [ 677962 ] The DMG wands have no charge.
    'EQUIPMENT: remove ATTACKS'          => 0,    # [ 686169 ] remove ATTACKS: tag
-   'Export lists'                       => 0,    # Export various lists of entities
    'PCC:GAME to GAMEMODE'               => 0,    # [ 707325 ] PCC: GAME is now GAMEMODE
    'PCC:GAMEMODE Add to the CMP DnD_'   => 0,    # In order for the CMP files to work with the  normal PCGEN files
    'PCC:GAMEMODE DnD to 3e'             => 0,    # [ 825005 ] convert GAMEMODE:DnD to GAMEMODE:3e
@@ -116,7 +110,7 @@ my $errorMessage;
 
 =head2 parseOptions
 
-   Paarse a passed array for the command line arguments.
+   Parse a passed array for the command line arguments.
 
    Options are parsed into clOption and accessed via the getOption and
    setOperation routines.
@@ -129,6 +123,7 @@ sub parseOptions {
 
    # Set up the defaults for each of the options
    my $basePath       = q{};        # Base path for the @ replacement
+   my $bonusReport    = 0;          # Do not generate the BONUS and PRE report
    my $convert        = q{};        # Activate a standard conversion
    my $exportList     = 0;          # Export lists of object in CVS format
    my $fileType       = q{};        # File type to use if no PCC are read
@@ -141,11 +136,11 @@ sub parseOptions {
    my $noJEP          = 0;          # Do not use the new parse_jep function
    my $noWarning      = 0;          # Do not display warning messages in the report
    my $noXCheck       = 0;          # Disable the x-check validations
-   my $oldSourceTag   = 0;          # Use | instead of \t for the SOURCExxx line
    my $outputError    = q{};        # Path and file name of the error log
    my $outputPath     = q{};        # Path for the ouput directory
    my $report         = 0;          # Generate tag usage report
    my $systemPath     = q{};        # Path to the system (game mode) files
+   my $tabLength      = 6;          # The default length of tabs for reformatting
    my $test           = 0;          # Internal; for tests only
    my $vendorPath     = q{};        # Path for the vendor directory
    my $warningLevel   = 'notice';   # Warning level for error output
@@ -156,31 +151,33 @@ sub parseOptions {
    if ( scalar @ARGV ) {
 
       GetOptions(
-         'basepath|b=s'      =>  \$basePath,  
-         'convert|c=s'       =>  \$convert,
-         'exportlist'        =>  \$exportList,
-         'filetype|f=s'      =>  \$fileType,
-         'gamemode|gm=s'     =>  \$gamemode,
-         'help|h|?'          =>  \$help,
-         'htmlhelp'          =>  \$htmlHelp,
-         'inputpath|i=s'     =>  \$inputPath,
-         'man'               =>  \$man,
-         'missingheader|mh'  =>  \$missingHeader,
-         'nojep'             =>  \$noJEP,
-         'nowarning|nw'      =>  \$noWarning,
-         'noxcheck|nx'       =>  \$noXCheck,
-         'oldsourcetag'      =>  \$oldSourceTag,
-         'outputerror|e=s'   =>  \$outputError,
-         'outputpath|o=s'    =>  \$outputPath,
-         'report|r'          =>  \$report,
-         'systempath|s=s'    =>  \$systemPath,
-         'test'              =>  \$test,
-         'vendorpath|v=s'    =>  \$vendorPath,
-         'warninglevel|wl=s' =>  \$warningLevel,
-         'xcheck|x'          =>  \$xCheck);
+         'basepath|b=s'       =>  \$basePath,  
+         'bonusreport|br'     =>  \$bonusReport,
+         'convert|c=s'        =>  \$convert,
+         'exportlist|el'      =>  \$exportList,
+         'filetype|f=s'       =>  \$fileType,
+         'gamemode|gm=s'      =>  \$gamemode,
+         'help|h|?'           =>  \$help,
+         'htmlhelp'           =>  \$htmlHelp,
+         'inputpath|i=s'      =>  \$inputPath,
+         'man'                =>  \$man,
+         'missingheader|mh'   =>  \$missingHeader,
+         'nojep'              =>  \$noJEP,
+         'nowarning|nw'       =>  \$noWarning,
+         'noxcheck|nx'        =>  \$noXCheck,
+         'outputerror|e=s'    =>  \$outputError,
+         'outputpath|o=s'     =>  \$outputPath,
+         'report|r'           =>  \$report,
+         'systempath|s=s'     =>  \$systemPath,
+         'tabLength|t=i'      =>  \$tabLength,
+         'test'               =>  \$test,
+         'vendorpath|v=s'     =>  \$vendorPath,
+         'warninglevel|wl=s'  =>  \$warningLevel,
+         'xcheck|x'           =>  \$xCheck);
 
       %clOptions = (
          'basepath'        =>  $basePath,  
+         'bonusreport'     =>  $bonusReport,
          'convert'         =>  $convert,
          'exportlist'      =>  $exportList,
          'filetype'        =>  $fileType,
@@ -193,11 +190,11 @@ sub parseOptions {
          'nojep'           =>  $noJEP,
          'nowarning'       =>  $noWarning,
          'noxcheck'        =>  $noXCheck,
-         'oldsourcetag'    =>  $oldSourceTag,
          'outputerror'     =>  $outputError,
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,
          'systempath'      =>  $systemPath,
+         'tabLength'       =>  $tabLength,
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
@@ -226,11 +223,12 @@ sub parseOptions {
       # make sure the defaults are set if there were no command line options
       %clOptions = (
          'basepath'        =>  $basePath,  
+         'bonusreport'     =>  $bonusReport,
          'convert'         =>  $convert,
          'exportlist'      =>  $exportList,
          'filetype'        =>  $fileType,
          'gamemode'        =>  $gamemode,
-         'help'            =>  0,
+         'help'            =>  $help,
          'htmlhelp'        =>  $htmlHelp,
          'inputpath'       =>  $inputPath,
          'man'             =>  $man,
@@ -238,12 +236,13 @@ sub parseOptions {
          'nojep'           =>  $noJEP,
          'nowarning'       =>  $noWarning,
          'noxcheck'        =>  $noXCheck,
-         'oldsourcetag'    =>  $oldSourceTag,
          'outputerror'     =>  $outputError,
          'outputpath'      =>  $outputPath,
          'report'          =>  $report,
          'systempath'      =>  $systemPath,
+         'tabLength'       =>  $tabLength,
          'test'            =>  $test,
+         'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
          'xcheck'          =>  $xCheck);
    }
@@ -371,15 +370,15 @@ sub _checkWarningLevel {
 
    if  (Scalar::Util::looks_like_number $wl) {
 
-      if ($wl < LstTidy::Log::ERROR || $wl > LstTidy::Log::DEBUG) {
+      if ($wl < TidyLst::Log::ERROR || $wl > TidyLst::Log::DEBUG) {
 
-         setOption('warninglevel', LstTidy::Log::NOTICE);
+         setOption('warninglevel', TidyLst::Log::NOTICE);
          $errorMessage = $message;
          setOption('help', 1);
       } 
-   } elsif ($wl !~ $LstTidy::Log::wlPattern) {
+   } elsif ($wl !~ $TidyLst::Log::wlPattern) {
 
-      setOption('warninglevel', LstTidy::Log::NOTICE);
+      setOption('warninglevel', TidyLst::Log::NOTICE);
       $errorMessage = $message;
       setOption('help', 1);
    };
@@ -411,6 +410,9 @@ sub _enableRequestedConversion {
 
    Convert the windows style path separator \\ to the unix style / 
 
+   If the path is not the empty string and does not end with /, then
+   append /.
+
 =cut
 
 sub _fixPath {
@@ -439,23 +441,18 @@ sub _processOptions {
 
    # No-warning option
    # level 6 is info, level 5 is notice
-   if (getOption('nowarning') && getOption('warninglevel') >= LstTidy::Log::INFO) {
-      setOption('warninglevel', LstTidy::Log::NOTICE);
+   if (getOption('nowarning') && getOption('warninglevel') >= TidyLst::Log::INFO) {
+      setOption('warninglevel', TidyLst::Log::NOTICE);
    }
 
    # oldsourcetag option
-   if ( getOption('oldsourcetag') ) {
+   if (getOption('oldsourcetag')) {
       # We disable the conversion if the -oldsourcetag option is used
       disableConversion ('ALL:New SOURCExxx tag format');
    }
 
-   # exportlist option
-   if ( getOption('exportlist') ) {
-      enableConversion ('Export lists');
-   }
-
    # noxcheck option
-   if ( getOption('noxcheck') ) {
+   if (getOption('noxcheck')) {
 
       # The xcheck option is now on by default. Using noxcheck is the only way to
       # disable it
@@ -464,7 +461,7 @@ sub _processOptions {
 
    # basepath option
    # If no basepath was given, use input_dir
-   if ( getOption('basepath') eq q{} ) {
+   if (getOption('basepath') eq q{}) {
       setOption('basepath', getOption('inputpath'));
    }
 

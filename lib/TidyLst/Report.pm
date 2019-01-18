@@ -1,4 +1,4 @@
-package LstTidy::Report;
+package TidyLst::Report;
 
 use strict;
 use warnings;
@@ -7,6 +7,7 @@ require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw( 
+   addToBonusAndPreReport
    add_to_xcheck_tables
    closeExportListFileHandles
    doXCheck
@@ -21,7 +22,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(
+use TidyLst::Data qw(
    foundInvalidTags
    getCrossCheckData
    getHeaderMissingOnLineType
@@ -33,9 +34,9 @@ use LstTidy::Data qw(
    validSubEntityExists
    );
 
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
-# use LstTidy::Validate qw();
+use TidyLst::LogFactory qw(getLogger);
+use TidyLst::Options qw(getOption isConversionActive);
+# use TidyLst::Validate qw();
 
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
@@ -92,15 +93,15 @@ my %Hardcoded_Variables = map { $_ => 1 } (
 
 =head2 addToBonusAndPreReport
 
+   Add the give token to the Bonus and PRE tag report
+
 =cut
 
 sub addToBonusAndPreReport {
 
-   my ($lineRef, $fileType, $tagType) = @_;
+   my ($token, $lineType) = @_;
 
-   for my $tag ( @{ $lineRef->{$tagType} } ) {
-      $bonusAndPreTagReport{$fileType}{$tag} = 1;
-   };
+   $bonusAndPreTagReport{$lineType}{$token->fullRealTag} = 1;
 }
                                 
 
@@ -207,7 +208,7 @@ sub openExportListFileHandles {
 
 =head2 printToExportList
 
-   C<LstTidy::Report::printToExportList('handle', @stuff)>
+   C<TidyLst::Report::printToExportList('handle', @stuff)>
 
    Prints the strings in @stuff to the filehandle named 'handle'.
 
@@ -255,7 +256,7 @@ sub report {
 
    my $header = $reportType . ' Tags';
 
-   $log->header(LstTidy::LogHeader::get($header));
+   $log->header(TidyLst::LogHeader::get($header));
 
    my $first = 1;
    LINE_TYPE:
@@ -296,7 +297,7 @@ sub reportBonus {
 
    my $log = getLogger();
 
-   $log->header(LstTidy::LogHeader::get('Bonus and PRE'));
+   $log->header(TidyLst::LogHeader::get('Bonus and PRE'));
 
    my $first = 1;
    LINE_TYPE:
@@ -912,7 +913,7 @@ sub doXCheck {
    my $log = getLogger();
 
    # Print the report sorted by file name and line number.
-   $log->header(LstTidy::LogHeader::get('CrossRef'));
+   $log->header(TidyLst::LogHeader::get('CrossRef'));
 
    # This will add a message for every message in to_report - which should be every message
    # that was added to to_report.
@@ -945,7 +946,7 @@ sub doXCheck {
    }
 
    # Print the type report sorted by file name and line number.
-   $log->header(LstTidy::LogHeader::get('Type CrossRef'));
+   $log->header(TidyLst::LogHeader::get('Type CrossRef'));
 
    for my $file ( sort keys %to_report ) {
       for my $line_ref ( sort { $a->[0] <=> $b->[0] } @{ $to_report{$file} } ) {
@@ -973,7 +974,7 @@ sub doXCheck {
    }
 
    # Set the header in the singleton logger object
-   $log->header(LstTidy::LogHeader::get('Category CrossRef'));
+   $log->header(TidyLst::LogHeader::get('Category CrossRef'));
 
    # Print the category report sorted by file name and line number.
    for my $file ( sort keys %to_report ) {
@@ -992,7 +993,7 @@ sub doXCheck {
    if ( getOption('missingheader') ) {
 
       my $log = getLogger();
-      $log->header(LstTidy::LogHeader::get('Missing Header'));
+      $log->header(TidyLst::LogHeader::get('Missing Header'));
 
       for my $linetype (sort getMissingHeaderLineTypes()) {
 

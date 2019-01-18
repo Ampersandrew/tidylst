@@ -1,4 +1,4 @@
-package LstTidy::Validate;
+package TidyLst::Validate;
 
 use strict;
 use warnings;
@@ -17,7 +17,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Data qw(
+use TidyLst::Data qw(
    addValidSubEntity
    getEntityName 
    incCountInvalidTags
@@ -25,8 +25,7 @@ use LstTidy::Data qw(
    splitAndAddToValidEntities
    setEntityValid
    );
-use LstTidy::LogFactory qw(getLogger);
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::LogFactory qw(getLogger);
 
 
 =head2 scanForDeprecatedTokens
@@ -256,19 +255,13 @@ sub scanForDeprecatedTokens {
 
 sub validateAbilityLine {
 
-   my ($entityName, $lineType, $lineTokens, $file, $line) = @_;
+   my ($line) = @_;
 
    my $log = getLogger();
 
-   my $hasCHOOSE = 1 if exists $lineTokens->{'CHOOSE'};
-   my $hasMULT   = 1 if exists $lineTokens->{'MULT'} && $lineTokens->{'MULT'}[0] =~ /^MULT:Y/i;
-   my $hasSTACK  = 1 if exists $lineTokens->{'STACK'} && $lineTokens->{'STACK'}[0] =~ /^STACK:Y/i;
-   
-   my $choose;
-   
-   if ($hasCHOOSE) {
-      $choose = $lineTokens->{'CHOOSE'}[0];
-   }
+   my $hasCHOOSE = 1 if $line->hasColumn('CHOOSE');
+   my $hasMULT   = 1 if $line->hasColumn('MULT')  && $line->firstColumnMatches('MULT', qr/^MULT:Y/i);
+   my $hasSTACK  = 1 if $line->hasColumn('STACK') && $line->firstColumnMatches('STACK', qr/^STACK:Y/i);
 
    # 1) if it has MULT:YES, it  _has_ to have CHOOSE
    # 2) if it has CHOOSE, it _has_ to have MULT:YES
@@ -277,75 +270,78 @@ sub validateAbilityLine {
    if ( $hasMULT && !$hasCHOOSE ) {
 
       $log->info(
-         qq(The CHOOSE tag is mandantory when MULT:YES is present in ${lineType} "${entityName}"),
-         $file,
-         $line
+         qq(The CHOOSE tag is mandantory when MULT:YES is present in ") 
+         . $line->type . q(" ") . $line->entityName . q("),
+         $line->file,
+         $line->num
       );
 
-   } elsif ( $hasCHOOSE && !$hasMULT && $choose !~ /CHOOSE:(?:SPELLLEVEL|NUMBER)/i ) {
+   } elsif ( $hasCHOOSE && !$hasMULT && $line->firstColumnMatches('CHOOSE', qr/CHOOSE:(?:SPELLLEVEL|NUMBER)/i)) {
 
       # CHOOSE:SPELLLEVEL and CHOOSE:NUMBER are exempted from this particular rule.
       $log->info(
-         qq(The MULT:YES tag is mandatory when CHOOSE is present in ${lineType} "${entityName}"),
-         $file,
-         $line
+         qq(The MULT:YES tag is mandatory when CHOOSE is present in ") 
+         . $line->type . q(" ") . $line->entityName . q("),
+         $line->file,
+         $line->num
       );
    }
 
    if ( $hasSTACK && !$hasMULT ) {
       $log->info(
-         qq(The MULT:YES tag is mandatory when STACK:YES is present in ${lineType} "${entityName}"),
-         $file,
-         $line
+         qq(The MULT:YES tag is mandatory when STACK:YES is present in ") 
+         . $line->type . q(" ") . $line->entityName . q("),
+         $line->file,
+         $line->num
       );
    }
 
    # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
    if ($hasCHOOSE) {
 
-      $entityName =~ s/.MOD$//;
+      my $entityName = $line->entityName =~ s/.MOD$//r;
 
       # The CHOOSE type tells us the type of sub-entities
 
-      if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/ ) {
+      if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/) ) {
 
-         addValidSubEntity($lineType, $entityName, $1)
+         addValidSubEntity($line->type, $entityName, $1)
 
-      } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/)) {
 
-         addValidSubEntity($lineType, $entityName, 'FEAT')
+         addValidSubEntity($line->type, $entityName, 'FEAT')
 
-      } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/)) {
 
-         addValidSubEntity($lineType, $entityName, 'WEAPONPROF')
+         addValidSubEntity($line->type, $entityName, 'WEAPONPROF')
 
-      } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/)) {
 
-         addValidSubEntity($lineType, $entityName, 'SKILL')
+         addValidSubEntity($line->type, $entityName, 'SKILL')
 
-      } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/)) {
 
-         addValidSubEntity($lineType, $entityName, 'SPELL_SCHOOL')
+         addValidSubEntity($line->type, $entityName, 'SPELL_SCHOOL')
 
-      } elsif ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/)) {
 
-         addValidSubEntity($lineType, $entityName, 'SPELL')
+         addValidSubEntity($line->type, $entityName, 'SPELL')
 
-      } elsif ($choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/ 
-         || $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/)
+               ||$line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/)) {
 
          # Ad-Lib is a special case that means "Don't look for
          # anything else".
-         addValidSubEntity($lineType, $entityName, 'Ad-Lib')
+         addValidSubEntity($line->type, $entityName, 'Ad-Lib')
 
-      } elsif ( $choose =~ /^CHOOSE:(?:COUNT=\d+\|)?(.*)/ ) {
+      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:COUNT=\d+\|)?(.*)/)) {
 
          # ad-hod/special list of thingy It adds to the valid
          # entities instead of the valid sub-entities.  We do
          # this when we find a CHOOSE but we do not know what
          # it is for.
 
-         splitAndAddToValidEntities($lineType, $entityName, $1);
+         splitAndAddToValidEntities($line->type, $entityName, $1);
       }
    }
 }
@@ -359,45 +355,111 @@ sub validateAbilityLine {
 
 sub validateEQMODKey {
 
-   my ($lineType, $lineTokens, $file, $line) = @_;
-
-   my $log = getLogger();
+   my ($line) = @_;
 
    # We keep track of the KEYs for the equipmods.
-   if ( exists $lineTokens->{'KEY'} ) {
+   if ( $line->hasColumn('KEY') ) {
 
       # We extract the key name
-      my ($key) = ( $lineTokens->{'KEY'}[0] =~ /KEY:(.*)/ );
+      my $token = $line->firstTokenInColumn('KEY');
+      my $key   = $token->value;
 
-      if ($key) {
-
-         setEntityValid("EQUIPMOD Key", $key);
-
-      } else {
-
-         $log->warning(
-            qq(Could not parse the KEY in "$lineTokens->{'KEY'}[0]"),
-            $file,
-            $line
-         );
-      }
+      setEntityValid("EQUIPMOD Key", $key);
 
    } else {
 
       # We get the contents of the tag at the start of the line (the one that
       # only has a value).
-      my $fullEntityName = getEntityName($lineType, $lineTokens);
+      my $fullEntityName = $line->entityName();
 
       # [ 1368562 ] .FORGET / .MOD don\'t need KEY entries
-      if ($fullEntityName =~ /.FORGET$|.MOD$/) {
+      if ($fullEntityName !~ /.FORGET$|.MOD$/) {
 
-      } else {
-         $log->info(
+         getLogger()->info(
             qq(No KEY tag found for "${fullEntityName}"),
-            $file,
-            $line
+            $line->file,
+            $line->num
          );
       }
+   }
+}
+
+
+##################################################################
+# Check to see if the TYPE contains Spellbook, if so, warn if NUMUSES or
+# PAGEUSAGE aren't there.  Then check to see if NUMPAGES or PAGEUSAGE are
+# there, and if they are there, but the TYPE doesn't contain Spellbook,
+# warn.
+#
+# Do the same for Type Container with and without CONTAINS
+
+=head2 validateEquipmentLine
+
+   Give appropriate warnings for bad combinations of equipment tags
+
+=cut
+
+sub validateEquipmentLine {
+
+   my ($self) = @_;
+
+   my $log = getLogger();
+
+   if ($self->hasType('Spellbook')) {
+
+      if ($self->hasColumn('NUMPAGES') && $self->hasColumn('PAGEUSAGE')) {
+         #Nothing to see here, move along.
+      } else {
+         $log->info(
+            q{You have a Spellbook defined without providing NUMPAGES or PAGEUSAGE.} 
+            . q{ If you want a spellbook of finite capacity, consider adding these tokens.},
+            $self->file,
+            $self->num
+         );
+      }
+
+   } else {
+
+      if ($self->hasColumn('NUMPAGES') ) {
+         $log->warning(
+            q{Invalid use of NUMPAGES token in a non-spellbook.} 
+            . q{ Remove this token, or correct the TYPE.},
+            $self->file,
+            $self->num
+         );
+      }
+
+      if  ($self->hasColumn('PAGEUSAGE'))
+      {
+         $log->warning(
+            q{Invalid use of PAGEUSAGE token in a non-spellbook.} 
+            . q{ Remove this token, or correct the TYPE.},
+            $self->file,
+            $self->num
+         );
+      }
+   }
+
+   if ($self->hasType('Container')) {
+
+      if (! $self->hasColumn('CONTAINS')) {
+
+         $log->warning(
+            q{Any object with TYPE:Container must also have a CONTAINS }
+            . q{token to be activated.},
+            $self->file,
+            $self->num
+         );
+      }
+
+   } elsif ($self->hasColumn('CONTAINS')) {
+
+      $log->warning(
+         q{Any object with CONTAINS must also be TYPE:Container }
+         . q{for the CONTAINS token to be activated.},
+         $self->file,
+         $self->num
+      );
    }
 }
 
@@ -406,54 +468,55 @@ sub validateEQMODKey {
 
    This function perform validation that must be done on a whole line at a time.
    
-   Paramter: $lineType   Type for the current line
-             $lineTokens Ref to a hash containing the tags of the line
-             $file       Name of the current file
-             $line       Number of the current line
+   Paramter: $line a TidyLst::Line object
 
 =cut
 
 sub validateLine {
 
-   my ($lineType, $lineTokens, $file, $line) = @_;
+   my ($line) = @_;
 
    my $log = getLogger();
 
    # We get the contents of the tag at the start of the line (the one that only
    # has a value).
-   my $fullEntityName = getEntityName($lineType, $lineTokens);
+   my $fullEntityName = $line->entityName();
 
    my $entityName = $fullEntityName =~ s/.MOD$//r;
+
+   if ($line->isType('EQUIPMENT')) {
+      validateEquipmentLine($line)
+   }
 
    ########################################################
    # Validation for the line entityName
    ########################################################
 
-   if ( !(  $lineType eq 'SOURCE'
-         || $lineType eq 'KIT LANGAUTO'
-         || $lineType eq 'KIT NAME'
-         || $lineType eq 'KIT FEAT'
-         || $file =~ m{ [.] PCC \z }xmsi
-         || $lineType eq 'COMPANIONMOD') # FOLLOWER:Class1,Class2=level
+   if ( !(  $line->isType('SOURCE')
+         || $line->isType('KIT LANGAUTO')
+         || $line->isType('KIT NAME')
+         || $line->isType('KIT FEAT')
+         || $line->file =~ m{ [.] PCC \z }xmsi
+         || $line->isType('COMPANIONMOD')) # FOLLOWER:Class1,Class2=level
    ) {
 
       my $key;
-      if (exists $lineTokens->{'KEY'}) {
-         $key = $lineTokens->{'KEY'}[0];
+      if ($line->hasColumn('KEY')) {
+         $key = $line->firstTokenInColumn('KEY');
       }
 
       # We hunt for the bad comma.
       if (defined $key && $key =~ /,/ ) {
          $log->notice(
             qq{"," (comma) should not be used in KEY: "$key"},
-            $file,
-            $line
+            $line->file,
+            $line->num
          );
       } elsif (!defined $key && $entityName =~ /,/ ) {
          $log->notice(
             qq{"," (comma) should not be used in line entityName name: $entityName with no key},
-            $file,
-            $line
+            $line->file,
+            $line->num
          );
       }
    }
@@ -462,123 +525,129 @@ sub validateLine {
    # Special validation for specific lines
    ########################################################
 
-   if ( $lineType eq "ABILITY" ) {
+   if ( $line->isType('ABILITY') ) {
 
       # Lines which are modifications don't need a separate CATEGORY tag, it is
       # embeded in the entityname.
       if ($fullEntityName =~ /\.(MOD|FORGET|COPY=)/ ) {
 
       # Find the other Abilities lines without Categories
-      } elsif ( !$lineTokens->{'CATEGORY'} ) {
+      } elsif ( !$line->hasColumn('CATEGORY') ) {
          $log->warning(
-            qq(The CATEGORY tag is required in ${lineType} "${entityName}"),
-            $file,
-            $line
+            qq(The CATEGORY tag is required in ABILITY "${entityName}"),
+            $line->file,
+            $line->num
          );
       }
 
-      validateAbilityLine($entityName, $lineType, $lineTokens, $file, $line);
+      validateAbilityLine($line);
 
-   } elsif ( $lineType eq "FEAT" ) {
+   } elsif ( $line->isType('FEAT') ) {
 
       # [ 1671410 ] xcheck CATEGORY:Feat in Feat object.
-      if (exists $lineTokens->{'CATEGORY'}) {
-         my $category = $lineTokens->{'CATEGORY'}[0];
-         if ($category !~ qr"CATEGORY:(?:Feat|Special Ability)") {
+      if ($line->hasColumn('CATEGORY')) {
+
+         if (! $line->firstColumnMatches('CATEGORY', qr"CATEGORY:(?:Feat|Special Ability)")) {
+            my $token = $line->firstTokenInColumn('CATEGORY');
 
             $log->info(
-               qq(The CATEGORY tag must have the value of Feat or Special Ability ) .
-               qq(when present on a FEAT. Remove or replace "${category}"),
-               $file,
-               $line
+               q(The CATEGORY tag must have the value of Feat or Special Ability ) .
+               q(when present on a FEAT. Remove or replace ") . $token->fullToken . q("),
+               $line->file,
+               $line->num
             );
          }
       }
 
-      validateAbilityLine($entityName, $lineType, $lineTokens, $file, $line);
+      validateAbilityLine($line);
 
-   } elsif ( $lineType eq "EQUIPMOD" ) {
+   } elsif ( $line->isType('EQUIPMOD') ) {
 
-      validateEQMODKey($lineType, $lineTokens, $file, $line);
+      validateEQMODKey($line);
 
-      if ( exists $lineTokens->{'CHOOSE'} ) {
+      if ( $line->hasColumn('CHOOSE') ) {
 
-         my $choose  = $lineTokens->{'CHOOSE'}[0];
+         my $token  = $line->firstTokenInColumn('CHOOSE');
+         my $choose = $token->fullToken;
 
-         if ( $choose =~ /^CHOOSE:(NUMBER[^|]*)/ ) {
+         if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(NUMBER[^|]*)/)) {
             # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|TITLE=Whatever
             # Valid: CHOOSE:NUMBER|1|2|3|4|5|6|7|8|TITLE=Whatever
             # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|INCREMENT=5|TITLE=Whatever
             # Valid: CHOOSE:NUMBER|MAX=99129342|INCREMENT=5|MIN=1|TITLE=Whatever
             # Only testing for TITLE= for now.
             # Test for TITLE= and warn if not present.
-            if ( $choose !~ /(TITLE[=])/ ) {
+         
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/)) {
+         
+            if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
                $log->info(
                   qq(TITLE= is missing in CHOOSE:NUMBER for "$choose"),
-                  $file,
-                  $line
+                  $line->file,
+                  $line->num
                );
             }
 
-         } elsif ( $choose =~ /^CHOOSE:NOCHOICE/ ) {
+         
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/)) {
 
          # CHOOSE:STRING|Foo|Bar|Monkey|Poo|TITLE=these are choices
-         } elsif ( $choose =~ /^CHOOSE:?(STRING)[^|]*/ ) {
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(STRING)[^|]*/)) {
 
             # Test for TITLE= and warn if not present.
-            if ( $choose !~ /(TITLE[=])/ ) {
+            if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
+         
                $log->info(
                   qq(TITLE= is missing in CHOOSE:STRING for "$choose"),
-                  $file,
-                  $line
+                  $line->file,
+                  $line->num
                );
             }
 
          # CHOOSE:STATBONUS|statname|MIN=2|MAX=5|TITLE=Enhancement Bonus
-         } elsif ( $choose =~ /^CHOOSE:?(STATBONUS)[^|]*/ ) {
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(STATBONUS)[^|]*/)) {
+         
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(SKILLBONUS)[^|]*/)) {
+         
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(SKILL)[^|]*/)) {
 
-         } elsif ( $choose =~ /^CHOOSE:?(SKILLBONUS)[^|]*/ ) {
-
-         } elsif ( $choose =~ /^CHOOSE:?(SKILL)[^|]*/ ) {
-            if ( $choose !~ /(TITLE[=])/ ) {
+            if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
                $log->info(
                   qq(TITLE= is missing in CHOOSE:SKILL for "$choose"),
-                  $file,
-                  $line
+                  $line->file,
+                  $line->num
                );
             }
 
-         } elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.SPELL)[^|]*/ ) {
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(EQBUILDER.SPELL)[^|]*/)) {
 
-         } elsif ( $choose =~ /^CHOOSE:?(EQBUILDER.EQTYPE)[^|]*/ ) {
+         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(EQBUILDER.EQTYPE)[^|]*/)) {
 
          # If not above, invaild CHOOSE for equipmod files.
          } else {
             $log->warning(
                qq(Invalid CHOOSE for Equipmod spells for "$choose"),
-               $file,
-               $line
+               $line->file,
+               $line->num
             );
          }
       }
 
-   } elsif ( $lineType eq "CLASS" ) {
+   } elsif ( $line->isType('CLASS') ) {
 
-      if ( exists $lineTokens->{'SPELLTYPE'} && !exists $lineTokens->{'BONUS:CASTERLEVEL'} ) {
+      if ( $line->hasColumn('SPELLTYPE') && !$line->hasColumn('BONUS:CASTERLEVEL') ) {
          $log->info(
             qq{Missing BONUS:CASTERLEVEL for "${entityName}"},
-            $file,
-            $line
+            $line->file,
+            $line->num
          );
       }
 
-   } elsif ( $lineType eq 'SKILL' ) {
+   } elsif ( $line->isType('SKILL') ) {
 
-      if ( exists $lineTokens->{'CHOOSE'} ) {
+      if ( $line->hasColumn('CHOOSE') ) {
 
-         my $choose  = $lineTokens->{'CHOOSE'}[0];
-
-         if ( $choose =~ /^CHOOSE:(?:NUMCHOICES=\d+\|)?Language/ ) {
+         if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?Language/)) {
             addValidSubEntity('SKILL', $entityName, 'LANGUAGE')
          }
       }

@@ -1,4 +1,4 @@
-package LstTidy::Data;
+package TidyLst::Data;
 
 use strict;
 use warnings;
@@ -13,11 +13,11 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
-   NO NO_HEADER SINGLE SUB TABSIZE YES
+   NO NO_HEADER SINGLE SUB YES
 );
 
 our @EXPORT_OK = qw(
-   addSourceTag
+   addSourceToken
    addTagsForConversions
    addToValidTypes
    addValidCategory
@@ -39,6 +39,7 @@ our @EXPORT_OK = qw(
    getValidSystemArr
    incCountInvalidTags
    incCountValidTags
+   isFauxTag
    isValidCategory
    isValidCheck
    isValidEntity
@@ -52,7 +53,7 @@ our @EXPORT_OK = qw(
    mungKey
    registerXCheck
    searchRace
-   seenSourceTag
+   seenSourceToken
    setEntityValid
    setValidSystemArr
    splitAndAddToValidEntities
@@ -61,19 +62,19 @@ our @EXPORT_OK = qw(
    validSubEntityExists
 );
 
-# expand library path so we can find LstTidy modules
+# expand library path so we can find TidyLst modules
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use LstTidy::Options qw(getOption isConversionActive);
+use TidyLst::Options qw(getOption isConversionActive);
 
 # Constants for the master_line_type
 use constant {
    # Line importance (Mode)
    MAIN           => 1, # Main line type for the file
    SUB            => 2, # Sub line type, must be linked to a MAIN
-   SINGLE         => 3, # Idependant line type
+   SINGLE         => 3, # Independant line type
    COMMENT        => 4, # Comment or empty line.
 
    # Line formatting option (Format)
@@ -89,13 +90,7 @@ use constant {
    # Standard YES NO constants
    NO             => 0,
    YES            => 1,
-
-   # The defined (non-standard) size of a tab
-   TABSIZE        => 6,
 };
-
-
-
 
 
 my %columnWithNoTag = (
@@ -128,6 +123,7 @@ my %columnWithNoTag = (
    'WEAPONPROF'        => '000WeaponName',
 );
 
+my %fauxTag = map {$_ => 1} values %columnWithNoTag;
 
 
 # The global BONUS:xxx tags are used in many of the line types.  They are
@@ -483,8 +479,8 @@ my @QUALITY_Tags = (
 
 # This will hold a list of the SOURCE tags found for a given directory. Since
 # all the lst files in a directory should have the same source tags. These are
-# tags actually cound in the files.
-my %sourceTags = ();
+# tags actually found in the files.
+my %sourceTokens = ();
 
 # Ensure consistent ordering in the masterOrder structure
 our @SOURCETags = (
@@ -510,6 +506,7 @@ our %masterOrder = (
       'OUTPUTNAME',
       'FACT:AppliedName',
       'CATEGORY',
+      'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
       'VISIBLE',
@@ -610,7 +607,9 @@ our %masterOrder = (
       'FRACTIONALPOOL',
       'POOL',
       'CATEGORY',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'ABILITYLIST',
       'PLURAL',
       'DISPLAYNAME',
@@ -631,7 +630,9 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'HANDS',
       @PreTags,
       @SOURCETags,
@@ -672,7 +673,9 @@ our %masterOrder = (
       'BONUSSPELLSTAT',
       'FACT:SpellType:*',
       'SPELLTYPE',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'FACT:ClassType',
       'CLASSTYPE',
       'FACT:Abb:*',
@@ -856,7 +859,9 @@ our %masterOrder = (
       'SORTKEY',
       'KEY',
       'FOLLOWER',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'HD',
       'DR',
       'SR',
@@ -1040,9 +1045,11 @@ our %masterOrder = (
       'PROFICIENCY:WEAPON',
       'PROFICIENCY:ARMOR',
       'PROFICIENCY:SHIELD',
+      'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
       'ALTTYPE',
+      'VISIBLE',
       'RESIZE',                        # [ 1956719 ] Add RESIZE tag to Equipment file
       'CONTAINS',
       'NUMPAGES',
@@ -1149,6 +1156,7 @@ our %masterOrder = (
       'OUTPUTNAME',
       'FORMATCAT',
       'NAMEOPT',
+      'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
       'PLUS',
@@ -1191,6 +1199,9 @@ our %masterOrder = (
       'AUTO:EQUIP:*',
       'AUTO:WEAPONPROF:*',
       'UNENCUMBEREDMOVE',
+      'DESC:.CLEAR',
+      'DESC:*',
+      'DESCISPI',
 
       'RATEOFFIRE',                    #  Deprecated 6.05.01
       'SA:.CLEAR',                     #  Deprecated 6.05.01
@@ -1204,8 +1215,9 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
+      'GROUP:*',
       'TYPE:.CLEAR',
-      'TYPE',
+      'TYPE:*',
       'VISIBLE',
       'CATEGORY',
       @PreTags,
@@ -1428,7 +1440,9 @@ our %masterOrder = (
    'KIT STARTPACK' => [
       'STARTPACK',
       'NAMEISPI',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'VISIBLE',
       'APPLY',
       'EQUIPBUY',
@@ -1461,7 +1475,9 @@ our %masterOrder = (
       '000LanguageName',
       'KEY',
       'NAMEISPI',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'SOURCEPAGE',
       @PreTags,
       @QUALIFYTags,
@@ -1469,7 +1485,9 @@ our %masterOrder = (
 
    'MASTERBONUSRACE' => [
       '000MasterBonusRace',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'DEFINE:*',
       'BONUS:ABILITYPOOL:*',
       'BONUS:CASTERLEVEL:*',
@@ -1509,7 +1527,9 @@ our %masterOrder = (
       'PUBNAMEWEB',
       'RANK',
       'SETTING',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'PRECAMPAIGN',
       '!PRECAMPAIGN',
       'SHOWINMENU',
@@ -1543,7 +1563,7 @@ our %masterOrder = (
       'ALIGNMENT',
       'ARMORPROF',
       'CLASS',
-      'CLASSSKILL',
+      # 'CLASSSKILL',
       'CLASSSPELL',
       'COMPANIONMOD',
       'DATACONTROL',
@@ -1632,11 +1652,13 @@ our %masterOrder = (
       'BAB',
       'HITDIE',
       'MONSTERCLASS',
+      'GROUP:*',
       'RACETYPE:.CLEAR',
       'RACETYPE:*',
       'RACESUBTYPE:.CLEAR',
       'RACESUBTYPE:*',
-      'TYPE',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'TEMPLATE:.CLEAR',
       'TEMPLATE:*',
       'HITDICEADVANCEMENT',
@@ -1691,7 +1713,9 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'HANDS',
       @PreTags,
       @SOURCETags,
@@ -1729,7 +1753,9 @@ our %masterOrder = (
       'ACHECK',
       'EXCLUSIVE',
       'CLASSES',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'VISIBLE',
       @PreTags,
       @QUALIFYTags,
@@ -1776,7 +1802,9 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'CLASSES:.CLEARALL',
       'CLASSES:*',
       'DOMAINS',
@@ -2208,10 +2236,12 @@ our %masterOrder = (
       'REMOVABLE',
       'SR:*',
       'SUBRACE',
+      'GROUP:*',
       'RACETYPE',
       'RACESUBTYPE:.REMOVE',
       'RACESUBTYPE:*',
-      'TYPE',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'ADDLEVEL',
       'VISION',
       'HD:*',
@@ -2231,6 +2261,7 @@ our %masterOrder = (
       'DESC:*',
       'TEMPDESC',
       'TEMPBONUS:*',
+      'TEMPVALUE:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -2257,7 +2288,9 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
-      'TYPE',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
       'HANDS',
       @PreTags,
       @SOURCETags,
@@ -2536,6 +2569,7 @@ my %tokenHeader = (
       'FREE'                              => 'Free',
       'FUMBLERANGE'                       => 'Fumble Range',
       'GENDER'                            => 'Gender',
+      'GROUP'                             => 'Assigned Groups',
       'HANDS'                             => 'Nb Hands',
       'HASSUBCLASS'                       => 'Subclass?',
       'ALLOWBASECLASS'                    => 'Base class as subclass?',
@@ -3239,15 +3273,17 @@ our @xcheck_to_process;
 
 
 
-=head2 addSourceTag
+=head2 addSourceToken
+
+   found a SOURCE token, add a note of it for this directory.
 
 =cut
 
-sub addSourceTag {
+sub addSourceToken {
 
-   my ($path, $tag, $value) = @_;
+   my ($path, $token) = @_;
 
-   $sourceTags{File::Basename::dirname($path)}{$tag} = $value;
+   $sourceTokens{File::Basename::dirname($path)}{$token->tag} = $token;
 }
 
 
@@ -3395,14 +3431,15 @@ sub constructValidTags {
 
 =head2 dirHasSourceTags
 
-   True if Source tags have been found in $path
+   True if Source tags have been found in the PCC file in the same directory as
+   $file.
 
 =cut
 
 sub dirHasSourceTags {
 
-   my ($path) = @_;
-   exists $sourceTags{ File::Basename::dirname($path) };
+   my ($file) = @_;
+   exists $sourceTokens{ File::Basename::dirname($file) };
 }
 
 
@@ -3437,14 +3474,14 @@ sub getCrossCheckData {
 
 =head2 getDirSourceTags
 
-   True if Source tags have been found in $file
+   Gets the Source tokens that have been found in $file's path (in the PCC).
 
 =cut
 
 sub getDirSourceTags {
 
    my ($file) = @_;
-   $sourceTags{ File::Basename::dirname($file) };
+   $sourceTokens{ File::Basename::dirname($file) };
 }
 
 
@@ -3462,7 +3499,13 @@ sub getEntityFirstTag {
 
    my ($entity) = @_;
 
-   @{getOrderForLineType($entity)}[0];
+   confess "Opps comment\n" unless $entity ne 'COMMENT';
+
+   my $arrayRef = getOrderForLineType($entity);
+
+   return "" unless defined $arrayRef;
+
+   $arrayRef->[0];
 }
 
 
@@ -3636,6 +3679,20 @@ sub getValidSystemArr {
    }->{$type};
 
    defined $arr ? @{$arr} : ();
+}
+
+
+=head2 isFauxTag
+
+   Returns true if the given tag is a Faux tag (doesn't exist in the files, but
+   the value appears at the start of the line).
+
+=cut
+
+sub isFauxTag {
+   my ($tag) = @_;
+
+   exists $fauxTag{$tag};
 }
 
 
@@ -3879,17 +3936,17 @@ sub searchRace {
 }
 
 
-=head2 seenSourceTag
+=head2 seenSourceToken
 
    Have we seen this source tag on this path before?
 
 =cut
 
-sub seenSourceTag {
+sub seenSourceToken {
 
-   my ($path, $tag) = @_;
+   my ($path, $token) = @_;
 
-   exists $sourceTags{File::Basename::dirname($path)}{$tag};
+   exists $sourceTokens{File::Basename::dirname($path)}{$token->tag};
 }
 
 
@@ -3952,6 +4009,8 @@ sub setValidSystemArr {
 sub splitAndAddToValidEntities {
    my ($entitytype, $ability, $value) = @_;
 
+   return unless defined $value;
+
    for my $abil ( split '\|', $value ) {
       $validEntities{'ABILITY'}{"$ability($abil)"}  = $value;
       $validEntities{'ABILITY'}{"$ability ($abil)"} = $value;
@@ -4002,7 +4061,7 @@ sub updateValidity {
       'CMP_D20_Fantasy_v35e_Kalamar',
       'DnD_v3.5e_VPWP',
       'CMP_D20_Fantasy_v35e_VPWP',
-      'b/LstTidy/Validate.pm4e',
+      '4e',
       '5e',
       'DnDNext',
       'AE',

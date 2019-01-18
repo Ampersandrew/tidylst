@@ -10,11 +10,11 @@ use lib dirname(dirname abs_path $0) . '/lib';
 
 use Test::More tests => 44;
 
-use_ok ('LstTidy::Token');
+use_ok ('TidyLst::Token');
 
 # Test the most basic form of the constructor with the four mantatory data items
 
-my $token = LstTidy::Token->new(
+my $token = TidyLst::Token->new(
    tag      => 'KEY',
    value    => 'Rogue ~ Sneak Attack',
    lineType => 'ABILITY',
@@ -33,7 +33,7 @@ is($token->hasLine, 1, "There is now a line attribute");
 
 # Test the the six basic accessors work
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    tag      => 'Category',
    value    => 'Feat',
    lineType => 'ABILITY',
@@ -50,7 +50,7 @@ is($token->line, 42, "line is correct");
 
 # Test using the full tag instead of the tag & value parameters
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken => 'KEY:Rogue ~ Sneak Attack',
    lineType  => 'ABILITY',
    file      => 'foo_abilities.lst',
@@ -61,7 +61,7 @@ is($token->value, 'Rogue ~ Sneak Attack', "Value is Rogue ~ Sneak Attack");
 
 # Test empty Value properly sets the tag & value
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    {
       fullToken => 'LICENCE:',
       lineType  => 'ABILITY',
@@ -76,7 +76,7 @@ is($token->value, '', "value constructed correctly");
 # Test that a broken tag (no :) gives an undefined value.
 # Also test the realTag accessor (identical to tag for non !PRE)
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken => 'BROKEN',
    lineType  => 'ABILITY',
    file      => 'foo_abilities.lst',
@@ -88,7 +88,7 @@ is($token->value, undef, "value constructed correctly");
 
 # Test the negated PRE sets tag & value and realTag correctly
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken => '!PREFOO:1,Wibble',
    lineType  => 'ABILITY',
    file      => 'foo_abilities.lst',
@@ -102,7 +102,7 @@ is($token->fullToken, 'PREFOO:1,Wibble', "Full tag reconstituted correctly.");
 is($token->fullRealToken, '!PREFOO:1,Wibble', "Full real tag reconstituted correctly.");
 
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken  => 'ABILITY:FEAT|AUTOMATIC|Toughness',
    lineType  => 'ABILITY',
    file      => 'foo_abilities.lst',
@@ -136,7 +136,7 @@ $token->noMoreErrors(1);
 
 is($token->noMoreErrors, 1, "set no more errors is 1");
 
-$token = LstTidy::Token->new(
+$token = TidyLst::Token->new(
    fullToken  => 'ABILITY:FEAT|AUTOMATIC|Toughness|!PREFOO:1,Wibble',
    lineType  => 'ABILITY',
    file      => 'foo_abilities.lst',
