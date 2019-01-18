@@ -63,7 +63,7 @@ our @EXPORT_OK = qw(
 );
 
 # expand library path so we can find TidyLst modules
-use File::Basename qw(dirname);
+use File::Basename qw(dirname fileparse);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
@@ -3281,9 +3281,11 @@ our @xcheck_to_process;
 
 sub addSourceToken {
 
-   my ($path, $token) = @_;
+   my ($input, $token) = @_;
 
-   $sourceTokens{File::Basename::dirname($path)}{$token->tag} = $token;
+   my ($file, $path) = fileparse($input);
+
+   $sourceTokens{$path}{$token->tag} = $token;
 }
 
 
@@ -3438,8 +3440,11 @@ sub constructValidTags {
 
 sub dirHasSourceTags {
 
-   my ($file) = @_;
-   exists $sourceTokens{ File::Basename::dirname($file) };
+   my ($input) = @_;
+
+   my ($file, $path) = fileparse($input);
+
+   exists $sourceTokens{ $path };
 }
 
 
@@ -3480,8 +3485,11 @@ sub getCrossCheckData {
 
 sub getDirSourceTags {
 
-   my ($file) = @_;
-   $sourceTokens{ File::Basename::dirname($file) };
+   my ($input) = @_;
+
+   my ($file, $path) = fileparse($input);
+
+   $sourceTokens{ $path };
 }
 
 
@@ -3944,9 +3952,11 @@ sub searchRace {
 
 sub seenSourceToken {
 
-   my ($path, $token) = @_;
+   my ($input, $token) = @_;
 
-   exists $sourceTokens{File::Basename::dirname($path)}{$token->tag};
+   my ($file, $path) = fileparse($input);
+
+   exists $sourceTokens{$path}{$token->tag};
 }
 
 

@@ -20,10 +20,9 @@ use Pod::Html ();  # We do not import any function for
 use Pod::Text ();  # the modules other than "system" modules
 use Pod::Usage ();
 use File::Find ();
-use File::Basename ();
 
 # Expand the local library path so we can find TidyLst modules
-use File::Basename qw(dirname);
+use File::Basename qw(dirname fileparse);
 use Cwd qw(abs_path);
 use lib dirname(abs_path $0) . '/lib';
 
@@ -290,7 +289,7 @@ if (getOption('inputpath')) {
       open my $pcc_fh, '<', $pccName;
 
       # Needed to find the full path
-      my $currentbasedir = File::Basename::dirname($pccName);
+      my ($dummy, $currentbasedir) = fileparse($pccName);
 
       my %found = (
          'book type'    => NO,
@@ -319,7 +318,8 @@ if (getOption('inputpath')) {
             $pccLine,
             'PCC',
             $pccName,
-            $INPUT_LINE_NUMBER);
+            $pcc_fh->input_line_number,
+         );
 
          # If extractTag returns a defined $value, no further processing is
          # neeeded. If $value is not defined, then the tag that was returned
@@ -331,7 +331,7 @@ if (getOption('inputpath')) {
             fullToken => $fullToken,
             lineType  => 'PCC',
             file      => $pccName,
-            line      => $INPUT_LINE_NUMBER,
+            line      => $pcc_fh->input_line_number,
          );
 
          if (not defined $value) {
@@ -360,7 +360,7 @@ if (getOption('inputpath')) {
                $log->warning(
                   q{Replacing "} . $token->origToken . q(" by ") . $token->fullRealToken . q("),
                   $pccName,
-                  $INPUT_LINE_NUMBER
+                  $pcc_fh->input_line_number,
                );
                $found{'gamemode'} = $token->value;
                $mustWrite = 1;
@@ -376,12 +376,13 @@ if (getOption('inputpath')) {
                $token->value($token->value =~ s/^([^|]*).*/$1/r);
 
                my $lstFile = find_full_path($token->value, $currentbasedir);
+
                $filesToParse{$lstFile} = $token->tag;
 
                # Check to see if the file exists
                if ( !-e $lstFile ) {
 
-                  $fileListMissing{$lstFile} = [ $pccName, $INPUT_LINE_NUMBER ];
+                  $fileListMissing{$lstFile} = [ $pccName, $pcc_fh->input_line_number ];
                   delete $filesToParse{$lstFile};
 
                # Remember some types of file, as there might be a need to
@@ -421,20 +422,19 @@ if (getOption('inputpath')) {
                      || $token->tag eq 'SOURCESHORT'
                      || $token->tag eq 'SOURCEWEB'
                      || $token->tag eq 'SOURCEDATE' ) )
-               {
-                  my $path = File::Basename::dirname($pccName);
 
+               {
                   # If a token with the same tag has been seen in this directory
-                  if (seenSourceToken($path, $token) && $path !~ /custom|altpcc/i ) {
+                  if (seenSourceToken($currentbasedir, $token) && $currentbasedir !~ /custom|altpcc/i ) {
 
                      $log->notice(
-                        $token->tag . " already found for $path",
+                        $token->tag . " already found for $currentbasedir",
                         $pccName,
-                        $INPUT_LINE_NUMBER
+                        $pcc_fh->input_line_number,
                      );
 
                   } else {
-                     addSourceToken($path, $token);
+                     addSourceToken($currentbasedir, $token);
                   }
 
                   # For the PCC report
@@ -469,7 +469,7 @@ if (getOption('inputpath')) {
                            $log->notice(
                               qq{Invalid GAMEMODE "$mode" in "$_"},
                               $pccName,
-                              $INPUT_LINE_NUMBER
+                              $pcc_fh->input_line_number,
                            );
                         }
                      }
@@ -531,8 +531,11 @@ if (getOption('inputpath')) {
          my $outputpath = getOption('outputpath');
          $newPccFile =~ s/${inputpath}/${outputpath}/i;
 
+         # Needed to find the full path
+         my ($file, $basedir) = fileparse($newPccFile);
+
          # Create the subdirectory if needed
-         create_dir(File::Basename::dirname($newPccFile), getOption('outputpath'));
+         create_dir($basedir, getOption('outputpath'));
 
          open my $newPccFh, '>', $newPccFile;
 
@@ -792,8 +795,11 @@ for my $file (@filesToParse_sorted) {
          my $outputpath = getOption('outputpath');
          $newfile =~ s/${inputpath}/${outputpath}/i;
 
+         # Needed to find the full path
+         my ($file, $basedir) = fileparse($newfile);
+
          # Create the subdirectory if needed
-         create_dir( File::Basename::dirname($newfile), getOption('outputpath') );
+         create_dir( $basedir, getOption('outputpath') );
 
          open $write_fh, '>', $newfile;
 
@@ -889,7 +895,7 @@ if (getOption('outputerror')) {
 sub find_full_path {
    my ($fileName, $currentBaseDir) = @_;
 
-   my $base_path  = getOption('basepath');
+   my $basePath  = getOption('basepath');
 
    # Change all the \ for / in the file name
    $fileName =~ tr{\\}{/};
@@ -911,13 +917,13 @@ sub find_full_path {
    }
 
    # Replace @ by the base dir or add the current base dir to the file name.
-   if ($fileName !~ s{ ^[@] }{$base_path}xmsi) {
-      $fileName = "$currentBaseDir/$fileName";
+   if ($fileName !~ s{ ^[@] }{$basePath}xmsi) {
+      $fileName = $currentBaseDir =~ qr/\/$/ ? $currentBaseDir . $fileName : "$currentBaseDir/$fileName";
    }
 
    # Remove the /xxx/../ for the directory
    if ($fileName =~ / [.][.] /xms ) {
-      if( $fileName !~ s{ [/] [^/]+ [/] [.][.] [/] }{/}xmsg ) {
+      if( $fileName !~ s{ [/] [^/]+ [/]+ [.][.] [/] }{/}xmsg ) {
          die qq{Cannot deal with the .. directory in "$fileName"};
       }
    }
@@ -931,7 +937,9 @@ sub create_dir {
 
    # Only if the directory doesn't already exist
    if ( !-d $dir ) {
-      my $parentdir = File::Basename::dirname($dir);
+
+      # Needed to find the full path
+      my ($file, $parentdir) = fileparse($dir);
 
       # If the $parentdir doesn't exist, we create it
       if ( $parentdir ne $outputdir && !-d $parentdir ) {

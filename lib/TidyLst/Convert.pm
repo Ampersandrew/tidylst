@@ -22,7 +22,10 @@ use lib dirname(dirname abs_path $0);
 use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
-   incCountInvalidTags);
+   dirHasSourceTags
+   getDirSourceTags
+   incCountInvalidTags
+   );
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 
