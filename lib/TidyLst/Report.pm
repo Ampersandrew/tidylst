@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(
    add_to_xcheck_tables
    closeExportListFileHandles
    doXCheck
+   makeExportListString
    openExportListFileHandles
    printToExportList
    registerReferrer
@@ -36,7 +37,6 @@ use TidyLst::Data qw(
 
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
-# use TidyLst::Validate qw();
 
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
@@ -121,7 +121,17 @@ sub closeExportListFileHandles {
 }
 
 
+=head2 makeExportListString
 
+   Join the arguments into a string suitable for passing to export lists.
+
+=cut
+
+sub makeExportListString {
+
+   my $guts = join qq{","}, @_;
+   qq{"${guts}\n"};
+}
 
 
 =head2 openExportListFileHandles

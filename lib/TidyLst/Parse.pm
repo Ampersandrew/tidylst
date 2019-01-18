@@ -53,6 +53,7 @@ use TidyLst::Line;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 use TidyLst::Reformat qw(reformatFile);
+use TidyLst::Report qw(makeExportListString printToExportList);
 use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
@@ -805,19 +806,6 @@ sub isWriteableFileType {
 }
 
 
-=head2 makeExportListString
-
-   Join the arguments into a string suitable for passing to export lists.
-
-=cut
-
-sub makeExportListString {
-
-   my $guts = join qq{","}, @_;
-   qq{"${guts}\n"};
-}
-
-
 =head2 matchLineType
 
    Match the given line, and return the line definition.
@@ -1564,28 +1552,24 @@ sub processLine {
          }
 
          # Write to file
-         TidyLst::Report::printToExportList('SPELL',
-            makeExportListString($name, $sourcepage, $line->num, $filename));
+         printToExportList('SPELL', makeExportListString($name, $sourcepage, $line->num, $filename));
       }
 
       if ( $line->isType('CLASS') ) {
 
          # Only one report per class
          if ($className ne $name) {
-            TidyLst::Report::printToExportList('CLASS',
-               makeExportListString($className, $line->num, $filename));
+            printToExportList('CLASS', makeExportListString($className, $line->num, $filename));
          };
          $className = $name;
       }
 
       if ( $line->isType('DEITY') ) {
-         TidyLst::Report::printToExportList('DEITY',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('DEITY', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('DOMAIN') ) {
-         TidyLst::Report::printToExportList('DOMAIN',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('DOMAIN', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMENT') ) {
@@ -1601,8 +1585,7 @@ sub processLine {
             }
          }
 
-         TidyLst::Report::printToExportList('EQUIPMENT',
-            makeExportListString($name, $outputname, $line->num, $filename));
+         printToExportList('EQUIPMENT', makeExportListString($name, $outputname, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMOD') ) {
@@ -1610,28 +1593,23 @@ sub processLine {
          my $key  = $line->hasColumn('KEY')  ? $line->valueInFirstTokenInColumn('KEY') : '';
          my $type = $line->hasColumn('TYPE') ? $line->valueInFirstTokenInColumn('TYPE') : '';
 
-         TidyLst::Report::printToExportList('EQUIPMOD',
-            makeExportListString($name, $key, $type, $line->num, $filename));
+         printToExportList('EQUIPMOD', makeExportListString($name, $key, $type, $line->num, $filename));
       }
 
       if ( $line->isType('FEAT') ) {
-         TidyLst::Report::printToExportList('FEAT',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('FEAT', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT STARTPACK') ) {
-         TidyLst::Report::printToExportList('KIT',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('KIT', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT TABLE') ) {
-         TidyLst::Report::printToExportList('TABLE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('TABLE', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('LANGUAGE') ) {
-         TidyLst::Report::printToExportList('LANGUAGE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('LANGUAGE', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('RACE') ) {
@@ -1639,20 +1617,17 @@ sub processLine {
          my $type    = $line->valueInFirstTokenInColumn('RACETYPE');
          my $subType = $line->valueInFirstTokenInColumn('RACESUBTYPE');
 
-         TidyLst::Report::printToExportList('RACE',
-            makeExportListString($name, $type, $subType, $line->num, $filename));
+         printToExportList('RACE', makeExportListString($name, $type, $subType, $line->num, $filename));
       }
 
       if ( $line->isType('SKILL') ) {
 
-         TidyLst::Report::printToExportList('SKILL',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('SKILL', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('TEMPLATE') ) {
 
-         TidyLst::Report::printToExportList('TEMPLATE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('TEMPLATE', makeExportListString($name, $line->num, $filename));
       }
    }
 
