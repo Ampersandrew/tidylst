@@ -140,7 +140,7 @@ sub parseOptions {
    my $outputPath     = q{};        # Path for the ouput directory
    my $report         = 0;          # Generate tag usage report
    my $systemPath     = q{};        # Path to the system (game mode) files
-   my $tabLength      = 6;          # The default length of tabs for reformatting
+   my $tabLength      = 8;          # The default length of tabs for reformatting
    my $test           = 0;          # Internal; for tests only
    my $vendorPath     = q{};        # Path for the vendor directory
    my $warningLevel   = 'notice';   # Warning level for error output
