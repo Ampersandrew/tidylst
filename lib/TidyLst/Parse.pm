@@ -907,7 +907,7 @@ sub parseFile {
    ##################################################
    # Working variables
 
-   my $curent_linetype = "";
+   my $currentLineType = "";
    my $lastMainLine    = -1;
 
    my $curent_entity;
@@ -935,7 +935,7 @@ sub parseFile {
       $newLine =~ s/^\s+//;
 
       my $line = TidyLst::Line->new(
-         type     => $curent_linetype,
+         type     => $currentLineType,
          file     => $file,
          unsplit  => $newLine,
          num      => $lineNum,
@@ -972,7 +972,7 @@ sub parseFile {
       $line->header($line_info->{Header});
 
       # What type of line is it?
-      $curent_linetype = $line_info->{Linetype};
+      $currentLineType = $line_info->{Linetype};
 
       if ( $line_info->{Mode} == MAIN ) {
 
@@ -982,7 +982,7 @@ sub parseFile {
 
          if ($lastMainLine == -1) {
             $log->warning(
-               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
+               qq{SUB line "$currentLineType" is not preceded by a MAIN line},
                $file,
                $lineNum
             )
@@ -994,14 +994,14 @@ sub parseFile {
 
       } else {
 
-         die qq(Invalid type for $curent_linetype);
+         die qq(Invalid type for $currentLineType);
       }
 
       # Got a line info hash, so update the line type in the line
       $line->type($line_info->{Linetype});
 
       # Identify the deprecated tags.
-      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
+      scanForDeprecatedTokens( $newLine, $currentLineType, $file, $lineNum, $line, );
 
       # By default, the tab character is used
       my $sep = $line_info->{SepRegEx} || qr(\t+);
@@ -1017,7 +1017,7 @@ sub parseFile {
 
       #First, we deal with the tag-less columns
       COLUMN:
-      for my $column ( getEntityNameTag($curent_linetype) ) {
+      for my $column ( getEntityNameTag($currentLineType) ) {
 
          # If this line type does not have tagless first entry
          if (not defined $column) {
@@ -1044,7 +1044,7 @@ sub parseFile {
          my $token =  TidyLst::Token->new(
             tag       => $column,
             value     => $value,
-            lineType  => $curent_linetype,
+            lineType  => $currentLineType,
             file      => $file,
             line      => $lineNum,
          );
@@ -1052,10 +1052,10 @@ sub parseFile {
          $line->add($token);
 
          # Statistic gathering
-         incCountValidTags($curent_linetype, $column);
+         incCountValidTags($currentLineType, $column);
 
          if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
+            my $exit = process000($line_info, $value, $currentLineType, $file, $lineNum);
             last COLUMN if $exit;
          }
       }
@@ -1064,7 +1064,7 @@ sub parseFile {
       for my $rawToken (@tokens) {
 
          my ($extractedToken, $value) =
-            extractTag($rawToken, $curent_linetype, $file, $lineNum);
+            extractTag($rawToken, $currentLineType, $file, $lineNum);
 
          # if extractTag returns a defined value, no further processing is
          # neeeded. If tag is defined but value is not, then the tag that was
@@ -1073,7 +1073,7 @@ sub parseFile {
 
             my $token =  TidyLst::Token->new(
                fullToken => $extractedToken,
-               lineType  => $curent_linetype,
+               lineType  => $currentLineType,
                file      => $file,
                line      => $lineNum,
             );
@@ -1083,10 +1083,10 @@ sub parseFile {
 
             my $tag = $token->tag;
 
-            if ($line->hasColumn($tag) && ! isValidMultiTag($curent_linetype, $tag)) {
+            if ($line->hasColumn($tag) && ! isValidMultiTag($currentLineType, $tag)) {
                $log->notice(
                   qq{The tag "$tag" should not be used more than once on the same }
-                  . $curent_linetype . qq{ line.\n},
+                  . $currentLineType . qq{ line.\n},
                   $file,
                   $lineNum
                );
