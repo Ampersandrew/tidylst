@@ -11,7 +11,7 @@ use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
-use TidyLst::Data qw(getEntityFirstTag getEntityNameTag isFauxTag);
+use TidyLst::Data qw(getEntityFirstTag isFauxTag);
 use TidyLst::Log;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Token;

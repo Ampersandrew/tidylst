@@ -23,7 +23,6 @@ use TidyLst::Data qw(
    incCountInvalidTags
    isValidTag
    splitAndAddToValidEntities
-   setEntityValid
    );
 use TidyLst::LogFactory qw(getLogger);
 
@@ -297,53 +296,53 @@ sub validateAbilityLine {
    }
 
    # We identify the feats that can have sub-entities. e.g. Spell Focus(Spellcraft)
-   if ($hasCHOOSE) {
+   # if ($hasCHOOSE) {
 
-      my $entityName = $line->entityName =~ s/.MOD$//r;
+   #    my $entityName = $line->entityName =~ s/.MOD$//r;
 
-      # The CHOOSE type tells us the type of sub-entities
+   #    # The CHOOSE type tells us the type of sub-entities
 
-      if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/) ) {
+   #    if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(FEAT=[^|]*)/) ) {
 
-         addValidSubEntity($line->type, $entityName, $1)
+   #       addValidSubEntity($line->type, $entityName, $1)
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?FEATLIST/)) {
 
-         addValidSubEntity($line->type, $entityName, 'FEAT')
+   #       addValidSubEntity($line->type, $entityName, 'FEAT')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?(?:WEAPONPROFS|Exotic|Martial)/)) {
 
-         addValidSubEntity($line->type, $entityName, 'WEAPONPROF')
+   #       addValidSubEntity($line->type, $entityName, 'WEAPONPROF')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SKILLSNAMED/)) {
 
-         addValidSubEntity($line->type, $entityName, 'SKILL')
+   #       addValidSubEntity($line->type, $entityName, 'SKILL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SCHOOLS/)) {
 
-         addValidSubEntity($line->type, $entityName, 'SPELL_SCHOOL')
+   #       addValidSubEntity($line->type, $entityName, 'SPELL_SCHOOL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLIST/)) {
 
-         addValidSubEntity($line->type, $entityName, 'SPELL')
+   #       addValidSubEntity($line->type, $entityName, 'SPELL')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/)
-               ||$line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?SPELLLEVEL/)
+   #             ||$line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:NUMCHOICES=\d+\|)?HP/)) {
 
-         # Ad-Lib is a special case that means "Don't look for
-         # anything else".
-         addValidSubEntity($line->type, $entityName, 'Ad-Lib')
+   #       # Ad-Lib is a special case that means "Don't look for
+   #       # anything else".
+   #       addValidSubEntity($line->type, $entityName, 'Ad-Lib')
 
-      } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:COUNT=\d+\|)?(.*)/)) {
+   #    } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(?:COUNT=\d+\|)?(.*)/)) {
 
-         # ad-hod/special list of thingy It adds to the valid
-         # entities instead of the valid sub-entities.  We do
-         # this when we find a CHOOSE but we do not know what
-         # it is for.
+   #       # ad-hod/special list of thingy It adds to the valid
+   #       # entities instead of the valid sub-entities.  We do
+   #       # this when we find a CHOOSE but we do not know what
+   #       # it is for.
 
-         splitAndAddToValidEntities($line->type, $entityName, $1);
-      }
-   }
+   #       splitAndAddToValidEntities($line->type, $entityName, $1);
+   #    }
+   # }
 }
 
 
@@ -358,15 +357,7 @@ sub validateEQMODKey {
    my ($line) = @_;
 
    # We keep track of the KEYs for the equipmods.
-   if ( $line->hasColumn('KEY') ) {
-
-      # We extract the key name
-      my $token = $line->firstTokenInColumn('KEY');
-      my $key   = $token->value;
-
-      setEntityValid("EQUIPMOD Key", $key);
-
-   } else {
+   if (! $line->hasColumn('KEY') ) {
 
       # We get the contents of the tag at the start of the line (the one that
       # only has a value).

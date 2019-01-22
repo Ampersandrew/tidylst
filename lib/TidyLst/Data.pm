@@ -29,7 +29,7 @@ our @EXPORT_OK = qw(
    getDirSourceTags
    getEntityFirstTag
    getEntityName
-   getEntityNameTag
+   getTaglessColumn
    getHeader
    getHeaderMissingOnLineType
    getMissingHeaderLineTypes
@@ -3511,7 +3511,7 @@ sub getDirSourceTags {
 
    C<getEntityFirstTag($lineType)>
 
-   Get the name of the first column of a line. Similar to getEntityNameTag, but
+   Get the name of the first column of a line. Similar to getTaglessColumn, but
    this one works even when the first token on the line does have a tag, 
    i.e. not a pretend tag that starts 000
 
@@ -3550,13 +3550,13 @@ sub getEntityName {
 }
 
 
-=head2 getEntityNameTag
+=head2 getTaglessColumn
 
    Get the name of the first column of a line that does not start with a tag.
 
 =cut
 
-sub getEntityNameTag {
+sub getTaglessColumn {
 
    my ($entity) = @_;
    $columnWithNoTag{$entity};

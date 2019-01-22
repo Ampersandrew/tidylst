@@ -100,14 +100,16 @@ sub oldExtractVariables {
 
       elsif ($values[0] eq 'SKILLRANK' || $values[0] eq 'SKILLTOTAL' ) {
 
-         # Convert {} to () for proper validation
-         $values[1] =~ tr/{}/()/;
-         registerXCheck(
-            'SKILL',
-            qq(@@" in "$tag),
-            $file,
-            $line,
-            $values[1] );
+         if (defined $values[1]) {
+            # Convert {} to () for proper validation
+            $values[1] =~ tr/{}/()/;
+            registerXCheck(
+               'SKILL',
+               qq(@@" in "$tag),
+               $file,
+               $line,
+               $values[1] );
+         }
 
       } else {
 

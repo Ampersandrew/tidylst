@@ -194,8 +194,12 @@ updateValidity();
 # PCC processing
 my %files = ();
 
-my %filesToParse;    # Will hold the file to parse (including path)
-my @modifiedFiles;   # Will hold the name of the modified files
+# Will hold the file to parse (including path) as the key, the value is the
+# filetype
+my %filesToParse;
+
+# Holds the name of files that are modified by the script.
+my @modifiedFiles;
 
 #####################################
 # Verify if the inputpath was given
@@ -300,6 +304,8 @@ if (getOption('inputpath')) {
       my $mustWrite      = NO;
       my @pccLines       = ();
       my %foundFileType;
+      my @gameModes;
+      my @gameModesRef    = \@gameModes;
 
       PCC_LINE:
       for my $pccLine ( <$pcc_fh> ) {
@@ -374,7 +380,8 @@ if (getOption('inputpath')) {
 
                my $lstFile = find_full_path($token->value, $currentbasedir);
 
-               $filesToParse{$lstFile} = $token->tag;
+               $filesToParse{$lstFile}{'fileType'} = $token->tag;
+               $filesToParse{$lstFile}{'gameMode'} = @gameModesRef;
 
                # Check to see if the file exists
                if ( !-e $lstFile ) {
@@ -443,24 +450,24 @@ if (getOption('inputpath')) {
                } elsif ( $token->tag eq 'GAMEMODE' ) {
 
                   # Verify that the GAMEMODEs are valid and match the filer.
-                  $found{'gamemode'} = $token->value;
-                  my @modes = split /[|]/, $token->value;
+                  my $gameModeOption = getOption('gamemode');
+                  my $gameModeRegex  = $gameModeOption ? qr{ \A (?: $gameModeOption  ) \z }xmsi : qr{ . }xms;
+                  my $validGameMode  = $gameModeOption ? 0 : 1;
 
-                  my $gamemode = getOption('gamemode');
-                  my $gamemode_regex = $gamemode ? qr{ \A (?: $gamemode  ) \z }xmsi : qr{ . }xms;
-                  my $valid_game_mode = $gamemode ? 0 : 1;
+                  $found{'gamemode'} = $token->value;
+                  @gameModes = split /[|]/, $token->value;
 
                   # First the filter is applied
-                  for my $mode (@modes) {
-                     if ( $mode =~ $gamemode_regex ) {
-                        $valid_game_mode = 1;
+                  for my $mode (@gameModes) {
+                     if ( $mode =~ $gameModeRegex ) {
+                        $validGameMode = 1;
                      }
                   }
 
                   # Then we check if the game mode is valid only if the game
                   # modes have not been filtered out
-                  if ($valid_game_mode) {
-                     for my $mode (@modes) {
+                  if ($validGameMode) {
+                     for my $mode (@gameModes) {
                         if ( ! isValidGamemode($mode) ) {
                            $log->notice(
                               qq{Invalid GAMEMODE "$mode" in "$_"},
@@ -471,12 +478,12 @@ if (getOption('inputpath')) {
                      }
                   }
 
-                  if ( !$valid_game_mode ) {
-                     
+                  if ( !$validGameMode ) {
+
                      # We set the variables that will kick us out of the while
                      # loop that read the file and that will prevent the file
                      # from being written.
-                     
+
                      $mustWrite       = NO;
                      $found{'header'} = NO;
                      last PCC_LINE;
@@ -516,7 +523,7 @@ if (getOption('inputpath')) {
       }
 
       if ( $found{'gamemode'} && getOption('exportlist') ) {
-         printToExportList('PCC', 
+         printToExportList('PCC',
             makeExportListString(@found{('source long', 'source short', 'gamemode')}, $pccName));
       }
 
@@ -541,7 +548,7 @@ if (getOption('inputpath')) {
          # While the first line is any sort of comment about pretty lst or TidyLst,
          # we remove it
          REMOVE_HEADER:
-         while (  $pccLines[0] =~ $TidyLst::Data::CVSPattern 
+         while (  $pccLines[0] =~ $TidyLst::Data::CVSPattern
                || $pccLines[0] =~ $TidyLst::Data::headerPattern) {
             shift @pccLines;
             last REMOVE_HEADER if not defined $pccLines[0];
@@ -723,7 +730,7 @@ sub find_full_path {
    # Change all the \ for / in the file name
    $fileName =~ tr{\\}{/};
 
-   # See if the vendor path replacement is necessary   
+   # See if the vendor path replacement is necessary
    if ($fileName =~ m{ ^[*] }xmsi) {
 
       # Remove the leading * and / if present
@@ -732,9 +739,9 @@ sub find_full_path {
       my $vendorFile = getOption('vendorpath') . $fileName;
 
       if ( -e $vendorFile ) {
-         $fileName = $vendorFile; 
+         $fileName = $vendorFile;
       } else {
-         $fileName = '@' . $fileName; 
+         $fileName = '@' . $fileName;
       }
 
    }
@@ -941,7 +948,7 @@ or if you use a package manager (activestate, debian etc.) you can get them
 from there, for instance for debian:
 
    apt install libmouse-perl
-   apt-install libmousex-nativetraits-perl 
+   apt-install libmousex-nativetraits-perl
 
 and for activestate:
 

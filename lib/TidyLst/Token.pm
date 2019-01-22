@@ -26,7 +26,6 @@ use TidyLst::Data qw(
    mungKey
    registerXCheck 
    searchRace
-   setEntityValid
    tagTakesFixedValues
    );
 
@@ -82,6 +81,17 @@ has 'line' => (
 has 'noMoreErrors' => (
    is     => 'rw',
    isa    => 'Bool',
+);
+
+has 'entityLabel' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasEntityLabel',
+);
+
+has 'entityValue' => (
+   is       => 'rw',
+   isa      => 'Str',
 );
 
 around 'BUILDARGS' => sub {
@@ -1390,7 +1400,9 @@ sub _define {
    # First we store the DEFINE variable name
    if ($var_name) {
       if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
-         setEntityValid('DEFINE Variable', $var_name);
+
+         $self->entityLabel('DEFINE Variable');
+         $self->entityValue($var_name);
 
          #####################################################
          # Export a list of variable names if requested
@@ -1494,6 +1506,8 @@ sub _domainsOnDeity {
    if ($self->value =~ /\|/ ) {
       $value = substr($self->value, 0, rindex($self->value, "\|"));
    }
+
+   return unless defined $value;
 
    DOMAIN_FOR_DEITY:
    for my $domain ( split ',', $value ) {
@@ -2138,7 +2152,8 @@ sub _move {
       else {
 
          # We keep the move type for future validation
-         setEntityValid('MOVE Type', $type);
+         $self->entityLabel('MOVE Type');
+         $self->entityValue($type);
       }
 
       unless ( $value =~ /^\d+$/ ) {
@@ -2432,6 +2447,37 @@ sub _numeric {
       $self->_variables($self->value) );
 }
 
+# Adds the category to the front of the ABILITY before sending it for cross
+# check.
+
+sub _preAbility {
+
+   my ($self, $enclosingToken) = @_;
+
+   # PRECHECK:<number>,<check equal value list>
+   # PRECHECKBASE:<number>,<check equal value list>
+   # <check equal value list> := <check name> "=" <number>
+   my ($valid, @values) = $self->_checkFirstValue;
+
+   # The PREtag doesn't begin with a number
+   if ( not $valid ) {
+      $self->_warnDeprecate($enclosingToken);
+   }
+
+   my $category = shift @values;
+
+   if (scalar @values) {
+
+      my @processed = map { "${category}|${_}" } @values;
+
+      registerXCheck(
+         'ABILITY', 
+         $self->tag, 
+         $self->file, 
+         $self->line, 
+         @processed);
+   }
+}
 
 
 # Ensures that a PRECHECK token's value start with a number.
@@ -2792,7 +2838,7 @@ sub _preToken {
 
    } elsif ( $self->tag eq 'PREABILITY' ) {
 
-      $self->_genericPRE('ABILITY', $enclosingToken);
+      $self->_preAbility('ABILITY', $enclosingToken);
 
    } elsif ( $self->tag eq 'PREITEM' ) {
 
@@ -2966,8 +3012,8 @@ sub _raceSubType {
                $race_subtype, );
 
          } else {
-
-            setEntityValid('RACESUBTYPE', $race_subtype);
+            $self->entityLabel('RACESUBTYPE');
+            $self->entityValue($race_subtype);
          }
 
       } else {
@@ -3011,7 +3057,8 @@ sub _raceType {
                $race_type, );
 
          } else {
-            setEntityValid('RACETYPE', $race_type);
+            $self->entityLabel('RACETYPE');
+            $self->entityValue($race_type);
          }
 
       } else {
@@ -3268,8 +3315,8 @@ sub _startPack {
    my ($self) = @_;
 
    my $value = $self->value;
-   setEntityValid('KIT STARTPACK', "KIT:$value");
-   setEntityValid('KIT STARTPACK', "$value");
+   $self->entityLabel('KIT STARTPACK');
+   $self->entityValue($self->value);
 }
 
 

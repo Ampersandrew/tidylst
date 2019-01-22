@@ -42,7 +42,7 @@ use TidyLst::Data qw(
    getDirSourceTags
    getEntityFirstTag
    getEntityName
-   getEntityNameTag
+   getTaglessColumn
    getHeader
    getValidSystemArr
    incCountValidTags
@@ -699,6 +699,94 @@ our %parseControl = (
 
 );
 
+my %tagsWithValidityData = (
+   'DEFINE'      => 1,
+   'MOVE'        => 1,
+   'RACESUBTYPE' => 1,
+   'RACETYPE'    => 1,
+   'STARTPACK'   => 1,
+);
+
+=head2 addValidEntities
+
+   Extract the name of any valid entities defined on this line and queue them
+   up to be used in the validity testing of other tags.
+
+=cut
+
+sub addValidEntities {
+
+   my ($line, $lineInfo) = @_;
+
+   for my $column (keys %tagsWithValidityData) {
+      if ($line->hasColumn($column)) {
+
+         # If this column has entity data stored, add it for validity checking
+         # of other tags.
+         COLUMN:
+         for my $token (@{ $line->column($column) }) {
+
+            next COLUMN unless $token->hasEntityLabel;
+
+            # Start kits store two values (don't know why, prettylst did it)
+            if ($token->entityLabel =~ qr/^KIT/) {
+               setEntityValid($token->entityLabel, "KIT:". $token->entityValue);
+            }
+            setEntityValid($token->entityLabel, $token->entityValue);
+         }
+      }
+   }
+
+   if ( $line->isType('EQUIPMOD') ) {
+      # We keep track of the KEYs for the equipmods.
+      if ( $line->hasColumn('KEY') ) {
+
+         # We extract the key
+         my $token = $line->firstTokenInColumn('KEY');
+
+         setEntityValid("EQUIPMOD Key", $token->value);
+      }
+   }
+
+   # Add the key with a category prefix, should solve most of the missing
+   # abilities reports.
+   if ($line->type eq 'ABILITY') {
+
+      my $category;
+      my $key;
+      my $entityName = $line->entityName;
+
+      if ($line->hasColumn('CATEGORY')) {
+         $category = $line->valueInFirstTokenInColumn('CATEGORY'); 
+      }
+
+      if ($line->hasColumn('KEY')) {
+         $key = $line->valueInFirstTokenInColumn('KEY'); 
+      }
+
+      if (defined $category && defined $key) {
+
+         my $value = "CATEGORY=${category}|${key}";
+         setEntityValid('ABILITY', $value);
+      }
+
+      if (defined $category && defined $entityName) {
+
+         my $value = "CATEGORY=${category}|${entityName}";
+         setEntityValid('ABILITY', $value);
+      }
+
+   } else {
+
+      # This adds the tagless first column in many lines to the validity data. It
+      # doesn't really handle abilities because they have CATEGORIES that you have
+      # to add to MOD or COPY. This means that anything referencing a modified
+      # ability can never find it.
+      addNameToValidEntities($line, $lineInfo);
+   }
+
+}
+
 
 =head2 checkClearTokenOrder
 
@@ -1040,12 +1128,12 @@ sub parseFile {
          map { s{ \A \s* | \s* \z }{}xmsg; $_ }
          split $sep, $newLine;
 
-      #First, we deal with the tag-less columns
+      #First, we deal with the tag-less column
       COLUMN:
-      for my $column ( getEntityNameTag($lineInfo->{Linetype}) ) {
+      for my $column ( getTaglessColumn($lineInfo->{Linetype}) ) {
 
-         # If this line type does not have tagless first entry
-         # then it doesn't need this separate treatment
+         # If this line type does not have tagless first entry then it doesn't
+         # need this separate treatment
          if (not defined $column) {
             last COLUMN;
          }
@@ -1079,11 +1167,6 @@ sub parseFile {
 
          # Statistic gathering
          incCountValidTags($lineInfo->{Linetype}, $column);
-
-         if ( index( $column, '000' ) == 0 && $lineInfo->{ValidateKeep} ) {
-            my $exit = process000($lineInfo, $value, $lineInfo->{Linetype}, $file, $lineNum);
-            last COLUMN if $exit;
-         }
       }
 
       # Second, let's parse the regular columns
@@ -1128,7 +1211,7 @@ sub parseFile {
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      processLine($line);
+      processLine($line, $lineInfo);
 
       # Validate the line
       if (getOption('xcheck')) {
@@ -1437,7 +1520,7 @@ sub parseSystemFiles {
    return;
 }
 
-=head2 process000
+=head2 addNameToValidEntities
 
    The first tag on a line may need to be processed because it is a MOD, FORGET
    or COPY. It may also need to be added to crosschecking data to allow other
@@ -1445,29 +1528,44 @@ sub parseSystemFiles {
 
 =cut
 
-sub process000 {
+sub addNameToValidEntities {
 
-   my ($lineInfo, $token, $linetype, $file, $line) = @_;
+   my ($line, $lineInfo) = @_;
+
+   # Only add the name valitdity info if the line info calls for it.
+   if (! $lineInfo->{ValidateKeep} ) {
+      return;
+   }
+
+   # Get the token that holds the name of this entity
+   my $column = getEntityFirstTag($lineInfo->{Linetype});
+
+   return unless defined $column;
+
+   my $token = $line->firstTokenInColumn($column);
 
    # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-   my $check_mod = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
+   my $modRegex = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
 
-   if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
+   
+   if ( my ($entityName, $modPart) = ($token->value =~ $modRegex) ) {
 
       # We keep track of the .MOD type tags to
       # later validate if they are valid
       if (getOption('xcheck')) {
-         TidyLst::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
+         TidyLst::Report::registerReferrer(
+            $lineInfo->{Linetype}, 
+            $entityName, 
+            $token->value, 
+            $token->file, 
+            $token->line);
       }
 
       # Special case for .COPY=<new name>
       # <new name> is a valid entity
-      if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
-         setEntityValid($linetype, $new_name);
+      if ( my ($newName) = ( $modPart =~ / \A COPY= (.*) /xmsi ) ) {
+         setEntityValid($lineInfo->{Linetype}, $newName);
       }
-
-      # Exit the loop
-      return 1; #last COLUMN;
 
    } elsif ( getOption('xcheck') ) {
 
@@ -1478,8 +1576,8 @@ sub process000 {
 
       if ( $lineInfo->{RegExGetEntry} ) {
 
-         if ( $token =~ $lineInfo->{RegExGetEntry} ) {
-            $token = $1;
+         if ( $token->value =~ $lineInfo->{RegExGetEntry} ) {
+            my $tok = $1;
 
             # Some line types refer to other line entries directly
             # in the line identifier.
@@ -1487,35 +1585,32 @@ sub process000 {
                TidyLst::Report::add_to_xcheck_tables(
                   $lineInfo->{IdentRefType},
                   $lineInfo->{IdentRefTag},
-                  $file,
-                  $line,
-                  &{ $lineInfo->{GetRefList} }($token)
+                  $token->file,
+                  $token->line,
+                  &{ $lineInfo->{GetRefList} }($tok)
                );
             }
 
          } else {
 
             getLogger()->warning(
-               qq(Cannot find the $linetype name),
-               $file,
-               $line
+               qq(Cannot find the ) . $lineInfo->{Linetype} . q( name),
+               $token->file,
+               $token->line
             );
          }
       }
 
-      setEntityValid($linetype, $token);
+      setEntityValid($lineInfo->{Linetype}, $token->value);
 
       # Check to see if the token must be recorded for other
       # token types.
       if ( exists $lineInfo->{OtherValidEntries} ) {
-         for my $entry_type ( @{ $lineInfo->{OtherValidEntries} } ) {
-            setEntityValid($entry_type, $token);
+         for my $tokenType ( @{ $lineInfo->{OtherValidEntries} } ) {
+            setEntityValid($tokenType, $token->value);
          }
       }
    }
-
-   # don't exit the loop
-   return 0;
 }
 
 
@@ -1528,7 +1623,10 @@ sub process000 {
 
 sub processFile {
    
-   my ($file, $fileType) = @_;
+   my ($file, $typeAndGameMode) = @_;
+
+   my $fileType  = $typeAndGameMode->{'fileType'}; 
+   my $gameModes = $typeAndGameMode->{'gameMode'}; 
 
    my $log = getLogger();
 
@@ -1723,7 +1821,7 @@ sub processFile {
 
 sub processLine {
 
-   my ($line) = @_;
+   my ($line, $lineInfo) = @_;
 
    my $log = getLogger();
 
@@ -1732,6 +1830,8 @@ sub processLine {
    # We manipulate the tags for the line here
 
    doLineConversions($line);
+
+   addValidEntities($line, $lineInfo);
 
    # Checking race files for TYPE and if no RACETYPE,
    # Do this check no matter what it is valid all the time
