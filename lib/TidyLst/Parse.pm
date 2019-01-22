@@ -2,24 +2,28 @@ package TidyLst::Parse;
 
 use strict;
 use warnings;
-use English;
+
+use Fatal qw( open close );             # Force some built-ins to die on error
+use English qw( -no_match_vars );       # No more funky punctuation variables
 
 require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
+   create_dir
    extractTag
    isParseableFileType
    isWriteableFileType
    normaliseFile
    parseSystemFiles
+   processFile
    );
 
 use Carp;
 use YAML;
 
 # expand library path so we can find TidyLst modules
-use File::Basename qw(dirname);
+use File::Basename qw(dirname fileparse);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
@@ -719,6 +723,32 @@ sub checkClearTokenOrder {
 }
 
 
+=head2 
+
+   Create any part of a subdirectory structure that is not already there.
+
+=cut 
+
+sub create_dir {
+   my ( $dir, $outputdir ) = @_;
+
+   # Only if the directory doesn't already exist
+   if ( !-d $dir ) {
+
+      # Needed to find the full path
+      my $parentdir = dirname($dir);
+
+      # If the $parentdir doesn't exist, we create it
+      if ( $parentdir ne $outputdir && !-d $parentdir ) {
+         create_dir( $parentdir, $outputdir );
+      }
+
+      # Create the curent level directory
+      mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
+   }
+}
+
+
 =head2 extractTag
 
    This opeatrion takes a tag and makes sure it is suitable for further
@@ -818,27 +848,26 @@ sub matchLineType {
    # Try each of the line types for this file type until we get a match or
    # exhaust the types.
 
-   my ($lineSpec, $entity);
+   my $lineSpec;
    for my $rec ( @{ $parseControl{$fileType} } ) {
       if ( $line =~ $rec->{RegEx} ) {
 
          $lineSpec = $rec;
-         $entity   = $1;
          last;
       }
    }
 
-   return($lineSpec, $entity);
+   return $lineSpec
 }
 
 =head2 normaliseFile
 
-   Detect filetype and normalize lines
+   Normalize the lines, and detect if the file wasMultiLine 
 
-   Parameters: $buffer => raw file data in a single buffer
+   Parameters: $buffer => raw file data in a single line
 
-   Returns: $filetype => either 'tab-based' or 'multi-line'
-            $lines => arrayref containing logical lines normalized to tab-based format
+   Returns: $lines an arrayref containing lines normalized to tab-based format
+            $wasMultiLine a boolean which is true if logical lines were split across physical lines
 
 =cut
 
@@ -847,8 +876,8 @@ sub normaliseFile {
    # TODO: handle empty buffers, other corner-cases
    my $buffer = shift || "";     # default to empty line when passed undef
 
-   my $filetype;
    my @lines;
+   my $wasMultiLine;
 
    # First, we clean out empty lines that contain only white-space. Otherwise,
    # we could have false positives on the filetype.  Simply remove all
@@ -861,7 +890,7 @@ sub normaliseFile {
 
    if ($buffer =~ /^\t+\S/m) {
 
-      $filetype = "multi-line";
+      $wasMultiLine = 1;
 
       # Normalize to tab-based
       # 1) All lines that start with a tab belong to the previous line.
@@ -872,17 +901,15 @@ sub normaliseFile {
 
       $buffer =~ s/\n\t/\t/mg;
 
-      @lines = split /\n/, $buffer;
-
    } else {
-      $filetype = "tab-based";
+      $wasMultiLine = 0;
    }
 
    # Split into an array of lines.
    @lines = split /\n/, $buffer;
 
    # return a arrayref so we are a little more efficient
-   return (\@lines, $filetype);
+   return (\@lines, $wasMultiLine);
 }
 
 
@@ -904,26 +931,20 @@ sub parseFile {
 
    my $log = getLogger();
 
-   ##################################################
-   # Working variables
-
    my $currentLineType = "";
-   my $lastMainLine    = -1;
 
-   my $curent_entity;
+   # This used to be used in the reformatting code, now it's only use is to
+   # recognise sub lines which are not preceeded by a MAIN line.
+   my $lastMainLine = -1;
 
-   my @newLines;   # New line generated
+   # New lines generated
+   my @newLines;   
 
-   ##################################################
-   ##################################################
-   # Phase I - Split line in tokens and parse
-   #               the tokens
+   # Phase I - Split line in tokens and parse the tokens
 
    my $lineNum = 1;
    LINE:
    for my $thisLine (@ {$lines_ref} ) {
-
-      my $line_info;
 
       # Convert the non-ascii character in the line
       my $newLine = convertEntities($thisLine);
@@ -934,6 +955,8 @@ sub parseFile {
       # Remove spaces at the begining of the line
       $newLine =~ s/^\s+//;
 
+      # Using $currentLineType because it was set on a previous cycle (or is
+      # an empty string until we find a line type)..
       my $line = TidyLst::Line->new(
          type     => $currentLineType,
          file     => $file,
@@ -952,10 +975,10 @@ sub parseFile {
          next LINE;
       }
 
-      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
+      my $lineInfo = matchLineType($newLine, $fileType);
 
       # If we didn't find a record with info how to parse this line
-      if ( ! defined $line_info ) {
+      if ( ! defined $lineInfo ) {
          $log->warning(
             qq(Can\'t find the line type for "$newLine"),
             $file,
@@ -967,18 +990,20 @@ sub parseFile {
          next LINE;
       }
 
-      $line->mode($line_info->{Mode});
-      $line->format($line_info->{Format});
-      $line->header($line_info->{Header});
+      # Found an info record, overwrite the defaults we added for these fields
+      # we created this line object.
+      $line->mode($lineInfo->{Mode});
+      $line->format($lineInfo->{Format});
+      $line->header($lineInfo->{Header});
 
       # What type of line is it?
-      $currentLineType = $line_info->{Linetype};
+      $currentLineType = $lineInfo->{Linetype};
 
-      if ( $line_info->{Mode} == MAIN ) {
+      if ( $lineInfo->{Mode} == MAIN ) {
 
          $lastMainLine = $lineNum - 1;
 
-      } elsif ( $line_info->{Mode} == SUB ) {
+      } elsif ( $lineInfo->{Mode} == SUB ) {
 
          if ($lastMainLine == -1) {
             $log->warning(
@@ -988,7 +1013,7 @@ sub parseFile {
             )
          }
 
-      } elsif ( $line_info->{Mode} == SINGLE ) {
+      } elsif ( $lineInfo->{Mode} == SINGLE ) {
 
          $lastMainLine = -1;
 
@@ -998,13 +1023,13 @@ sub parseFile {
       }
 
       # Got a line info hash, so update the line type in the line
-      $line->type($line_info->{Linetype});
+      $line->type($lineInfo->{Linetype});
 
       # Identify the deprecated tags.
-      scanForDeprecatedTokens( $newLine, $currentLineType, $file, $lineNum, $line, );
+      scanForDeprecatedTokens( $newLine, $lineInfo->{Linetype}, $file, $lineNum, $line, );
 
       # By default, the tab character is used
-      my $sep = $line_info->{SepRegEx} || qr(\t+);
+      my $sep = $lineInfo->{SepRegEx} || qr(\t+);
 
       # We split the tokens, strip the spaces and silently remove the empty tags
       # (empty tokens are the result of [tab][space][tab] type of chracter
@@ -1017,9 +1042,10 @@ sub parseFile {
 
       #First, we deal with the tag-less columns
       COLUMN:
-      for my $column ( getEntityNameTag($currentLineType) ) {
+      for my $column ( getEntityNameTag($lineInfo->{Linetype}) ) {
 
          # If this line type does not have tagless first entry
+         # then it doesn't need this separate treatment
          if (not defined $column) {
             last COLUMN;
          }
@@ -1044,7 +1070,7 @@ sub parseFile {
          my $token =  TidyLst::Token->new(
             tag       => $column,
             value     => $value,
-            lineType  => $currentLineType,
+            lineType  => $lineInfo->{Linetype},
             file      => $file,
             line      => $lineNum,
          );
@@ -1052,10 +1078,10 @@ sub parseFile {
          $line->add($token);
 
          # Statistic gathering
-         incCountValidTags($currentLineType, $column);
+         incCountValidTags($lineInfo->{Linetype}, $column);
 
-         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = process000($line_info, $value, $currentLineType, $file, $lineNum);
+         if ( index( $column, '000' ) == 0 && $lineInfo->{ValidateKeep} ) {
+            my $exit = process000($lineInfo, $value, $lineInfo->{Linetype}, $file, $lineNum);
             last COLUMN if $exit;
          }
       }
@@ -1064,7 +1090,7 @@ sub parseFile {
       for my $rawToken (@tokens) {
 
          my ($extractedToken, $value) =
-            extractTag($rawToken, $currentLineType, $file, $lineNum);
+            extractTag($rawToken, $lineInfo->{Linetype}, $file, $lineNum);
 
          # if extractTag returns a defined value, no further processing is
          # neeeded. If tag is defined but value is not, then the tag that was
@@ -1073,7 +1099,7 @@ sub parseFile {
 
             my $token =  TidyLst::Token->new(
                fullToken => $extractedToken,
-               lineType  => $currentLineType,
+               lineType  => $lineInfo->{Linetype},
                file      => $file,
                line      => $lineNum,
             );
@@ -1083,10 +1109,10 @@ sub parseFile {
 
             my $tag = $token->tag;
 
-            if ($line->hasColumn($tag) && ! isValidMultiTag($currentLineType, $tag)) {
+            if ($line->hasColumn($tag) && ! isValidMultiTag($lineInfo->{Linetype}, $tag)) {
                $log->notice(
                   qq{The tag "$tag" should not be used more than once on the same }
-                  . $currentLineType . qq{ line.\n},
+                  . $lineInfo->{Linetype} . qq{ line.\n},
                   $file,
                   $lineNum
                );
@@ -1118,9 +1144,12 @@ sub parseFile {
    }
    continue { $lineNum++ }
 
-   #####################################################
-   #####################################################
-   # We find all the header lines
+   # Phase II - Categorise comment and blank lines.
+   #
+   # Comments can be Header lines, Block comments or ordinary comments.  Header
+   # lines are replaced. Block comments are passed through unaltered, but are
+   # used to split up locks of MAIN lines. Ordinary comments are passed through
+   # unaltered into the newly formatted file. 
 
    CATEGORIZE_COMMENTS:
    for (my $i = 0; $i < @newLines; $i++) {
@@ -1186,15 +1215,13 @@ sub parseFile {
       }
    }
 
-   #################################################################
-   ######################## Conversion #############################
+   # Phase III - File Conversion 
+   #
    # We manipulate the tags for the whole file here
 
    doFileConversions(\@newLines, $fileType, $file);
 
-   ##################################################
-   ##################################################
-   # Phase II - Reformating the lines
+   # Phase IV - Potential reformating of the lines
 
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
@@ -1420,10 +1447,10 @@ sub parseSystemFiles {
 
 sub process000 {
 
-   my ($line_info, $token, $linetype, $file, $line) = @_;
+   my ($lineInfo, $token, $linetype, $file, $line) = @_;
 
    # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-   my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
+   my $check_mod = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
 
    if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
 
@@ -1449,20 +1476,20 @@ sub process000 {
       #
       # Some line types need special code to extract the entry.
 
-      if ( $line_info->{RegExGetEntry} ) {
+      if ( $lineInfo->{RegExGetEntry} ) {
 
-         if ( $token =~ $line_info->{RegExGetEntry} ) {
+         if ( $token =~ $lineInfo->{RegExGetEntry} ) {
             $token = $1;
 
             # Some line types refer to other line entries directly
             # in the line identifier.
-            if ( exists $line_info->{GetRefList} ) {
+            if ( exists $lineInfo->{GetRefList} ) {
                TidyLst::Report::add_to_xcheck_tables(
-                  $line_info->{IdentRefType},
-                  $line_info->{IdentRefTag},
+                  $lineInfo->{IdentRefType},
+                  $lineInfo->{IdentRefTag},
                   $file,
                   $line,
-                  &{ $line_info->{GetRefList} }($token)
+                  &{ $lineInfo->{GetRefList} }($token)
                );
             }
 
@@ -1480,8 +1507,8 @@ sub process000 {
 
       # Check to see if the token must be recorded for other
       # token types.
-      if ( exists $line_info->{OtherValidEntries} ) {
-         for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
+      if ( exists $lineInfo->{OtherValidEntries} ) {
+         for my $entry_type ( @{ $lineInfo->{OtherValidEntries} } ) {
             setEntityValid($entry_type, $token);
          }
       }
@@ -1492,10 +1519,202 @@ sub process000 {
 }
 
 
+=head2 processFile
+
+   Check that the file type is parseable, and if so, parse the file
+   and write the modified result (if necessary and permitted).
+
+=cut
+
+sub processFile {
+   
+   my ($file, $fileType) = @_;
+
+   my $log = getLogger();
+
+   my $numberofcf   = 0;     # Number of extra CF found in the file.
+   my $wasMultiLine = 0;
+
+   # Will hold all the lines of the file
+   my @lines;           
+
+   if ( $file eq "STDIN" ) {
+
+      local $/ = undef; # read all from buffer
+      my $buffer = <>;
+
+      (my $lines, $wasMultiLine) = normaliseFile($buffer);
+      @lines = @{$lines};
+
+   } else {
+
+      # We read only what we know needs to be processed
+      my $parseable = isParseableFileType($fileType);
+
+      if (ref( $parseable ) ne 'CODE') {
+         return 0;
+      }
+
+      # We try to read the file and continue to the next one even if we
+      # encounter problems
+      #
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
+
+      eval {
+
+         local $/ = undef; # read all from buffer
+         open my $lst_fh, '<', $file;
+         my $buffer = <$lst_fh>;
+         close $lst_fh;
+
+         (my $lines, $wasMultiLine) = normaliseFile($buffer);
+         @lines = @{$lines};
+      };
+
+      if ( $EVAL_ERROR ) {
+         # There was an error in the eval
+         $log->error( $EVAL_ERROR, $file );
+         return 0;
+      }
+   }
+
+   # If the file is empty, we skip it
+   unless (@lines) {
+      $log->notice("Empty file.", $file);
+      return 0;
+   }
+
+   # Check to see if we are dealing with a HTML file
+   if ( grep /<html>/i, @lines ) {
+      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file );
+      return 0;
+   }
+
+   my $headerRemoved = 0;
+
+   # While the first line is any sort of comment about pretty lst or TidyLst,
+   # we remove it
+   REMOVE_HEADER:
+   while (  $lines[0] =~ $TidyLst::Data::CVSPattern 
+         || $lines[0] =~ $TidyLst::Data::headerPattern ) {
+      shift @lines;
+      $headerRemoved++;
+      last REMOVE_HEADER if not defined $lines[0];
+   }
+
+   # The full file is in the @lines array, remove the normal EOL characters
+   chomp(@lines);
+
+   # Remove and count any abnormal EOL characters i.e. anything that remains
+   # after the chomp
+   for my $line (@lines) {
+      $numberofcf += $line =~ s/[\x0d\x0a]//g;
+   }
+
+   if($numberofcf) {
+      $log->warning( "$numberofcf extra CF found and removed.", $file );
+   }
+
+   my $parser = isParseableFileType($fileType);
+
+   if ( ref($parser) eq "CODE" ) {
+
+      # The overwhelming majority of checking, correcting and reformatting happens in this operation
+      my ($newlines_ref) = &{ $parser }( $fileType, \@lines, $file);
+
+      # Let's remove any tralling white spaces
+      for my $line (@$newlines_ref) {
+         $line =~ s/\s+$//;
+      }
+
+      # Some file types are never written
+      if ($wasMultiLine) {
+         $log->report("SKIP rewrite for $file because it is a multi-line file");
+         return 0;
+      }
+
+      if (!isWriteableFileType($fileType)) {
+         return 0;
+      }
+
+      # We compare the result with the orginal file.
+      # If there are no modifications, we do not create the new files
+      my $same  = NO;
+      my $index = 0;
+
+      # First, we check if there are obvious reasons not to write the new file
+      # No extra CRLF characters were removed, same number of lines
+      if (!$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
+
+         # We assume the arrays are the same ...
+         $same = YES;
+
+         # ... but we check every line
+         $index = -1;
+         while ( $same && ++$index < scalar(@lines) ) {
+            if ( $lines[$index] ne $newlines_ref->[$index] ) {
+               $same = NO;
+            }
+         }
+      }
+
+      if ($same) {
+         return 0;
+      }
+
+      my $write_fh;
+
+      if (getOption('outputpath')) {
+
+         my $newfile = $file;
+         my $inputpath  = getOption('inputpath');
+         my $outputpath = getOption('outputpath');
+         $newfile =~ s/${inputpath}/${outputpath}/i;
+
+         # Needed to find the full path
+         my ($file, $basedir) = fileparse($newfile);
+
+         # Create the subdirectory if needed
+         create_dir( $basedir, getOption('outputpath') );
+
+         open $write_fh, '>', $newfile;
+
+      } else {
+
+         # Output to standard output
+         $write_fh = *STDOUT;
+      }
+
+      # The first line of the new file will be a comment line.
+      print {$write_fh} $TidyLst::Data::TidyLstHeader;
+
+      # We print the result
+      for my $line ( @{$newlines_ref} ) {
+         print {$write_fh} "$line\n"
+      }
+
+      # If we opened a filehandle, then close it
+      if (getOption('outputpath')) {
+         close $write_fh;
+      }
+
+      return 1;
+
+   } else {
+      warn "Didn't process filetype \"$fileType\".\n";
+      return 0;
+   }
+}
+
+
 =head2 processLine
 
    This function does additional processing on each line once
-   it have been seperated into tokens.
+   it has been seperated into tokens.
 
    The processing is a mix of validation and conversion.
 

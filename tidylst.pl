@@ -36,6 +36,7 @@ use TidyLst::Data qw(
    isValidGamemode
    isValidTag
    seenSourceToken
+   setFileHeader
    updateValidity
    );
 use TidyLst::Line;
@@ -44,11 +45,13 @@ use TidyLst::LogFactory qw(getLogger);
 use TidyLst::LogHeader;
 use TidyLst::Options qw(getOption isConversionActive parseOptions setOption);
 use TidyLst::Parse qw(
+   create_dir
    extractTag
    isParseableFileType
    isWriteableFileType
    normaliseFile
    parseSystemFiles
+   processFile
    );
 use TidyLst::Report qw(
    closeExportListFileHandles
@@ -60,11 +63,12 @@ use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 
 # Subroutines
 sub find_full_path;
-sub create_dir;
 sub generate_css;
 
 # Print version information
 print STDERR "$VERSION_LONG\n";
+
+setFileHeader("# $today -- reformatted by $SCRIPTNAME v$VERSION\n");
 
 #######################################################################
 # Parameter parsing
@@ -184,20 +188,13 @@ if ( getOption('systempath') ne q{} ) {
    parseSystemFiles(getOption('systempath'));
 }
 
-# For Some tags, validity is based on the system mode variables
+# For some tags, validity is based on the system mode variables
 updateValidity();
 
 # PCC processing
 my %files = ();
 
-# Finds the CVS lines at the top of LST files,so we can delete them
-# and replace with a single line TidyLst Header.
-my $CVSPattern       = qr{\#.*CVS.*Revision}i;
-my $newHeaderPattern = qr{\#.*reformatt?ed by}i;
-my $TidyLstHeader    = "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
-
 my %filesToParse;    # Will hold the file to parse (including path)
-my @lines;           # Will hold all the lines of the file
 my @modifiedFiles;   # Will hold the name of the modified files
 
 #####################################
@@ -358,7 +355,7 @@ if (getOption('inputpath')) {
 
                $pccLines[-1] = $token->fullRealToken;
                $log->warning(
-                  q{Replacing "} . $token->origToken . q(" by ") . $token->fullRealToken . q("),
+                  q(Replacing ") . $token->origToken . q(" by ") . $token->fullRealToken . q("),
                   $pccName,
                   $pcc_fh->input_line_number,
                );
@@ -390,7 +387,6 @@ if (getOption('inputpath')) {
                } elsif (
                      $token->tag eq 'ALIGNMENT'
                   || $token->tag eq 'CLASS'
-                  || $token->tag eq 'CLASSSPELL'
                   || $token->tag eq 'DOMAIN'
                   || $token->tag eq 'SAVE'
                   || $token->tag eq 'SPELL'
@@ -408,7 +404,7 @@ if (getOption('inputpath')) {
 
             } elsif ( $token->tag =~ m/^\#/ ) {
 
-               if ($token->tag =~ $newHeaderPattern) {
+               if ($token->tag =~ $TidyLst::Data::headerPattern) {
                   $found{'header'} = 1;
                }
 
@@ -495,7 +491,7 @@ if (getOption('inputpath')) {
 
          } elsif ( $pccLine =~ m/ \A [#] /xms ) {
 
-            if ($pccLine =~ $newHeaderPattern) {
+            if ($pccLine =~ $TidyLst::Data::headerPattern) {
                $found{'header'} = 1;
             }
 
@@ -545,12 +541,13 @@ if (getOption('inputpath')) {
          # While the first line is any sort of comment about pretty lst or TidyLst,
          # we remove it
          REMOVE_HEADER:
-         while ($pccLines[0] =~ $CVSPattern || $pccLines[0] =~ $newHeaderPattern) {
+         while (  $pccLines[0] =~ $TidyLst::Data::CVSPattern 
+               || $pccLines[0] =~ $TidyLst::Data::headerPattern) {
             shift @pccLines;
             last REMOVE_HEADER if not defined $pccLines[0];
          }
 
-         print {$newPccFh} "# $today -- reformatted by $SCRIPTNAME v$VERSION\n";
+         print {$newPccFh} $TidyLst::Data::TidyLstHeader;
 
          for my $line (@pccLines) {
             print {$newPccFh} "$line\n";
@@ -622,21 +619,20 @@ my %temp_filesToParse   = %filesToParse;
 # This bit used to be separate checks and it only pulled files forward if
 # certain conversions were active. It turns out that that ordering was
 # mututally exclusive and we can just do it all, all the time. I've left the
-# separate comments explaining why some files are pulled tot he front of the
+# separate comments explaining why some files are pulled to the front of the
 # list.
-
-# The CLASS files must be put at the start of the filesToParse_sorted array in
+#
+# ALIGNMENT SAVE and STAT are files that were previously in the gamemode, put
+# them first so we can extract valid Alignments, saves and stats for validating
+# later files (not done at the moment - Jan 2019).
+#
+# The CLASS files must be put early in the filesToParse_sorted array in
 # order for them to be dealt with before the SPELL files.
-
-# The CLASS and DOMAIN files must be put at the start of the
-# filesToParse_sorted array in order for them to be dealt with before the
-# CLASSSPELL files. The CLASSSPELL needs to be processed before the SPELL
-# files.
-
+#
 # The SPELL file must be loaded before the EQUIPMENT in order to properly
 # generate the EQMOD tags
 
-for my $filetype (qw(CLASS DOMAIN CLASSSPELL SPELL)) {
+for my $filetype (qw(ALIGNMENT SAVE STAT CLASS SPELL)) {
    for my $file_name ( sort keys %{ $files{$filetype} } ) {
       push @filesToParse_sorted, $file_name;
       delete $temp_filesToParse{$file_name};
@@ -648,185 +644,12 @@ push @filesToParse_sorted, sort keys %temp_filesToParse;
 
 FILE_TO_PARSE:
 for my $file (@filesToParse_sorted) {
-   my $numberofcf = 0;     # Number of extra CF found in the file.
 
-   my $filetype = "tab-based";   # can be either 'tab-based' or 'multi-line'
+   my $modified = processFile($file, $filesToParse{$file});
 
-   if ( $file eq "STDIN" ) {
-
-      # We read from STDIN
-      # henkslaaf - Multiline parsing
-      #       1) read all to a buffer (files are not so huge that it is a memory hog)
-      #       2) send the buffer to a method that splits based on the type of file
-      #       3) let the method return split and normalized entries
-      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
-      local $/ = undef; # read all from buffer
-      my $buffer = <>;
-
-      (my $lines, $filetype) = normaliseFile($buffer);
-      @lines = @$lines;
-
-   } else {
-
-      # We read only what we know needs to be processed
-      my $parseable = isParseableFileType($filesToParse{$file});
-
-      next FILE_TO_PARSE if ref( $parseable ) ne 'CODE';
-
-      # We try to read the file and continue to the next one even if we
-      # encounter problems
-      #
-      # henkslaaf - Multiline parsing
-      #       1) read all to a buffer (files are not so huge that it is a memory hog)
-      #       2) send the buffer to a method that splits based on the type of file
-      #       3) let the method return split and normalized entries
-      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
-
-      eval {
-
-         local $/ = undef; # read all from buffer
-         open my $lst_fh, '<', $file;
-         my $buffer = <$lst_fh>;
-         close $lst_fh;
-
-         (my $lines, $filetype) = normaliseFile($buffer);
-         @lines = @$lines;
-      };
-
-      if ( $EVAL_ERROR ) {
-         # There was an error in the eval
-         $log->error( $EVAL_ERROR, $file );
-         next FILE_TO_PARSE;
-      }
-   }
-
-   # If the file is empty, we skip it
-   unless (@lines) {
-      $log->notice("Empty file.", $file);
-      next FILE_TO_PARSE;
-   }
-
-   # Check to see if we are dealing with a HTML file
-   if ( grep /<html>/i, @lines ) {
-      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file );
-      next FILE_TO_PARSE;
-   }
-
-   my $headerRemoved = 0;
-
-   # While the first line is any sort of comment about pretty lst or TidyLst,
-   # we remove it
-   REMOVE_HEADER:
-   while ( $lines[0] =~ $CVSPattern || $lines[0] =~ $newHeaderPattern ) {
-      shift @lines;
-      $headerRemoved++;
-      last REMOVE_HEADER if not defined $lines[0];
-   }
-
-   # The full file is in the @lines array, remove the normal EOL characters
-   chomp(@lines);
-
-   # Remove and count any abnormal EOL characters i.e. anything that remains
-   # after the chomp
-   for my $line (@lines) {
-      $numberofcf += $line =~ s/[\x0d\x0a]//g;
-   }
-
-   if($numberofcf) {
-      $log->warning( "$numberofcf extra CF found and removed.", $file );
-   }
-
-   my $parser = isParseableFileType($filesToParse{$file});
-
-   if ( ref($parser) eq "CODE" ) {
-
-      # The overwhelming majority of checking, correcting and reformatting happens in this operation
-      my ($newlines_ref) = &{ $parser }( $filesToParse{$file}, \@lines, $file);
-
-      # Let's remove any tralling white spaces
-      for my $line (@$newlines_ref) {
-         $line =~ s/\s+$//;
-      }
-
-      # henkslaaf - we need to handle this in multi-line object files
-      #       take the multi-line variable and use it to determine
-      #       if we should skip writing this file
-
-      # Some file types are never written
-      if ($filetype eq 'multi-line') {
-         $log->report("SKIP rewrite for $file because it is a multi-line file");
-         next FILE_TO_PARSE;                # we still need to implement rewriting for multi-line
-      }
-
-      if (!isWriteableFileType($filesToParse{$file})) {
-         next FILE_TO_PARSE
-      }
-
-      # We compare the result with the orginal file.
-      # If there are no modifications, we do not create the new files
-      my $same  = NO;
-      my $index = 0;
-
-      # First, we check if there are obvious resons not to write the new file
-      # No extra CRLF char. were removed
-      # Same number of lines
-      if (!$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
-
-         # We assume the arrays are the same ...
-         $same = YES;
-
-         # ... but we check every line
-         $index = -1;
-         while ( $same && ++$index < scalar(@lines) ) {
-            if ( $lines[$index] ne $newlines_ref->[$index] ) {
-               $same = NO;
-            }
-         }
-      }
-
-      next FILE_TO_PARSE if $same;
-
-      my $write_fh;
-
-      if (getOption('outputpath')) {
-
-         my $newfile = $file;
-         my $inputpath  = getOption('inputpath');
-         my $outputpath = getOption('outputpath');
-         $newfile =~ s/${inputpath}/${outputpath}/i;
-
-         # Needed to find the full path
-         my ($file, $basedir) = fileparse($newfile);
-
-         # Create the subdirectory if needed
-         create_dir( $basedir, getOption('outputpath') );
-
-         open $write_fh, '>', $newfile;
-
-         # We keep track of the files we modify
-         push @modifiedFiles, $file;
-
-      } else {
-
-         # Output to standard output
-         $write_fh = *STDOUT;
-      }
-
-      # The first line of the new file will be a comment line.
-      print {$write_fh} $TidyLstHeader;
-
-      # We print the result
-      for my $line ( @{$newlines_ref} ) {
-         print {$write_fh} "$line\n"
-      }
-
-      # If we opened a filehandle, then close it
-      if (getOption('outputpath')) {
-         close $write_fh;
-      }
-
-   } else {
-      warn "Didn't process filetype \"$filesToParse{$file}\".\n";
+   # We keep track of the files we modify
+   if ($modified) {
+      push @modifiedFiles, $file;
    }
 }
 
@@ -889,7 +712,7 @@ if (getOption('outputerror')) {
 #
 # Change the @, * and relative paths found in the .lst for the real thing.
 #
-# Parameters: $fileName         File name
+# Parameters: $fileName           File name
 #             $current_base_dir  Current directory
 
 sub find_full_path {
@@ -929,26 +752,6 @@ sub find_full_path {
    }
 
    return $fileName;
-}
-
-# Create any part of a subdirectory structure that is not already there.
-sub create_dir {
-   my ( $dir, $outputdir ) = @_;
-
-   # Only if the directory doesn't already exist
-   if ( !-d $dir ) {
-
-      # Needed to find the full path
-      my ($file, $parentdir) = fileparse($dir);
-
-      # If the $parentdir doesn't exist, we create it
-      if ( $parentdir ne $outputdir && !-d $parentdir ) {
-         create_dir( $parentdir, $outputdir );
-      }
-
-      # Create the curent level directory
-      mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
-   }
 }
 
 

@@ -55,6 +55,7 @@ our @EXPORT_OK = qw(
    searchRace
    seenSourceToken
    setEntityValid
+   setFileHeader
    setValidSystemArr
    splitAndAddToValidEntities
    tagTakesFixedValues
@@ -91,6 +92,19 @@ use constant {
    NO             => 0,
    YES            => 1,
 };
+
+# Finds the CVS lines at the top of LST files, so we can delete them
+# and replace with a single line TidyLst Header.
+our $CVSPattern    = qr{\#.*CVS.*Revision}i;
+our $headerPattern = qr{\#.*reformatt?ed by}i;
+our $TidyLstHeader;
+
+
+sub setFileHeader {
+   my ($header) = @_;
+
+   $TidyLstHeader = $header;
+}
 
 
 my %columnWithNoTag = (
