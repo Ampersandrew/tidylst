@@ -1549,7 +1549,9 @@ sub addNameToValidEntities {
    # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
    my $modRegex = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
    
-   if ( my ($entityName, $modPart) = ($token->value =~ $modRegex) ) {
+   my ($entityName, $modPart) = ($token->fullRealToken =~ $modRegex);
+   
+   if (defined $modPart) {
 
       # We keep track of the .MOD type tags to
       # later validate if they are valid
@@ -1562,9 +1564,11 @@ sub addNameToValidEntities {
             $token->line);
       }
 
+      my ($newName) = ($modPart =~ / \A COPY= (.*) /xmsi);
+
       # Special case for .COPY=<new name>
       # <new name> is a valid entity
-      if ( my ($newName) = ( $modPart =~ / \A COPY= (.*) /xmsi ) ) {
+      if (defined $newName) {
          setEntityValid($lineInfo->{Linetype}, $newName);
       }
 
@@ -1602,7 +1606,11 @@ sub addNameToValidEntities {
          }
       }
 
-      setEntityValid($lineInfo->{Linetype}, $token->value);
+      # if we stripped of a modification (MOD, FORGET, COPY), use the
+      # unmodified value, otherwise, just use ->value
+      $entityName //= $token->value;
+
+      setEntityValid($lineInfo->{Linetype}, $entityName);
 
       # Check to see if the token must be recorded for other
       # token types.
@@ -1747,7 +1755,7 @@ sub processFile {
 
       # First, we check if there are obvious reasons not to write the new file
       # No extra CRLF characters were removed, same number of lines
-      if (!$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
+      if (!getOption('writeall') && !$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
 
          # We assume the arrays are the same ...
          $same = YES;

@@ -144,6 +144,7 @@ sub parseOptions {
    my $test           = 0;          # Internal; for tests only
    my $vendorPath     = q{};        # Path for the vendor directory
    my $warningLevel   = 'notice';   # Warning level for error output
+   my $writeAll       = 0;          # Do not force the writing of all writable files
    my $xCheck         = 1;          # Perform cross-check validation
 
    $errorMessage = "";
@@ -173,6 +174,7 @@ sub parseOptions {
          'test'               =>  \$test,
          'vendorpath|v=s'     =>  \$vendorPath,
          'warninglevel|wl=s'  =>  \$warningLevel,
+         'writeall|wa'        =>  \$writeAll,
       );
 
       %clOptions = (
@@ -198,6 +200,7 @@ sub parseOptions {
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
+         'writeall'        =>  $writeAll,
          'xcheck'          =>  $xCheck
       );
 
@@ -245,6 +248,7 @@ sub parseOptions {
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
+         'writeall'        =>  $writeAll,
          'xcheck'          =>  $xCheck);
    }
 
