@@ -1706,13 +1706,12 @@ sub _eqmod {
 
    my ($self) = @_;
 
-   # The higher level for the EQMOD is the . (who's the genius who
-   # dreamed that up...
-   my @key_list = split '\.', $self->value;
+   # Split the value on . and extract the part before the | this is the key
+   my @keyList = map {s/|.+$//r} split '\.', $self->value;
 
-   # The key name is everything found before the first |
-   for $_ (@key_list) {
-      my ($key) = (/^([^|]*)/);
+   for my $key (@keyList) {
+
+      # my ($key) = (/^([^|]*)/);
 
       if ($key) {
 
