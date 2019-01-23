@@ -306,7 +306,7 @@ sub entityName {
 
    # There is only a faux tag on this token, so just return the value as that
    # is the name.
-   defined $token && $token->value;
+   defined $token && ref $token eq 'TidyLst::Token' && $token->value;
 }
 
 

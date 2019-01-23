@@ -1752,6 +1752,7 @@ our %masterOrder = (
       'BONUS:LOADMULT',
       'BONUS:SKILL:*',
       'DISPLAYNAME',
+      'ISDEFAULTSIZE',
       'MODIFY:*',
       'SIZENUM',
    ],

@@ -448,6 +448,7 @@ my %validSubTags = (
 
    BONUS => {
       'ABILITYPOOL'           => 1,
+      'ACVALUE'               => 1,
       'CASTERLEVEL'           => 1,
       'COMBAT'                => 1,
       'CONCENTRATION'         => 1,
@@ -460,7 +461,9 @@ my %validSubTags = (
       'FOLLOWERS'             => 1,
       'HD'                    => 1,
       'HP'                    => 1,
+      'ITEMCAPACITY'          => 1,
       'ITEMCOST'              => 1,
+      'ITEMWEIGHT'            => 1,
       'LANG'                  => 1,
       'LOADMULT'              => 1,
       'MISC'                  => 1,
@@ -1839,7 +1842,7 @@ sub _genericPRE {
 }
 
 
-# This is part of EQUIPMED processing, queue up for cross checking
+# This is part of EQUIPMOD processing, queue up for cross checking
 
 sub _ignores {
 

@@ -484,6 +484,10 @@ sub validateLine {
    ########################################################
 
    if ( !(  $line->isType('SOURCE')
+         || $line->isType('DATACONTROL DEFAULTVARIABLEVALUE')
+         || $line->isType('DATACONTROL FUNCTION')
+         || $line->isType('DATACONTROL FACTDEF')
+         || $line->isType('DATACONTROL FACTSETDEF')
          || $line->isType('KIT LANGAUTO')
          || $line->isType('KIT NAME')
          || $line->isType('KIT FEAT')

@@ -2452,8 +2452,13 @@ sub sourceReplacement {
    my ($line) = @_;
 
    my $inputpath = getOption('inputpath');
+   my $file = $line->file;
 
-   if (dirHasSourceTags($line->file) ) {
+   if (! dirHasSourceTags($line->file)) {
+      $file = dirname $file;
+   }
+
+   if (dirHasSourceTags($file) ) {
 
       # Only the first SOURCE tag is replaced.
       $sourceCurrentFile = $line->file;
@@ -2462,7 +2467,7 @@ sub sourceReplacement {
       # the directory .PCC
       $line->clearTokens;
 
-      my %tokens = %{getDirSourceTags($line->file)};
+      my %tokens = %{getDirSourceTags($file)};
       for my $token (values %tokens) {
          $line->add($token);
       }

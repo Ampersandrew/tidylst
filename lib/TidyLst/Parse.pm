@@ -688,7 +688,7 @@ our %parseControl = (
 
    'SIZE' => [
       \%SourceLineDef,
-      {  Linetype       => 'DATACONTROL',
+      {  Linetype       => 'SIZE',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -748,8 +748,8 @@ sub addValidEntities {
       }
    }
 
-   # Add the key with a category prefix, should solve most of the missing
-   # abilities reports.
+   # For Abilities, add the key and the name, both with a category prefix,
+   # should solve most of the missing abilities reports.
    if ($line->type eq 'ABILITY') {
 
       my $category;
@@ -1544,9 +1544,10 @@ sub addNameToValidEntities {
 
    my $token = $line->firstTokenInColumn($column);
 
+   return unless defined $token;
+
    # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
    my $modRegex = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
-
    
    if ( my ($entityName, $modPart) = ($token->value =~ $modRegex) ) {
 
