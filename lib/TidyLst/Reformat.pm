@@ -56,8 +56,8 @@ sub reformatFile {
       my $newline  = "";
       my $lastLine = $newLines[-1];
 
-      # if the previous line was a header, remove it.
-      if (defined $lastLine && $lastLine->type eq 'HEADER') {
+      # Get rid of any preceeding header lines
+      while (defined $lastLine && $lastLine->type eq 'HEADER') {
          pop @newLines;
          $lastLine = $newLines[-1];
       }
