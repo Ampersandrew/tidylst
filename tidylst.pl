@@ -747,7 +747,7 @@ sub find_full_path {
    }
 
    # Replace @ by the base dir or add the current base dir to the file name.
-   if ($fileName !~ s{ ^[@] }{$basePath}xmsi) {
+   if ($fileName !~ s{ ^[@] [/]? }{$basePath}xmsi) {
       $fileName = $currentBaseDir =~ qr/\/$/ ? $currentBaseDir . $fileName : "$currentBaseDir/$fileName";
    }
 
