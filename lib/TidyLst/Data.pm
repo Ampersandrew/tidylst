@@ -5,6 +5,7 @@ use warnings;
 
 use Data::Dumper;
 use Scalar::Util;
+use YAML qw(Dump);
 
 use Carp;
 
@@ -109,12 +110,9 @@ sub setFileHeader {
 
 my %columnWithNoTag = (
    'ABILITY'           => '000AbilityName', 
-   'ABILITYCATEGORY'   => '000AbilityCategory',
    'ALIGNMENT'         => '000AlignmentName',
    'ARMORPROF'         => '000ArmorName',
    'CLASS Level'       => '000Level',
-   'CLASS'             => '000ClassName',
-   'COMPANIONMOD'      => '000Follower',
    'DEITY'             => '000DeityName',
    'DOMAIN'            => '000DomainName',
    'EQUIPMENT'         => '000EquipmentName',
@@ -122,7 +120,6 @@ my %columnWithNoTag = (
    'FEAT'              => '000FeatName',
    'GLOBALMODIFIER'    => '000GlobalmodName',
    'LANGUAGE'          => '000LanguageName',
-   'MASTERBONUSRACE'   => '000MasterBonusRace',
    'RACE'              => '000RaceName',
    'SAVE'              => '000SaveName',
    'SHIELDPROF'        => '000ShieldName',
@@ -130,8 +127,6 @@ my %columnWithNoTag = (
    'SKILL'             => '000SkillName',
    'SPELL'             => '000SpellName',
    'STAT'              => '000StatName',
-   'SUBCLASS'          => '000SubClassName',
-   'SUBSTITUTIONCLASS' => '000SubstitutionClassName',
    'TEMPLATE'          => '000TemplateName',
    'VARIABLE'          => '000VariableName',
    'WEAPONPROF'        => '000WeaponName',
@@ -614,7 +609,7 @@ our %masterOrder = (
    ],
 
    'ABILITYCATEGORY' => [
-      '000AbilityCategory',
+      'ABILITYCATEGORY',
       'VISIBLE',
       'EDITABLE',
       'EDITPOOL',
@@ -676,7 +671,7 @@ our %masterOrder = (
    ],
 
    'CLASS' => [
-      '000ClassName',
+      'CLASS',
       'SORTKEY',
       'KEY',
       'NAMEISPI',
@@ -865,56 +860,6 @@ our %masterOrder = (
       'SA:.CLEAR:*',                   # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
       'SPECIALS',                      # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
-   ],
-
-   'COMPANIONMOD' => [
-      '000Follower',
-      'SORTKEY',
-      'KEY',
-      'FOLLOWER',
-      'GROUP:*',
-      'TYPE:.CLEAR',
-      'TYPE:*',
-      'HD',
-      'DR',
-      'SR',
-      'ABILITY:.CLEAR',
-      'ABILITY:*',
-      'COPYMASTERBAB',
-      'COPYMASTERCHECK',
-      'COPYMASTERHP',
-      'USEMASTERSKILL',
-      'GENDER',
-      'PRERACE',
-      '!PRERACE',
-      'PREABILITY:*',
-      '!PREABILITY:*',
-      'MOVE',
-      'KIT',
-      'AUTO:ARMORPROF:*',
-      'SAB:.CLEAR',
-      'SAB:*',
-      'ADD:LANGUAGE',
-      'DEFINE:*',
-      'DEFINESTAT:*',
-      @globalBONUSTags,
-      'RACETYPE',
-      'SWITCHRACE:*',
-      'TEMPLATE:*',
-      'STACK',
-      'MULT',
-      'CHOOSE',
-      'SELECT',
-      'DESC:.CLEAR',
-      'DESC:*',
-
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
-      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
-      'FEAT:*',                        # Deprecated 6.05.01
-      'FEAT:.CLEAR',                   # Deprecated 6.05.01
-      'SA:.CLEAR',                     # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
       'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
@@ -1316,6 +1261,55 @@ our %masterOrder = (
       'SA:*',                          # Deprecated 6.05.01
    ],
 
+   'FOLLOWER' => [
+      'FOLLOWER',
+      'SORTKEY',
+      'KEY',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
+      'HD',
+      'DR',
+      'SR',
+      'ABILITY:.CLEAR',
+      'ABILITY:*',
+      'COPYMASTERBAB',
+      'COPYMASTERCHECK',
+      'COPYMASTERHP',
+      'USEMASTERSKILL',
+      'GENDER',
+      'PRERACE',
+      '!PRERACE',
+      'PREABILITY:*',
+      '!PREABILITY:*',
+      'MOVE',
+      'KIT',
+      'AUTO:ARMORPROF:*',
+      'SAB:.CLEAR',
+      'SAB:*',
+      'ADD:LANGUAGE',
+      'DEFINE:*',
+      'DEFINESTAT:*',
+      @globalBONUSTags,
+      'RACETYPE',
+      'SWITCHRACE:*',
+      'TEMPLATE:*',
+      'STACK',
+      'MULT',
+      'CHOOSE',
+      'SELECT',
+      'DESC:.CLEAR',
+      'DESC:*',
+
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
+      'FEAT:*',                        # Deprecated 6.05.01
+      'FEAT:.CLEAR',                   # Deprecated 6.05.01
+      'SA:.CLEAR',                     # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
+   ],
+
    'GLOBALMODIFIER' => [
       '000GlobalmonName',
       'EXPLANATION',
@@ -1498,7 +1492,7 @@ our %masterOrder = (
    ],
 
    'MASTERBONUSRACE' => [
-      '000MasterBonusRace',
+      'MASTERBONUSRACE',
       'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
@@ -1906,7 +1900,7 @@ our %masterOrder = (
    ],
 
    'SUBCLASS' => [
-      '000SubClassName',
+      'SUBCLASS',
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
@@ -1971,7 +1965,7 @@ our %masterOrder = (
    ],
 
    'SUBSTITUTIONCLASS' => [
-      '000SubstitutionClassName',
+      'SUBSTITUTIONCLASS',
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
@@ -2857,7 +2851,7 @@ my %tokenHeader = (
    },
 
    ABILITYCATEGORY => {
-      '000AbilityCategory'       => '# Ability Category',
+      'ABILITYCATEGORY'          => '# Ability Category',
       'CATEGORY'                 => 'Category of Object',
       'DISPLAYLOCATION'          => 'Display Location',
       'DISPLAYNAME'              => 'Display where?',
@@ -2888,7 +2882,7 @@ my %tokenHeader = (
    },
 
    CLASS => {
-      '000ClassName'             => '# Class Name',
+      'CLASS'                    => '# Class Name',
       'FACT:CLASSTYPE'           => 'Class Type',
       'CLASSTYPE'                => 'Class Type',
       'FACT:Abb'                 => 'Abbreviation',
@@ -2906,17 +2900,6 @@ my %tokenHeader = (
 
    'CLASS Level' => {
       '000Level'                 => '# Level',
-   },
-
-   COMPANIONMOD => {
-      '000Follower'              => '# Class of the Master',
-      '000MasterBonusRace'       => '# Race of familiar',
-      'COPYMASTERBAB'            => 'Copy Masters BAB',
-      'COPYMASTERCHECK'          => 'Copy Masters Checks',
-      'COPYMASTERHP'             => 'HP formula based on Master',
-      'FOLLOWER'                 => 'Added Value',
-      'SWITCHRACE'               => 'Change Racetype',
-      'USEMASTERSKILL'           => 'Use Masters skills?',
    },
    
    'DATACONTROL FACTDEF' => {
@@ -2994,6 +2977,15 @@ my %tokenHeader = (
       '000FeatName'                       => '# Feat Name',
    },
 
+   FOLLOWER => {
+      'FOLLOWER'                 => '# Class of the Master',
+      'COPYMASTERBAB'            => 'Copy Masters BAB',
+      'COPYMASTERCHECK'          => 'Copy Masters Checks',
+      'COPYMASTERHP'             => 'HP formula based on Master',
+      'SWITCHRACE'               => 'Change Racetype',
+      'USEMASTERSKILL'           => 'Use Masters skills?',
+   },
+
    GLOBALMODIFIER => {
       '000GlobalmodName'         => '# Name',
       'EXPLANATION'              => 'Explanation',
@@ -3051,7 +3043,7 @@ my %tokenHeader = (
    },
 
    MASTERBONUSRACE => {
-      '000MasterBonusRace'       => '# Race of familiar',
+      'MASTERBONUSRACE'          => '# Race of familiar',
    },
 
    RACE => {
@@ -3087,11 +3079,11 @@ my %tokenHeader = (
    },
 
    SUBCLASS => {
-      '000SubClassName'          => '# Subclass',
+      'SUBCLASS'                 => '# Subclass',
    },
 
    SUBSTITUTIONCLASS => {
-      '000SubstitutionClassName' => '# Substitution Class',
+      'SUBSTITUTIONCLASS'        => '# Substitution Class',
    },
 
    TEMPLATE => {
@@ -3316,12 +3308,12 @@ sub addTagsForConversions {
    if ( isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
       push @{ $masterOrder{'CLASS'} },          'ADD:SA';
       push @{ $masterOrder{'CLASS Level'} },    'ADD:SA';
-      push @{ $masterOrder{'COMPANIONMOD'} },   'ADD:SA';
       push @{ $masterOrder{'DEITY'} },          'ADD:SA';
       push @{ $masterOrder{'DOMAIN'} },         'ADD:SA';
       push @{ $masterOrder{'EQUIPMENT'} },      'ADD:SA';
       push @{ $masterOrder{'EQUIPMOD'} },       'ADD:SA';
       push @{ $masterOrder{'FEAT'} },           'ADD:SA';
+      push @{ $masterOrder{'FOLLOWER'} },       'ADD:SA';
       push @{ $masterOrder{'RACE'} },           'ADD:SA';
       push @{ $masterOrder{'SKILL'} },          'ADD:SA';
       push @{ $masterOrder{'SUBCLASSLEVEL'} },  'ADD:SA';
@@ -3343,12 +3335,12 @@ sub addTagsForConversions {
    if ( isConversionActive('ALL:BONUS:MOVE conversion') ) {
       push @{ $masterOrder{'CLASS'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'CLASS Level'} },    'BONUS:MOVE:*';
-      push @{ $masterOrder{'COMPANIONMOD'} },   'BONUS:MOVE:*';
       push @{ $masterOrder{'DEITY'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'DOMAIN'} },         'BONUS:MOVE:*';
       push @{ $masterOrder{'EQUIPMENT'} },      'BONUS:MOVE:*';
       push @{ $masterOrder{'EQUIPMOD'} },       'BONUS:MOVE:*';
       push @{ $masterOrder{'FEAT'} },           'BONUS:MOVE:*';
+      push @{ $masterOrder{'FOLLOWER'} },       'BONUS:MOVE:*';
       push @{ $masterOrder{'RACE'} },           'BONUS:MOVE:*';
       push @{ $masterOrder{'SKILL'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'SUBCLASSLEVEL'} },  'BONUS:MOVE:*';
@@ -3465,7 +3457,7 @@ sub dirHasSourceTags {
 
 sub dumpValidEntities {
 
-   print STDERR Dumper %validEntities;
+   print STDERR Dump %validEntities;
 
 }
 

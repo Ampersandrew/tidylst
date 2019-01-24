@@ -57,7 +57,11 @@ use TidyLst::Line;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 use TidyLst::Reformat qw(reformatFile);
-use TidyLst::Report qw(makeExportListString printToExportList);
+use TidyLst::Report qw(
+   makeExportListString
+   printToExportList 
+   registerReferrer
+   );
 use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
@@ -215,8 +219,6 @@ our %parseControl = (
          Format         => BLOCK,
          Header         => NO_HEADER,
          ValidateKeep   => YES,
-         RegExIsMod     => qr(AGESET:(.*)\.([^\t]+)),
-         RegExGetEntry  => qr(AGESET:(.*)),
       },
       {  Linetype       => 'BIOSET RACENAME',
          RegEx          => qr(^RACENAME:([^\t]*)),
@@ -239,8 +241,6 @@ our %parseControl = (
          Format         => LINE,
          Header         => LINE_HEADER,
          ValidateKeep   => YES,
-         RegExIsMod     => qr(CLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry  => qr(CLASS:(.*)),
       },
       \%SourceLineDef,
       {  Linetype          => 'SUBCLASS',
@@ -249,8 +249,6 @@ our %parseControl = (
          Format            => BLOCK,
          Header            => NO_HEADER,
          ValidateKeep      => YES,
-         RegExIsMod        => qr(SUBCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry     => qr(SUBCLASS:(.*)),
          # SUBCLASS can be refered to anywhere CLASS works.
          OtherValidEntries => ['CLASS'],
       },
@@ -260,8 +258,6 @@ our %parseControl = (
          Format            => BLOCK,
          Header            => NO_HEADER,
          ValidateKeep      => YES,
-         RegExIsMod        => qr(SUBSTITUTIONCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry     => qr(SUBSTITUTIONCLASS:(.*)),
          # SUBSTITUTIONCLASS can be refered to anywhere CLASS works.
          OtherValidEntries => ['CLASS'],
       },
@@ -287,22 +283,17 @@ our %parseControl = (
          Format         => LINE,
          Header         => NO_HEADER,
       },
-      { Linetype        => 'COMPANIONMOD',
+      { Linetype        => 'FOLLOWER',
          RegEx          => qr(^FOLLOWER:([^\t]*)),
          Mode           => MAIN,
          Format         => BLOCK,
          Header         => BLOCK_HEADER,
          ValidateKeep   => YES,
          RegExIsMod     => qr(FOLLOWER:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry  => qr(FOLLOWER:(.*)),
+         RegExGetEntry  => qr(FOLLOWER:(.*?)=),
 
          # Identifier that refer to other entry type
          IdentRefType   => 'CLASS,DEFINE Variable',
-         IdentRefTag    => 'FOLLOWER',  # Tag name for the reference check
-         # Get the list of reference identifiers
-         # The syntax is FOLLOWER:class1,class2=level
-         # We need to extract the class names.
-         GetRefList     => sub { split q{,}, ( $_[0] =~ / \A ( [^=]* ) /xms )[0]  },
       },
       { Linetype        => 'MASTERBONUSRACE',
          RegEx          => qr(^MASTERBONUSRACE:([^\t]*)),
@@ -312,12 +303,9 @@ our %parseControl = (
          ValidateKeep   => YES,
          RegExIsMod     => qr(MASTERBONUSRACE:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
          RegExGetEntry  => qr(MASTERBONUSRACE:(.*)),
-         IdentRefType   => 'RACE',                 # Identifier that refers to other entry type
-         IdentRefTag    => 'MASTERBONUSRACE',      # Tag name for the reference check
-         # Get the list of reference identifiers
-         # The syntax is MASTERBONUSRACE:race
-         # We need to extract the race name.
-         GetRefList     => sub { return @_ },
+         
+         # Identifier that refers to other entry type
+         IdentRefType   => 'RACE',                 
       },
    ],
 
@@ -706,6 +694,113 @@ my %tagsWithValidityData = (
    'RACETYPE'    => 1,
    'STARTPACK'   => 1,
 );
+
+
+=head2 addNameToValidEntities
+
+   The first tag on a line may need to be processed because it is a MOD, FORGET
+   or COPY. It may also need to be added to crosschecking data to allow other
+   lines to do MOD, FORGETs or COPYs.
+
+=cut
+
+sub addNameToValidEntities {
+
+   my ($line, $lineInfo) = @_;
+
+   # Only add the name valitdity info if the line info calls for it.
+   if (! $lineInfo->{ValidateKeep} ) {
+      return;
+   }
+
+   # Get the token that holds the name of this entity
+   my $column = getEntityFirstTag($lineInfo->{Linetype});
+
+   return unless defined $column;
+
+   my $token = $line->firstTokenInColumn($column);
+
+   return unless defined $token;
+
+   my ($entityName, $modPart);
+
+   if (defined $lineInfo->{RegExIsMod}) {
+      ($entityName, $modPart) = ($token->fullRealToken =~ $lineInfo->{RegExIsMod});
+   } else {
+      ($entityName, $modPart) = ($token->value =~ qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi);
+   }
+   
+   if (defined $modPart) {
+
+      # getLogger->report("In the valid entries, adding: " . $token->value); 
+
+      # We keep track of the .MOD type tags to
+      # later validate if they are valid
+      if (getOption('xcheck')) {
+         registerReferrer(
+            $lineInfo->{Linetype}, 
+            $entityName, 
+            $token->fullRealToken, 
+            $token->file, 
+            $token->line);
+      }
+
+      my ($newName) = ($modPart =~ / \A COPY= (.*) /xmsi);
+
+      # Special case for .COPY=<new name>
+      # <new name> is a valid entity
+      if (defined $newName) {
+         setEntityValid($lineInfo->{Linetype}, $newName);
+      }
+
+   } elsif ( getOption('xcheck') ) {
+
+      # We keep track of the entities that could be used with a .MOD type of
+      # tag for later validation.
+      #
+      # Some line types need special code to extract the entry.
+
+      if ( $lineInfo->{RegExGetEntry} ) {
+
+         if ( $token->fullRealToken =~ $lineInfo->{RegExGetEntry} ) {
+            my $tok = $1;
+            my @entries = split /,(?:\w+)?/, $tok;
+
+            # Some line types refer to other line entries directly
+            # in the line identifier.
+               TidyLst::Report::add_to_xcheck_tables(
+                  $lineInfo->{IdentRefType},
+                  $lineInfo->{Linetype},
+                  $token->file,
+                  $token->line,
+                  @entries,
+               );
+
+         } else {
+
+            getLogger()->warning(
+               qq(Cannot find the ) . $lineInfo->{Linetype} . q( name),
+               $token->file,
+               $token->line
+            );
+         }
+      }
+
+      # if we stripped of a modification (MOD, FORGET, COPY), use the
+      # unmodified value, otherwise, just use ->value
+      $entityName //= $token->value;
+
+      setEntityValid($lineInfo->{Linetype}, $entityName);
+
+      # Check to see if the token must be recorded for other
+      # token types.
+      if ( exists $lineInfo->{OtherValidEntries} ) {
+         for my $tokenType ( @{ $lineInfo->{OtherValidEntries} } ) {
+            setEntityValid($tokenType, $token->value);
+         }
+      }
+   }
+}
 
 =head2 addValidEntities
 
@@ -1518,108 +1613,6 @@ sub parseSystemFiles {
    }
 
    return;
-}
-
-=head2 addNameToValidEntities
-
-   The first tag on a line may need to be processed because it is a MOD, FORGET
-   or COPY. It may also need to be added to crosschecking data to allow other
-   lines to do MOD, FORGETs or COPYs.
-
-=cut
-
-sub addNameToValidEntities {
-
-   my ($line, $lineInfo) = @_;
-
-   # Only add the name valitdity info if the line info calls for it.
-   if (! $lineInfo->{ValidateKeep} ) {
-      return;
-   }
-
-   # Get the token that holds the name of this entity
-   my $column = getEntityFirstTag($lineInfo->{Linetype});
-
-   return unless defined $column;
-
-   my $token = $line->firstTokenInColumn($column);
-
-   return unless defined $token;
-
-   # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-   my $modRegex = $lineInfo->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
-   
-   my ($entityName, $modPart) = ($token->fullRealToken =~ $modRegex);
-   
-   if (defined $modPart) {
-
-      # We keep track of the .MOD type tags to
-      # later validate if they are valid
-      if (getOption('xcheck')) {
-         TidyLst::Report::registerReferrer(
-            $lineInfo->{Linetype}, 
-            $entityName, 
-            $token->value, 
-            $token->file, 
-            $token->line);
-      }
-
-      my ($newName) = ($modPart =~ / \A COPY= (.*) /xmsi);
-
-      # Special case for .COPY=<new name>
-      # <new name> is a valid entity
-      if (defined $newName) {
-         setEntityValid($lineInfo->{Linetype}, $newName);
-      }
-
-   } elsif ( getOption('xcheck') ) {
-
-      # We keep track of the entities that could be used with a .MOD type of
-      # tag for later validation.
-      #
-      # Some line types need special code to extract the entry.
-
-      if ( $lineInfo->{RegExGetEntry} ) {
-
-         if ( $token->value =~ $lineInfo->{RegExGetEntry} ) {
-            my $tok = $1;
-
-            # Some line types refer to other line entries directly
-            # in the line identifier.
-            if ( exists $lineInfo->{GetRefList} ) {
-               TidyLst::Report::add_to_xcheck_tables(
-                  $lineInfo->{IdentRefType},
-                  $lineInfo->{IdentRefTag},
-                  $token->file,
-                  $token->line,
-                  &{ $lineInfo->{GetRefList} }($tok)
-               );
-            }
-
-         } else {
-
-            getLogger()->warning(
-               qq(Cannot find the ) . $lineInfo->{Linetype} . q( name),
-               $token->file,
-               $token->line
-            );
-         }
-      }
-
-      # if we stripped of a modification (MOD, FORGET, COPY), use the
-      # unmodified value, otherwise, just use ->value
-      $entityName //= $token->value;
-
-      setEntityValid($lineInfo->{Linetype}, $entityName);
-
-      # Check to see if the token must be recorded for other
-      # token types.
-      if ( exists $lineInfo->{OtherValidEntries} ) {
-         for my $tokenType ( @{ $lineInfo->{OtherValidEntries} } ) {
-            setEntityValid($tokenType, $token->value);
-         }
-      }
-   }
 }
 
 

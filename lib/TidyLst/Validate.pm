@@ -492,7 +492,7 @@ sub validateLine {
          || $line->isType('KIT NAME')
          || $line->isType('KIT FEAT')
          || $line->file =~ m{ [.] PCC \z }xmsi
-         || $line->isType('COMPANIONMOD')) # FOLLOWER:Class1,Class2=level
+         || $line->isType('FOLLOWER')) # FOLLOWER:Class1,Class2=level
    ) {
 
       my $key;

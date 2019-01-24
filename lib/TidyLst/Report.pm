@@ -385,7 +385,7 @@ sub add_to_xcheck_tables {
    # We remove the empty elements in the list
    @list = grep { defined $_ && $_ ne "" } @list;
 
-   # If the list of entry is empty, we retrun immediately
+   # If the list of entries is empty, we return immediately
    return if scalar @list == 0;
 
    # We set $tagName properly for the substitution

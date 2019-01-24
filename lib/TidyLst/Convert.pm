@@ -28,6 +28,7 @@ use TidyLst::Data qw(
    );
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
+use TidyLst::Report qw(printToExportList);
 
 our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLOCK_COMMENT|BLANK)$);
 
@@ -2433,7 +2434,7 @@ sub reportWillpower {
       # Write the token and related information to the willpower.csv file
       my $output = q{"} . $token->fullToken . q{","} . $token->line . q{","} . $token->file . qq{"\n};
 
-      TidyLst::Report::printToExportList($output);
+      printToExportList('Willpower', $output);
    }
 }
 

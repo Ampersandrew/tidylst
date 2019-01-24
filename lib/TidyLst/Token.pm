@@ -1311,7 +1311,7 @@ sub _classesOnSpell {
 
    # First we find all the classes used
    for my $level ( split '\|', $self->value ) {
-      if ( $level =~ /(.*)=(\d+)/ ) {
+      if ( $level =~ /(.*?)=(\d+)/ ) {
          for my $entity ( split ',', $1 ) {
 
             # [ 849365 ] CLASSES:ALL
@@ -1707,7 +1707,7 @@ sub _eqmod {
    my ($self) = @_;
 
    # Split the value on . and extract the part before the | this is the key
-   my @keyList = map {s/|.+$//r} split '\.', $self->value;
+   my @keyList = map {my @vals = split '\|', $_; shift @vals} split '\.', $self->value;
 
    for my $key (@keyList) {
 
@@ -2040,8 +2040,8 @@ sub _limitedAlign {
       # Is it a number?
       my ($number) = $align =~ / \A (\d+) \z /xms;
 
-      if ( defined $number && $number >= 0 && $number < scalar @{getValidSystemArr('alignments')}) {
-         $align = ${getValidSystemArr('alignments')}[$number];
+      if ( defined $number && $number >= 0 && $number < scalar getValidSystemArr('alignments')) {
+         $align = (getValidSystemArr('alignments'))[$number];
          $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
       }
 
