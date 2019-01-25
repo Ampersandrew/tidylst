@@ -299,6 +299,8 @@ my @PreTags = (
    '!PREFEAT',
    'PREFACT:*',
    '!PREFACT',
+   'PREFACTSET:*',
+   '!PREFACTSET',
    'PREGENDER',
    '!PREGENDER',
    'PREHANDSEQ',
@@ -918,6 +920,7 @@ our %masterOrder = (
       'ABILITY:*',
       'UNENCUMBEREDMOVE',
       'GROUP',
+      'TYPE:*',
       'FACT:Article',
       'FACT:Symbol',
       'FACTSET:Pantheon',
@@ -1001,6 +1004,7 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
+      'CHANGEPROF',
       'PROFICIENCY:WEAPON',
       'PROFICIENCY:ARMOR',
       'PROFICIENCY:SHIELD',
@@ -1058,6 +1062,7 @@ our %masterOrder = (
       'ADD:SPELLCASTER:*',
       'ADD:TEMPLATE:*',
       'ABILITY:*',
+      'KIT:*',
       'VISION',
       'SR',
       'DR',
@@ -1300,6 +1305,8 @@ our %masterOrder = (
       'SELECT',
       'DESC:.CLEAR',
       'DESC:*',
+      'AUTO:LANG:*',
+      'AUTO:WEAPONPROF:*',
 
       'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
@@ -1696,6 +1703,7 @@ our %masterOrder = (
       'SPELLLEVEL:CLASS:*',
       'SPELLLEVEL:DOMAIN:*',
       'KIT',
+      'DESC:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -1714,6 +1722,7 @@ our %masterOrder = (
       'SORTKEY',
       'KEY',
       @globalBONUSTags,
+      'DESC:*',
    ],
 
    'SHIELDPROF' => [
@@ -1749,6 +1758,7 @@ our %masterOrder = (
       'ISDEFAULTSIZE',
       'MODIFY:*',
       'SIZENUM',
+      'DESC:*',
    ],
 
    'SKILL' => [
@@ -1897,6 +1907,7 @@ our %masterOrder = (
       'ABILITY',
       'BONUS:LANG:*',
       'BONUS:MODSKILLPOINTS:*',
+      'DESC:*',
    ],
 
    'SUBCLASS' => [
@@ -2306,6 +2317,7 @@ our %masterOrder = (
       @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+      'DESC:*',
 
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
@@ -2373,7 +2385,7 @@ my %tagFixValue = (
    APPLY                => { map { $_ => 1 } qw( INSTANT PERMANENT ) },
    FORMATCAT            => { map { $_ => 1 } qw( FRONT MIDDLE PARENS ) },
    MODS                 => { map { $_ => 1 } qw( YES NO REQUIRED ) },
-   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
+   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charge Charges ) },
    VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
 
    # See updateValidity for the values of these keys
@@ -2655,6 +2667,10 @@ my %tokenHeader = (
       'PREEQUIP'                          => 'Req. Equipement',
       'PREEQMOD'                          => 'Req. Equipment Mod.',
       '!PREEQMOD'                         => 'Prohibited Equipment Mod.',
+      'PREFACT'                           => 'Required Fact',
+      '!PREFACT'                          => 'Prohibited Fact',
+      'PREFACTSET'                        => 'Required Factset',
+      '!PREFACTSET'                       => 'Prohibited Factset',
       'PREFEAT'                           => 'Required Feat',
       '!PREFEAT'                          => 'Prohibited Feat',
       'PREGENDER'                         => 'Required Gender',

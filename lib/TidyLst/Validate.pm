@@ -565,63 +565,46 @@ sub validateLine {
          my $token  = $line->firstTokenInColumn('CHOOSE');
          my $choose = $token->fullToken;
 
-         if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(NUMBER[^|]*)/)) {
-            # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|TITLE=Whatever
-            # Valid: CHOOSE:NUMBER|1|2|3|4|5|6|7|8|TITLE=Whatever
-            # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|INCREMENT=5|TITLE=Whatever
-            # Valid: CHOOSE:NUMBER|MAX=99129342|INCREMENT=5|MIN=1|TITLE=Whatever
-            # Only testing for TITLE= for now.
-            # Test for TITLE= and warn if not present.
+         # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|TITLE=Whatever
+         # Valid: CHOOSE:NUMBER|1|2|3|4|5|6|7|8|TITLE=Whatever
+         # Valid: CHOOSE:NUMBER|MIN=1|MAX=99129342|INCREMENT=5|TITLE=Whatever
+         # Valid: CHOOSE:NUMBER|MAX=99129342|INCREMENT=5|MIN=1|TITLE=Whatever
          
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/)) {
-         
-            if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
-               $log->info(
-                  qq(TITLE= is missing in CHOOSE:NUMBER for "$choose"),
-                  $line->file,
-                  $line->num
-               );
-            }
-
-         
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:NOCHOICE/)) {
-
          # CHOOSE:STRING|Foo|Bar|Monkey|Poo|TITLE=these are choices
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(STRING)[^|]*/)) {
+
+         # Only testing for TITLE= for now.
+         # Test for TITLE= and warn if not present.
+
+         my $valid = qr{(
+            ABILITY          |
+            EQBUILDER.EQTYPE |
+            EQBUILDER.SPELL  |
+            NOCHOICE         |
+            SKILLBONUS       |
+            STATBONUS        |
+            WEAPONPROFICIENCY
+            )}x;
+
+         if ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:(NUMBER|SKILL|STRING)/)) {
+
+            my $chooser = $1;
 
             # Test for TITLE= and warn if not present.
             if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
          
                $log->info(
-                  qq(TITLE= is missing in CHOOSE:STRING for "$choose"),
+                  qq(TITLE= is missing in CHOOSE:${1} for "$choose"),
                   $line->file,
                   $line->num
                );
             }
 
-         # CHOOSE:STATBONUS|statname|MIN=2|MAX=5|TITLE=Enhancement Bonus
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(STATBONUS)[^|]*/)) {
-         
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(SKILLBONUS)[^|]*/)) {
-         
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(SKILL)[^|]*/)) {
-
-            if (! $line->firstColumnMatches('CHOOSE', qr/(TITLE[=])/)) {
-               $log->info(
-                  qq(TITLE= is missing in CHOOSE:SKILL for "$choose"),
-                  $line->file,
-                  $line->num
-               );
-            }
-
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(EQBUILDER.SPELL)[^|]*/)) {
-
-         } elsif ($line->firstColumnMatches('CHOOSE', qr/^CHOOSE:?(EQBUILDER.EQTYPE)[^|]*/)) {
+         } elsif ($line->firstColumnMatches('CHOOSE', $valid)) {
 
          # If not above, invaild CHOOSE for equipmod files.
          } else {
             $log->warning(
-               qq(Invalid CHOOSE for Equipmod spells for "$choose"),
+               qq(Invalid CHOOSE for Equipmod "$choose"),
                $line->file,
                $line->num
             );

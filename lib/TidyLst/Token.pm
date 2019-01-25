@@ -212,7 +212,7 @@ my %tagProcessor = (
 
 sub process {
 
-   my ($token) = @_;
+   my ($self) = @_;
 
    my $log = getLogger();
 
@@ -221,71 +221,70 @@ sub process {
    # exception to this rule is LICENSE that can be used without a value to
    # display an empty line.
 
-   if ( (!defined $token->value || $token->value eq q{}) && $token->fullToken ne 'LICENSE:') {
+   if ( (!defined $self->value || $self->value eq q{}) && $self->fullToken ne 'LICENSE:') {
       $log->warning(
-         qq(The tag "} . $token->fullToken . q{" is missing a value (or you forgot a : somewhere)),
-         $token->file,
-         $token->line
+         qq(The tag ") . $self->fullToken . q(" is missing a value (or you forgot a : somewhere)),
+         $self->file,
+         $self->line
       );
 
       # We set the value to prevent further errors
-      $token->value(q{});
+      $self->value(q{});
    }
 
-   if ($token->tag eq 'ADD') {
-      TidyLst::Convert::convertAddTokens($token);
+   if ($self->tag eq 'ADD') {
+      TidyLst::Convert::convertAddTokens($self);
    }
 
    # Special cases like BONUS:..., FACT:..., etc.
    #
    # These are converted from e.g. FACT  BaseSize|M  to  FACT:BaseSize  |M
    
-   if (exists $tagProcessor{$token->tag}) {
+   if (exists $tagProcessor{$self->tag}) {
 
-      my $processor = $tagProcessor{$token->tag};
+      my $processor = $tagProcessor{$self->tag};
 
       if ( ref ($processor) eq "CODE" ) {
-         &{ $processor }($token);
+         &{ $processor }($self);
       }
    }
 
-   if ( defined $token->value && $token->value =~ /^.CLEAR/i ) {
-      $token->_clear();
+   if ( defined $self->value && $self->value =~ /^.CLEAR/i ) {
+      $self->_clear();
    }
 
    # The tag is invalid and it's not a commnet.
-   if ( ! isValidTag($token->lineType, $token->tag) && index( $token->fullToken, '#' ) != 0 ) {
+   if ( ! isValidTag($self->lineType, $self->tag) && index( $self->fullToken, '#' ) != 0 ) {
 
-      $token->_invalid();
+      $self->_invalid();
 
-   } elsif (isValidTag($token->lineType, $token->tag)) {
+   } elsif (isValidTag($self->lineType, $self->tag)) {
 
       # Statistic gathering
-      incCountValidTags($token->lineType, $token->realTag);
+      incCountValidTags($self->lineType, $self->realTag);
    }
 
    # Check and reformat the values for the tags with only a limited number of
    # values.
-   if (tagTakesFixedValues($token->tag)) {
-      $token->_limited();
+   if (tagTakesFixedValues($self->tag)) {
+      $self->_limited();
    }
 
    ############################################################
    ######################## Conversion ########################
    # We manipulate the tag here
-   doTokenConversions($token);
+   doTokenConversions($self);
 
    ############################################################
    # We call the validating function if needed
    if (getOption('xcheck')) {
-      $token->_validate()
+      $self->_validate()
    };
 
-   if ($token->value eq q{}) {
-      $log->debug(qq{process: } . $token->fullToken, $token->file, $token->line)
+   if ($self->value eq q{}) {
+      $log->debug(qq{process: } . $self->fullToken, $self->file, $self->line)
    };
 }
-
 
 
 #################################################################################################
@@ -1087,7 +1086,7 @@ sub _bonusVar {
 
    # First we store the DEFINE variable name
    for my $varName ( split ',', $varNameList ) {
-      if ( $varName =~ /^[a-z][a-z0-9_\s]*$/i ) {
+      if ( $varName =~ /^[a-z][ a-z0-9_\s]*$/i || $varName eq '%LIST' ) {
 
          # LIST is filtered out as it may not be valid for the
          # other places were a variable name is used.
@@ -1402,7 +1401,7 @@ sub _define {
 
    # First we store the DEFINE variable name
    if ($var_name) {
-      if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
+      if ( $var_name =~ /^[a-z][ a-z0-9_]*$/i || $var_name eq '%LIST' ) {
 
          $self->entityLabel('DEFINE Variable');
          $self->entityValue($var_name);
@@ -1417,7 +1416,7 @@ sub _define {
             TidyLst::Report::printToExportList('VARIABLE', qq{"$var_name","$self->line","$file"\n});
          }
 
-         # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
+      # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
       } elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
          $log->notice(
             qq{Invalid variable name "$var_name" in "} . $self->fullToken . q{"},
@@ -2328,7 +2327,7 @@ sub _nonKitSpells {
          }
 
          # Embeded PRExxx tags
-      } elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
+      } elsif ( $param =~ /^!?(PRE[A-Z]+):(.*)/ ) {
 
          my $preToken = $self->clone(tag => $1, value => $2);
          $preToken->_preToken($self->fullRealToken);
@@ -2525,6 +2524,48 @@ sub _precheck {
    }
 }
 
+
+
+# Ensures that a PRECLASS token's value starts with a number.
+# and that it references valid classes.
+
+sub _preclass {
+
+   my ($self, $enclosingToken) = @_;
+
+   # PRECLASS<number>,<check equal value list>
+   # <check equal value list> := <class name> "=" <number>
+   my ($valid, @values) = $self->_checkFirstValue;
+
+   # The PREtag doesn't begin with a number
+   if ( not $valid ) {
+      $self->_warnDeprecate($enclosingToken);
+   }
+
+   # Get the logger once outside the loop
+   my $log = getLogger();
+
+   for my $item ( @values ) {
+
+      # Extract the check name
+      if ( my ($className, $value) = ( $item =~ / \A ( \w+ ) = ( \d+ ) \z /xms ) ) {
+
+         registerXCheck(
+            'CLASS', 
+            $self->tag, 
+            $self->file, 
+            $self->line, 
+            $className );
+
+      } else {
+         $log->notice(
+            $self->tag . qq{ syntax error in "$item" found in "} . $self->fullRealValue . q{"},
+            $self->file,
+            $self->line
+         );
+      }
+   }
+}
 
 
 
@@ -2821,6 +2862,10 @@ sub _preToken {
    } elsif ( $self->tag eq 'PRECHECK' || $self->tag eq 'PRECHECKBASE') {
 
       $self->_precheck($enclosingToken);
+
+   } elsif ( $self->tag eq 'PRECLASS') {
+
+      $self->_preclass($enclosingToken);
 
    } elsif ( $self->tag eq 'PRECSKILL' ) {
 
@@ -3159,14 +3204,20 @@ sub _spellLevelClass {
    # Work with a copy because we do not want to change the original
    my $tag_line = $self->value;
 
-   $tag_line =~ s/\|PRE\w+\:.+$//;
+   my @subTags = grep {$_ !~ m/^!?PRE/} split '\|', $tag_line; 
+
+   # Throw away the CLASS
+   shift @subTags;
 
    # We extract the classes and the spell names
-   if ( my $working_value = $tag_line ) {
-      while ($working_value) {
-         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-            my $class  = $1;
-            my $spells = $2;
+   if ( scalar @subTags ) {
+
+      while (scalar @subTags) {
+
+         my $class  = shift @subTags;
+         my $spells = shift @subTags;
+
+         if ( defined $spells ) {
 
             # The CLASS
             if ( $class =~ /([^=]+)\=(\d+)/ ) {
@@ -3207,7 +3258,6 @@ sub _spellLevelClass {
                $self->file,
                $self->line
             );
-            $working_value = "";
          }
       }
 
@@ -3240,11 +3290,22 @@ sub _spellLevelDomain {
    # ex. SPELLLEVEL:DOMAIN|Air=1|Obscuring Mist|Animal=4|Repel Vermin
 
    # We extract the classes and the spell names
-   if ( my $working_value = $self->value ) {
-      while ($working_value) {
-         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-            my $domain = $1;
-            my $spells = $2;
+   my $tag_line = $self->value;
+
+   my @subTags = grep {$_ !~ m/^!?PRE/} split '\|', $tag_line; 
+
+   # Throw away the CLASS
+   shift @subTags;
+
+   # We extract the classes and the spell names
+   if ( scalar @subTags ) {
+
+      while (scalar @subTags) {
+
+         my $domain = shift @subTags;
+         my $spells = shift @subTags;
+
+         if (defined $spells) {
 
             # The DOMAIN
             if ( $domain =~ /([^=]+)\=(\d+)/ ) {
@@ -3279,7 +3340,6 @@ sub _spellLevelDomain {
                $self->file,
                $self->line
             );
-            $working_value = "";
          }
       }
 
