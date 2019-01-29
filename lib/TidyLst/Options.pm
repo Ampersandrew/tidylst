@@ -62,6 +62,7 @@ my $errorMessage;
    'ALL:New SOURCExxx tag format'       => 1,    # [ 1444527 ] New SOURCE tag format
    'CLASS:Four lines'                   => 1,    # [ 626133 ] Convert CLASS lines into 3 lines
    'EQUIP: ALTCRITICAL to ALTCRITMULT'  => 1,    # [ 1615457 ] Replace ALTCRITICAL with ALTCRITMULT'
+   'SOURCE line replacement'            => 1,
 
    'ALL: , to | in VISION'              => 0,    # [ 699834 ] Incorrect loading of multiple vision types 
                                                  # [ 728038 ] BONUS:VISION must replace VISION:
@@ -102,7 +103,6 @@ my $errorMessage;
    'RACE:NoProfReq'                     => 0,    # [ 832164 ] Adding NoProfReq to AUTO:WEAPONPROF for most races
    'RACE:Remove MFEAT and HITDICE'      => 0,    # [ 1514765 ] Conversion to remove old defaultmonster tags
    'RACE:TYPE to RACETYPE'              => 0,    # [ 1353255 ] TYPE to RACETYPE conversion
-   'SOURCE line replacement'            => 0,
    'SPELL:Add TYPE tags'                => 0,    # [ 653596 ] Add a TYPE tag for all SPELLs
    'TEMPLATE:HITDICESIZE to HITDIE'     => 0,    # [ 1070344 ] HITDICESIZE to HITDIE in templates.lst
    'WEAPONPROF:No more SIZE'            => 0,    # [ 845853 ] SIZE is no longer valid in the weaponprof files
@@ -140,10 +140,11 @@ sub parseOptions {
    my $outputPath     = q{};        # Path for the ouput directory
    my $report         = 0;          # Generate tag usage report
    my $systemPath     = q{};        # Path to the system (game mode) files
-   my $tabLength      = 6;          # The default length of tabs for reformatting
+   my $tabLength      = 8;          # The default length of tabs for reformatting
    my $test           = 0;          # Internal; for tests only
    my $vendorPath     = q{};        # Path for the vendor directory
    my $warningLevel   = 'notice';   # Warning level for error output
+   my $writeAll       = 0;          # Do not force the writing of all writable files
    my $xCheck         = 1;          # Perform cross-check validation
 
    $errorMessage = "";
@@ -173,7 +174,8 @@ sub parseOptions {
          'test'               =>  \$test,
          'vendorpath|v=s'     =>  \$vendorPath,
          'warninglevel|wl=s'  =>  \$warningLevel,
-         'xcheck|x'           =>  \$xCheck);
+         'writeall|wa'        =>  \$writeAll,
+      );
 
       %clOptions = (
          'basepath'        =>  $basePath,  
@@ -198,7 +200,9 @@ sub parseOptions {
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
-         'xcheck'          =>  $xCheck);
+         'writeall'        =>  $writeAll,
+         'xcheck'          =>  $xCheck
+      );
 
       # Has a conversion been requested
       _enableRequestedConversion ($clOptions{convert}) if $clOptions{convert};
@@ -244,6 +248,7 @@ sub parseOptions {
          'test'            =>  $test,
          'vendorpath'      =>  $vendorPath,
          'warninglevel'    =>  $warningLevel,
+         'writeall'        =>  $writeAll,
          'xcheck'          =>  $xCheck);
    }
 
@@ -443,12 +448,6 @@ sub _processOptions {
    # level 6 is info, level 5 is notice
    if (getOption('nowarning') && getOption('warninglevel') >= TidyLst::Log::INFO) {
       setOption('warninglevel', TidyLst::Log::NOTICE);
-   }
-
-   # oldsourcetag option
-   if (getOption('oldsourcetag')) {
-      # We disable the conversion if the -oldsourcetag option is used
-      disableConversion ('ALL:New SOURCExxx tag format');
    }
 
    # noxcheck option

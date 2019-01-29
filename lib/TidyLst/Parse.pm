@@ -2,24 +2,28 @@ package TidyLst::Parse;
 
 use strict;
 use warnings;
-use English;
+
+use Fatal qw( open close );             # Force some built-ins to die on error
+use English qw( -no_match_vars );       # No more funky punctuation variables
 
 require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
+   create_dir
    extractTag
    isParseableFileType
    isWriteableFileType
    normaliseFile
    parseSystemFiles
+   processFile
    );
 
 use Carp;
 use YAML;
 
 # expand library path so we can find TidyLst modules
-use File::Basename qw(dirname);
+use File::Basename qw(dirname fileparse);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
@@ -38,7 +42,7 @@ use TidyLst::Data qw(
    getDirSourceTags
    getEntityFirstTag
    getEntityName
-   getEntityNameTag
+   getTaglessColumn
    getHeader
    getValidSystemArr
    incCountValidTags
@@ -53,6 +57,11 @@ use TidyLst::Line;
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
 use TidyLst::Reformat qw(reformatFile);
+use TidyLst::Report qw(
+   makeExportListString
+   printToExportList 
+   registerReferrer
+   );
 use TidyLst::Token;
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 use TidyLst::Variable;
@@ -210,8 +219,6 @@ our %parseControl = (
          Format         => BLOCK,
          Header         => NO_HEADER,
          ValidateKeep   => YES,
-         RegExIsMod     => qr(AGESET:(.*)\.([^\t]+)),
-         RegExGetEntry  => qr(AGESET:(.*)),
       },
       {  Linetype       => 'BIOSET RACENAME',
          RegEx          => qr(^RACENAME:([^\t]*)),
@@ -234,8 +241,6 @@ our %parseControl = (
          Format         => LINE,
          Header         => LINE_HEADER,
          ValidateKeep   => YES,
-         RegExIsMod     => qr(CLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry  => qr(CLASS:(.*)),
       },
       \%SourceLineDef,
       {  Linetype          => 'SUBCLASS',
@@ -244,8 +249,6 @@ our %parseControl = (
          Format            => BLOCK,
          Header            => NO_HEADER,
          ValidateKeep      => YES,
-         RegExIsMod        => qr(SUBCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry     => qr(SUBCLASS:(.*)),
          # SUBCLASS can be refered to anywhere CLASS works.
          OtherValidEntries => ['CLASS'],
       },
@@ -255,8 +258,6 @@ our %parseControl = (
          Format            => BLOCK,
          Header            => NO_HEADER,
          ValidateKeep      => YES,
-         RegExIsMod        => qr(SUBSTITUTIONCLASS:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry     => qr(SUBSTITUTIONCLASS:(.*)),
          # SUBSTITUTIONCLASS can be refered to anywhere CLASS works.
          OtherValidEntries => ['CLASS'],
       },
@@ -282,22 +283,17 @@ our %parseControl = (
          Format         => LINE,
          Header         => NO_HEADER,
       },
-      { Linetype        => 'COMPANIONMOD',
+      { Linetype        => 'FOLLOWER',
          RegEx          => qr(^FOLLOWER:([^\t]*)),
          Mode           => MAIN,
          Format         => BLOCK,
          Header         => BLOCK_HEADER,
          ValidateKeep   => YES,
          RegExIsMod     => qr(FOLLOWER:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
-         RegExGetEntry  => qr(FOLLOWER:(.*)),
+         RegExGetEntry  => qr(FOLLOWER:(.*?)=),
 
          # Identifier that refer to other entry type
          IdentRefType   => 'CLASS,DEFINE Variable',
-         IdentRefTag    => 'FOLLOWER',  # Tag name for the reference check
-         # Get the list of reference identifiers
-         # The syntax is FOLLOWER:class1,class2=level
-         # We need to extract the class names.
-         GetRefList     => sub { split q{,}, ( $_[0] =~ / \A ( [^=]* ) /xms )[0]  },
       },
       { Linetype        => 'MASTERBONUSRACE',
          RegEx          => qr(^MASTERBONUSRACE:([^\t]*)),
@@ -307,12 +303,9 @@ our %parseControl = (
          ValidateKeep   => YES,
          RegExIsMod     => qr(MASTERBONUSRACE:(.*)\.(MOD|FORGET|COPY=[^\t]+)),
          RegExGetEntry  => qr(MASTERBONUSRACE:(.*)),
-         IdentRefType   => 'RACE',                 # Identifier that refers to other entry type
-         IdentRefTag    => 'MASTERBONUSRACE',      # Tag name for the reference check
-         # Get the list of reference identifiers
-         # The syntax is MASTERBONUSRACE:race
-         # We need to extract the race name.
-         GetRefList     => sub { return @_ },
+         
+         # Identifier that refers to other entry type
+         IdentRefType   => 'RACE',                 
       },
    ],
 
@@ -683,7 +676,7 @@ our %parseControl = (
 
    'SIZE' => [
       \%SourceLineDef,
-      {  Linetype       => 'DATACONTROL',
+      {  Linetype       => 'SIZE',
          RegEx          => qr(^([^\t:]+)),
          Mode           => MAIN,
          Format         => BLOCK,
@@ -693,6 +686,201 @@ our %parseControl = (
    ],
 
 );
+
+my %tagsWithValidityData = (
+   'DEFINE'      => 1,
+   'MOVE'        => 1,
+   'RACESUBTYPE' => 1,
+   'RACETYPE'    => 1,
+   'STARTPACK'   => 1,
+);
+
+
+=head2 addNameToValidEntities
+
+   The first tag on a line may need to be processed because it is a MOD, FORGET
+   or COPY. It may also need to be added to crosschecking data to allow other
+   lines to do MOD, FORGETs or COPYs.
+
+=cut
+
+sub addNameToValidEntities {
+
+   my ($line, $lineInfo) = @_;
+
+   # Only add the name valitdity info if the line info calls for it.
+   if (! $lineInfo->{ValidateKeep} ) {
+      return;
+   }
+
+   # Get the token that holds the name of this entity
+   my $column = getEntityFirstTag($lineInfo->{Linetype});
+
+   return unless defined $column;
+
+   my $token = $line->firstTokenInColumn($column);
+
+   return unless defined $token;
+
+   my ($entityName, $modPart);
+
+   if (defined $lineInfo->{RegExIsMod}) {
+      ($entityName, $modPart) = ($token->fullRealToken =~ $lineInfo->{RegExIsMod});
+   } else {
+      ($entityName, $modPart) = ($token->value =~ qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi);
+   }
+   
+   if (defined $modPart) {
+
+      # getLogger->report("In the valid entries, adding: " . $token->value); 
+
+      # We keep track of the .MOD type tags to
+      # later validate if they are valid
+      if (getOption('xcheck')) {
+         registerReferrer(
+            $lineInfo->{Linetype}, 
+            $entityName, 
+            $token->fullRealToken, 
+            $token->file, 
+            $token->line);
+      }
+
+      my ($newName) = ($modPart =~ / \A COPY= (.*) /xmsi);
+
+      # Special case for .COPY=<new name>
+      # <new name> is a valid entity
+      if (defined $newName) {
+         setEntityValid($lineInfo->{Linetype}, $newName);
+      }
+
+   } elsif ( getOption('xcheck') ) {
+
+      # We keep track of the entities that could be used with a .MOD type of
+      # tag for later validation.
+      #
+      # Some line types need special code to extract the entry.
+
+      if ( $lineInfo->{RegExGetEntry} ) {
+
+         if ( $token->fullRealToken =~ $lineInfo->{RegExGetEntry} ) {
+            my $tok = $1;
+            my @entries = split /,(?:\w+)?/, $tok;
+
+            # Some line types refer to other line entries directly
+            # in the line identifier.
+               TidyLst::Report::add_to_xcheck_tables(
+                  $lineInfo->{IdentRefType},
+                  $lineInfo->{Linetype},
+                  $token->file,
+                  $token->line,
+                  @entries,
+               );
+
+         } else {
+
+            getLogger()->warning(
+               qq(Cannot find the ) . $lineInfo->{Linetype} . q( name),
+               $token->file,
+               $token->line
+            );
+         }
+      }
+
+      # if we stripped of a modification (MOD, FORGET, COPY), use the
+      # unmodified value, otherwise, just use ->value
+      $entityName //= $token->value;
+
+      setEntityValid($lineInfo->{Linetype}, $entityName);
+
+      # Check to see if the token must be recorded for other
+      # token types.
+      if ( exists $lineInfo->{OtherValidEntries} ) {
+         for my $tokenType ( @{ $lineInfo->{OtherValidEntries} } ) {
+            setEntityValid($tokenType, $token->value);
+         }
+      }
+   }
+}
+
+=head2 addValidEntities
+
+   Extract the name of any valid entities defined on this line and queue them
+   up to be used in the validity testing of other tags.
+
+=cut
+
+sub addValidEntities {
+
+   my ($line, $lineInfo) = @_;
+
+   for my $column (keys %tagsWithValidityData) {
+      if ($line->hasColumn($column)) {
+
+         # If this column has entity data stored, add it for validity checking
+         # of other tags.
+         COLUMN:
+         for my $token (@{ $line->column($column) }) {
+
+            next COLUMN unless $token->hasEntityLabel;
+
+            # Start kits store two values (don't know why, prettylst did it)
+            if ($token->entityLabel =~ qr/^KIT/) {
+               setEntityValid($token->entityLabel, "KIT:". $token->entityValue);
+            }
+            setEntityValid($token->entityLabel, $token->entityValue);
+         }
+      }
+   }
+
+   if ( $line->isType('EQUIPMOD') ) {
+      # We keep track of the KEYs for the equipmods.
+      if ( $line->hasColumn('KEY') ) {
+
+         # We extract the key
+         my $token = $line->firstTokenInColumn('KEY');
+
+         setEntityValid("EQUIPMOD Key", $token->value);
+      }
+   }
+
+   # For Abilities, add the key and the name, both with a category prefix,
+   # should solve most of the missing abilities reports.
+   if ($line->type eq 'ABILITY') {
+
+      my $category;
+      my $key;
+      my $entityName = $line->entityName;
+
+      if ($line->hasColumn('CATEGORY')) {
+         $category = $line->valueInFirstTokenInColumn('CATEGORY'); 
+      }
+
+      if ($line->hasColumn('KEY')) {
+         $key = $line->valueInFirstTokenInColumn('KEY'); 
+      }
+
+      if (defined $category && defined $key) {
+
+         my $value = "CATEGORY=${category}|${key}";
+         setEntityValid('ABILITY', $value);
+      }
+
+      if (defined $category && defined $entityName) {
+
+         my $value = "CATEGORY=${category}|${entityName}";
+         setEntityValid('ABILITY', $value);
+      }
+
+   } else {
+
+      # This adds the tagless first column in many lines to the validity data. It
+      # doesn't really handle abilities because they have CATEGORIES that you have
+      # to add to MOD or COPY. This means that anything referencing a modified
+      # ability can never find it.
+      addNameToValidEntities($line, $lineInfo);
+   }
+
+}
 
 
 =head2 checkClearTokenOrder
@@ -714,6 +902,32 @@ sub checkClearTokenOrder {
       # if only one of a kind, skip the rest
       next TAG if $line->columnHasSingleToken($column);
       $line->checkClear($column);
+   }
+}
+
+
+=head2 
+
+   Create any part of a subdirectory structure that is not already there.
+
+=cut 
+
+sub create_dir {
+   my ( $dir, $outputdir ) = @_;
+
+   # Only if the directory doesn't already exist
+   if ( !-d $dir ) {
+
+      # Needed to find the full path
+      my $parentdir = dirname($dir);
+
+      # If the $parentdir doesn't exist, we create it
+      if ( $parentdir ne $outputdir && !-d $parentdir ) {
+         create_dir( $parentdir, $outputdir );
+      }
+
+      # Create the curent level directory
+      mkdir $dir, oct(755) or die "Cannot create directory $dir: $OS_ERROR";
    }
 }
 
@@ -805,19 +1019,6 @@ sub isWriteableFileType {
 }
 
 
-=head2 makeExportListString
-
-   Join the arguments into a string suitable for passing to export lists.
-
-=cut
-
-sub makeExportListString {
-
-   my $guts = join qq{","}, @_;
-   qq{"${guts}\n"};
-}
-
-
 =head2 matchLineType
 
    Match the given line, and return the line definition.
@@ -830,27 +1031,26 @@ sub matchLineType {
    # Try each of the line types for this file type until we get a match or
    # exhaust the types.
 
-   my ($lineSpec, $entity);
+   my $lineSpec;
    for my $rec ( @{ $parseControl{$fileType} } ) {
       if ( $line =~ $rec->{RegEx} ) {
 
          $lineSpec = $rec;
-         $entity   = $1;
          last;
       }
    }
 
-   return($lineSpec, $entity);
+   return $lineSpec
 }
 
 =head2 normaliseFile
 
-   Detect filetype and normalize lines
+   Normalize the lines, and detect if the file wasMultiLine 
 
-   Parameters: $buffer => raw file data in a single buffer
+   Parameters: $buffer => raw file data in a single line
 
-   Returns: $filetype => either 'tab-based' or 'multi-line'
-            $lines => arrayref containing logical lines normalized to tab-based format
+   Returns: $lines an arrayref containing lines normalized to tab-based format
+            $wasMultiLine a boolean which is true if logical lines were split across physical lines
 
 =cut
 
@@ -859,8 +1059,8 @@ sub normaliseFile {
    # TODO: handle empty buffers, other corner-cases
    my $buffer = shift || "";     # default to empty line when passed undef
 
-   my $filetype;
    my @lines;
+   my $wasMultiLine;
 
    # First, we clean out empty lines that contain only white-space. Otherwise,
    # we could have false positives on the filetype.  Simply remove all
@@ -873,7 +1073,7 @@ sub normaliseFile {
 
    if ($buffer =~ /^\t+\S/m) {
 
-      $filetype = "multi-line";
+      $wasMultiLine = 1;
 
       # Normalize to tab-based
       # 1) All lines that start with a tab belong to the previous line.
@@ -884,17 +1084,15 @@ sub normaliseFile {
 
       $buffer =~ s/\n\t/\t/mg;
 
-      @lines = split /\n/, $buffer;
-
    } else {
-      $filetype = "tab-based";
+      $wasMultiLine = 0;
    }
 
    # Split into an array of lines.
    @lines = split /\n/, $buffer;
 
    # return a arrayref so we are a little more efficient
-   return (\@lines, $filetype);
+   return (\@lines, $wasMultiLine);
 }
 
 
@@ -916,26 +1114,20 @@ sub parseFile {
 
    my $log = getLogger();
 
-   ##################################################
-   # Working variables
+   my $currentLineType = "";
 
-   my $curent_linetype = "";
-   my $lastMainLine    = -1;
+   # This used to be used in the reformatting code, now it's only use is to
+   # recognise sub lines which are not preceeded by a MAIN line.
+   my $lastMainLine = -1;
 
-   my $curent_entity;
+   # New lines generated
+   my @newLines;   
 
-   my @newLines;   # New line generated
-
-   ##################################################
-   ##################################################
-   # Phase I - Split line in tokens and parse
-   #               the tokens
+   # Phase I - Split line in tokens and parse the tokens
 
    my $lineNum = 1;
    LINE:
    for my $thisLine (@ {$lines_ref} ) {
-
-      my $line_info;
 
       # Convert the non-ascii character in the line
       my $newLine = convertEntities($thisLine);
@@ -946,8 +1138,10 @@ sub parseFile {
       # Remove spaces at the begining of the line
       $newLine =~ s/^\s+//;
 
+      # Using $currentLineType because it was set on a previous cycle (or is
+      # an empty string until we find a line type)..
       my $line = TidyLst::Line->new(
-         type     => $curent_linetype,
+         type     => $currentLineType,
          file     => $file,
          unsplit  => $newLine,
          num      => $lineNum,
@@ -964,10 +1158,10 @@ sub parseFile {
          next LINE;
       }
 
-      ($line_info, $curent_entity) = matchLineType($newLine, $fileType);
+      my $lineInfo = matchLineType($newLine, $fileType);
 
       # If we didn't find a record with info how to parse this line
-      if ( ! defined $line_info ) {
+      if ( ! defined $lineInfo ) {
          $log->warning(
             qq(Can\'t find the line type for "$newLine"),
             $file,
@@ -979,44 +1173,46 @@ sub parseFile {
          next LINE;
       }
 
-      $line->mode($line_info->{Mode});
-      $line->format($line_info->{Format});
-      $line->header($line_info->{Header});
+      # Found an info record, overwrite the defaults we added for these fields
+      # we created this line object.
+      $line->mode($lineInfo->{Mode});
+      $line->format($lineInfo->{Format});
+      $line->header($lineInfo->{Header});
 
       # What type of line is it?
-      $curent_linetype = $line_info->{Linetype};
+      $currentLineType = $lineInfo->{Linetype};
 
-      if ( $line_info->{Mode} == MAIN ) {
+      if ( $lineInfo->{Mode} == MAIN ) {
 
          $lastMainLine = $lineNum - 1;
 
-      } elsif ( $line_info->{Mode} == SUB ) {
+      } elsif ( $lineInfo->{Mode} == SUB ) {
 
          if ($lastMainLine == -1) {
             $log->warning(
-               qq{SUB line "$curent_linetype" is not preceded by a MAIN line},
+               qq{SUB line "$currentLineType" is not preceded by a MAIN line},
                $file,
                $lineNum
             )
          }
 
-      } elsif ( $line_info->{Mode} == SINGLE ) {
+      } elsif ( $lineInfo->{Mode} == SINGLE ) {
 
          $lastMainLine = -1;
 
       } else {
 
-         die qq(Invalid type for $curent_linetype);
+         die qq(Invalid type for $currentLineType);
       }
 
       # Got a line info hash, so update the line type in the line
-      $line->type($line_info->{Linetype});
+      $line->type($lineInfo->{Linetype});
 
       # Identify the deprecated tags.
-      scanForDeprecatedTokens( $newLine, $curent_linetype, $file, $lineNum, $line, );
+      scanForDeprecatedTokens( $newLine, $lineInfo->{Linetype}, $file, $lineNum, $line, );
 
       # By default, the tab character is used
-      my $sep = $line_info->{SepRegEx} || qr(\t+);
+      my $sep = $lineInfo->{SepRegEx} || qr(\t+);
 
       # We split the tokens, strip the spaces and silently remove the empty tags
       # (empty tokens are the result of [tab][space][tab] type of chracter
@@ -1027,11 +1223,12 @@ sub parseFile {
          map { s{ \A \s* | \s* \z }{}xmsg; $_ }
          split $sep, $newLine;
 
-      #First, we deal with the tag-less columns
+      #First, we deal with the tag-less column
       COLUMN:
-      for my $column ( getEntityNameTag($curent_linetype) ) {
+      for my $column ( getTaglessColumn($lineInfo->{Linetype}) ) {
 
-         # If this line type does not have tagless first entry
+         # If this line type does not have tagless first entry then it doesn't
+         # need this separate treatment
          if (not defined $column) {
             last COLUMN;
          }
@@ -1056,7 +1253,7 @@ sub parseFile {
          my $token =  TidyLst::Token->new(
             tag       => $column,
             value     => $value,
-            lineType  => $curent_linetype,
+            lineType  => $lineInfo->{Linetype},
             file      => $file,
             line      => $lineNum,
          );
@@ -1064,19 +1261,14 @@ sub parseFile {
          $line->add($token);
 
          # Statistic gathering
-         incCountValidTags($curent_linetype, $column);
-
-         if ( index( $column, '000' ) == 0 && $line_info->{ValidateKeep} ) {
-            my $exit = process000($line_info, $value, $curent_linetype, $file, $lineNum);
-            last COLUMN if $exit;
-         }
+         incCountValidTags($lineInfo->{Linetype}, $column);
       }
 
       # Second, let's parse the regular columns
       for my $rawToken (@tokens) {
 
          my ($extractedToken, $value) =
-            extractTag($rawToken, $curent_linetype, $file, $lineNum);
+            extractTag($rawToken, $lineInfo->{Linetype}, $file, $lineNum);
 
          # if extractTag returns a defined value, no further processing is
          # neeeded. If tag is defined but value is not, then the tag that was
@@ -1085,7 +1277,7 @@ sub parseFile {
 
             my $token =  TidyLst::Token->new(
                fullToken => $extractedToken,
-               lineType  => $curent_linetype,
+               lineType  => $lineInfo->{Linetype},
                file      => $file,
                line      => $lineNum,
             );
@@ -1095,10 +1287,10 @@ sub parseFile {
 
             my $tag = $token->tag;
 
-            if ($line->hasColumn($tag) && ! isValidMultiTag($curent_linetype, $tag)) {
+            if ($line->hasColumn($tag) && ! isValidMultiTag($lineInfo->{Linetype}, $tag)) {
                $log->notice(
                   qq{The tag "$tag" should not be used more than once on the same }
-                  . $curent_linetype . qq{ line.\n},
+                  . $lineInfo->{Linetype} . qq{ line.\n},
                   $file,
                   $lineNum
                );
@@ -1114,7 +1306,7 @@ sub parseFile {
       # This function call will parse individual lines, which will
       # in turn parse the tags within the lines.
 
-      processLine($line);
+      processLine($line, $lineInfo);
 
       # Validate the line
       if (getOption('xcheck')) {
@@ -1130,9 +1322,12 @@ sub parseFile {
    }
    continue { $lineNum++ }
 
-   #####################################################
-   #####################################################
-   # We find all the header lines
+   # Phase II - Categorise comment and blank lines.
+   #
+   # Comments can be Header lines, Block comments or ordinary comments.  Header
+   # lines are replaced. Block comments are passed through unaltered, but are
+   # used to split up locks of MAIN lines. Ordinary comments are passed through
+   # unaltered into the newly formatted file. 
 
    CATEGORIZE_COMMENTS:
    for (my $i = 0; $i < @newLines; $i++) {
@@ -1198,15 +1393,13 @@ sub parseFile {
       }
    }
 
-   #################################################################
-   ######################## Conversion #############################
+   # Phase III - File Conversion 
+   #
    # We manipulate the tags for the whole file here
 
    doFileConversions(\@newLines, $fileType, $file);
 
-   ##################################################
-   ##################################################
-   # Phase II - Reformating the lines
+   # Phase IV - Potential reformating of the lines
 
    # No reformating needed?
    return $lines_ref unless getOption('outputpath') && isWriteableFileType($fileType);
@@ -1422,92 +1615,206 @@ sub parseSystemFiles {
    return;
 }
 
-=head2 process000
 
-   The first tag on a line may need to be processed because it is a MOD, FORGET
-   or COPY. It may also need to be added to crosschecking data to allow other
-   lines to do MOD, FORGETs or COPYs.
+=head2 processFile
+
+   Check that the file type is parseable, and if so, parse the file
+   and write the modified result (if necessary and permitted).
 
 =cut
 
-sub process000 {
+sub processFile {
+   
+   my ($file, $typeAndGameMode) = @_;
 
-   my ($line_info, $token, $linetype, $file, $line) = @_;
+   my $fileType  = $typeAndGameMode->{'fileType'}; 
+   my $gameModes = $typeAndGameMode->{'gameMode'}; 
 
-   # Are we dealing with a .MOD, .FORGET or .COPY type of tag?
-   my $check_mod = $line_info->{RegExIsMod} || qr{ \A (.*) [.] (MOD|FORGET|COPY=[^\t]+) }xmsi;
+   my $log = getLogger();
 
-   if ( my ($entity_name, $mod_part) = ($token =~ $check_mod) ) {
+   my $numberofcf   = 0;     # Number of extra CF found in the file.
+   my $wasMultiLine = 0;
 
-      # We keep track of the .MOD type tags to
-      # later validate if they are valid
-      if (getOption('xcheck')) {
-         TidyLst::Report::registerReferrer($linetype, $entity_name, $token, $file, $line);
+   # Will hold all the lines of the file
+   my @lines;           
+
+   if ( $file eq "STDIN" ) {
+
+      local $/ = undef; # read all from buffer
+      my $buffer = <>;
+
+      (my $lines, $wasMultiLine) = normaliseFile($buffer);
+      @lines = @{$lines};
+
+   } else {
+
+      # We read only what we know needs to be processed
+      my $parseable = isParseableFileType($fileType);
+
+      if (ref( $parseable ) ne 'CODE') {
+         return 0;
       }
 
-      # Special case for .COPY=<new name>
-      # <new name> is a valid entity
-      if ( my ($new_name) = ( $mod_part =~ / \A COPY= (.*) /xmsi ) ) {
-         setEntityValid($linetype, $new_name);
-      }
-
-      # Exit the loop
-      return 1; #last COLUMN;
-
-   } elsif ( getOption('xcheck') ) {
-
-      # We keep track of the entities that could be used with a .MOD type of
-      # tag for later validation.
+      # We try to read the file and continue to the next one even if we
+      # encounter problems
       #
-      # Some line types need special code to extract the entry.
+      # henkslaaf - Multiline parsing
+      #       1) read all to a buffer (files are not so huge that it is a memory hog)
+      #       2) send the buffer to a method that splits based on the type of file
+      #       3) let the method return split and normalized entries
+      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
 
-      if ( $line_info->{RegExGetEntry} ) {
+      eval {
 
-         if ( $token =~ $line_info->{RegExGetEntry} ) {
-            $token = $1;
+         local $/ = undef; # read all from buffer
+         open my $lst_fh, '<', $file;
+         my $buffer = <$lst_fh>;
+         close $lst_fh;
 
-            # Some line types refer to other line entries directly
-            # in the line identifier.
-            if ( exists $line_info->{GetRefList} ) {
-               TidyLst::Report::add_to_xcheck_tables(
-                  $line_info->{IdentRefType},
-                  $line_info->{IdentRefTag},
-                  $file,
-                  $line,
-                  &{ $line_info->{GetRefList} }($token)
-               );
-            }
+         (my $lines, $wasMultiLine) = normaliseFile($buffer);
+         @lines = @{$lines};
+      };
 
-         } else {
-
-            getLogger()->warning(
-               qq(Cannot find the $linetype name),
-               $file,
-               $line
-            );
-         }
-      }
-
-      setEntityValid($linetype, $token);
-
-      # Check to see if the token must be recorded for other
-      # token types.
-      if ( exists $line_info->{OtherValidEntries} ) {
-         for my $entry_type ( @{ $line_info->{OtherValidEntries} } ) {
-            setEntityValid($entry_type, $token);
-         }
+      if ( $EVAL_ERROR ) {
+         # There was an error in the eval
+         $log->error( $EVAL_ERROR, $file );
+         return 0;
       }
    }
 
-   # don't exit the loop
-   return 0;
+   # If the file is empty, we skip it
+   unless (@lines) {
+      $log->notice("Empty file.", $file);
+      return 0;
+   }
+
+   # Check to see if we are dealing with a HTML file
+   if ( grep /<html>/i, @lines ) {
+      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file );
+      return 0;
+   }
+
+   my $headerRemoved = 0;
+
+   # While the first line is any sort of comment about pretty lst or TidyLst,
+   # we remove it
+   REMOVE_HEADER:
+   while (  $lines[0] =~ $TidyLst::Data::CVSPattern 
+         || $lines[0] =~ $TidyLst::Data::headerPattern ) {
+      shift @lines;
+      $headerRemoved++;
+      last REMOVE_HEADER if not defined $lines[0];
+   }
+
+   # The full file is in the @lines array, remove the normal EOL characters
+   chomp(@lines);
+
+   # Remove and count any abnormal EOL characters i.e. anything that remains
+   # after the chomp
+   for my $line (@lines) {
+      $numberofcf += $line =~ s/[\x0d\x0a]//g;
+   }
+
+   if($numberofcf) {
+      $log->warning( "$numberofcf extra CF found and removed.", $file );
+   }
+
+   my $parser = isParseableFileType($fileType);
+
+   if ( ref($parser) eq "CODE" ) {
+
+      # The overwhelming majority of checking, correcting and reformatting happens in this operation
+      my ($newlines_ref) = &{ $parser }( $fileType, \@lines, $file);
+
+      # Let's remove any tralling white spaces
+      for my $line (@$newlines_ref) {
+         $line =~ s/\s+$//;
+      }
+
+      # Some file types are never written
+      if ($wasMultiLine) {
+         $log->report("SKIP rewrite for $file because it is a multi-line file");
+         return 0;
+      }
+
+      if (!isWriteableFileType($fileType)) {
+         return 0;
+      }
+
+      # We compare the result with the orginal file.
+      # If there are no modifications, we do not create the new files
+      my $same  = NO;
+      my $index = 0;
+
+      # First, we check if there are obvious reasons not to write the new file
+      # No extra CRLF characters were removed, same number of lines
+      if (!getOption('writeall') && !$numberofcf && $headerRemoved && scalar(@lines) == scalar(@$newlines_ref)) {
+
+         # We assume the arrays are the same ...
+         $same = YES;
+
+         # ... but we check every line
+         $index = -1;
+         while ( $same && ++$index < scalar(@lines) ) {
+            if ( $lines[$index] ne $newlines_ref->[$index] ) {
+               $same = NO;
+            }
+         }
+      }
+
+      if ($same) {
+         return 0;
+      }
+
+      my $write_fh;
+
+      if (getOption('outputpath')) {
+
+         my $newfile = $file;
+         my $inputpath  = getOption('inputpath');
+         my $outputpath = getOption('outputpath');
+         $newfile =~ s/${inputpath}/${outputpath}/i;
+
+         # Needed to find the full path
+         my ($file, $basedir) = fileparse($newfile);
+
+         # Create the subdirectory if needed
+         create_dir( $basedir, getOption('outputpath') );
+
+         open $write_fh, '>', $newfile;
+
+      } else {
+
+         # Output to standard output
+         $write_fh = *STDOUT;
+      }
+
+      # The first line of the new file will be a comment line.
+      print {$write_fh} $TidyLst::Data::TidyLstHeader;
+
+      # We print the result
+      for my $line ( @{$newlines_ref} ) {
+         print {$write_fh} "$line\n"
+      }
+
+      # If we opened a filehandle, then close it
+      if (getOption('outputpath')) {
+         close $write_fh;
+      }
+
+      return 1;
+
+   } else {
+      warn "Didn't process filetype \"$fileType\".\n";
+      return 0;
+   }
 }
 
 
 =head2 processLine
 
    This function does additional processing on each line once
-   it have been seperated into tokens.
+   it has been seperated into tokens.
 
    The processing is a mix of validation and conversion.
 
@@ -1516,7 +1823,7 @@ sub process000 {
 
 sub processLine {
 
-   my ($line) = @_;
+   my ($line, $lineInfo) = @_;
 
    my $log = getLogger();
 
@@ -1525,6 +1832,8 @@ sub processLine {
    # We manipulate the tags for the line here
 
    doLineConversions($line);
+
+   addValidEntities($line, $lineInfo);
 
    # Checking race files for TYPE and if no RACETYPE,
    # Do this check no matter what it is valid all the time
@@ -1564,28 +1873,24 @@ sub processLine {
          }
 
          # Write to file
-         TidyLst::Report::printToExportList('SPELL',
-            makeExportListString($name, $sourcepage, $line->num, $filename));
+         printToExportList('SPELL', makeExportListString($name, $sourcepage, $line->num, $filename));
       }
 
       if ( $line->isType('CLASS') ) {
 
          # Only one report per class
          if ($className ne $name) {
-            TidyLst::Report::printToExportList('CLASS',
-               makeExportListString($className, $line->num, $filename));
+            printToExportList('CLASS', makeExportListString($className, $line->num, $filename));
          };
          $className = $name;
       }
 
       if ( $line->isType('DEITY') ) {
-         TidyLst::Report::printToExportList('DEITY',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('DEITY', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('DOMAIN') ) {
-         TidyLst::Report::printToExportList('DOMAIN',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('DOMAIN', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMENT') ) {
@@ -1601,8 +1906,7 @@ sub processLine {
             }
          }
 
-         TidyLst::Report::printToExportList('EQUIPMENT',
-            makeExportListString($name, $outputname, $line->num, $filename));
+         printToExportList('EQUIPMENT', makeExportListString($name, $outputname, $line->num, $filename));
       }
 
       if ( $line->isType('EQUIPMOD') ) {
@@ -1610,28 +1914,23 @@ sub processLine {
          my $key  = $line->hasColumn('KEY')  ? $line->valueInFirstTokenInColumn('KEY') : '';
          my $type = $line->hasColumn('TYPE') ? $line->valueInFirstTokenInColumn('TYPE') : '';
 
-         TidyLst::Report::printToExportList('EQUIPMOD',
-            makeExportListString($name, $key, $type, $line->num, $filename));
+         printToExportList('EQUIPMOD', makeExportListString($name, $key, $type, $line->num, $filename));
       }
 
       if ( $line->isType('FEAT') ) {
-         TidyLst::Report::printToExportList('FEAT',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('FEAT', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT STARTPACK') ) {
-         TidyLst::Report::printToExportList('KIT',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('KIT', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('KIT TABLE') ) {
-         TidyLst::Report::printToExportList('TABLE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('TABLE', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('LANGUAGE') ) {
-         TidyLst::Report::printToExportList('LANGUAGE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('LANGUAGE', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('RACE') ) {
@@ -1639,20 +1938,17 @@ sub processLine {
          my $type    = $line->valueInFirstTokenInColumn('RACETYPE');
          my $subType = $line->valueInFirstTokenInColumn('RACESUBTYPE');
 
-         TidyLst::Report::printToExportList('RACE',
-            makeExportListString($name, $type, $subType, $line->num, $filename));
+         printToExportList('RACE', makeExportListString($name, $type, $subType, $line->num, $filename));
       }
 
       if ( $line->isType('SKILL') ) {
 
-         TidyLst::Report::printToExportList('SKILL',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('SKILL', makeExportListString($name, $line->num, $filename));
       }
 
       if ( $line->isType('TEMPLATE') ) {
 
-         TidyLst::Report::printToExportList('TEMPLATE',
-            makeExportListString($name, $line->num, $filename));
+         printToExportList('TEMPLATE', makeExportListString($name, $line->num, $filename));
       }
    }
 

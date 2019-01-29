@@ -22,9 +22,13 @@ use lib dirname(dirname abs_path $0);
 use TidyLst::Data qw(
    BLOCK BLOCK_HEADER COMMENT FIRST_COLUMN LINE LINE_HEADER MAIN
    NO NO_HEADER SINGLE SUB YES
-   incCountInvalidTags);
+   dirHasSourceTags
+   getDirSourceTags
+   incCountInvalidTags
+   );
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
+use TidyLst::Report qw(printToExportList);
 
 our $tokenlessRegex = qr(^(?:HEADER|COMMENT|BLOCK_COMMENT|BLANK)$);
 
@@ -2430,7 +2434,7 @@ sub reportWillpower {
       # Write the token and related information to the willpower.csv file
       my $output = q{"} . $token->fullToken . q{","} . $token->line . q{","} . $token->file . qq{"\n};
 
-      TidyLst::Report::printToExportList($output);
+      printToExportList('Willpower', $output);
    }
 }
 
@@ -2449,8 +2453,13 @@ sub sourceReplacement {
    my ($line) = @_;
 
    my $inputpath = getOption('inputpath');
+   my $file = $line->file;
 
-   if (dirHasSourceTags($line->file) ) {
+   if (! dirHasSourceTags($line->file)) {
+      $file = dirname $file;
+   }
+
+   if (dirHasSourceTags($file) ) {
 
       # Only the first SOURCE tag is replaced.
       $sourceCurrentFile = $line->file;
@@ -2459,7 +2468,7 @@ sub sourceReplacement {
       # the directory .PCC
       $line->clearTokens;
 
-      my %tokens = %{getDirSourceTags($line->file)};
+      my %tokens = %{getDirSourceTags($file)};
       for my $token (values %tokens) {
          $line->add($token);
       }

@@ -5,6 +5,7 @@ use warnings;
 
 use Data::Dumper;
 use Scalar::Util;
+use YAML qw(Dump);
 
 use Carp;
 
@@ -29,7 +30,7 @@ our @EXPORT_OK = qw(
    getDirSourceTags
    getEntityFirstTag
    getEntityName
-   getEntityNameTag
+   getTaglessColumn
    getHeader
    getHeaderMissingOnLineType
    getMissingHeaderLineTypes
@@ -55,6 +56,7 @@ our @EXPORT_OK = qw(
    searchRace
    seenSourceToken
    setEntityValid
+   setFileHeader
    setValidSystemArr
    splitAndAddToValidEntities
    tagTakesFixedValues
@@ -63,7 +65,7 @@ our @EXPORT_OK = qw(
 );
 
 # expand library path so we can find TidyLst modules
-use File::Basename qw(dirname);
+use File::Basename qw(dirname fileparse);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);
 
@@ -92,15 +94,25 @@ use constant {
    YES            => 1,
 };
 
+# Finds the CVS lines at the top of LST files, so we can delete them
+# and replace with a single line TidyLst Header.
+our $CVSPattern    = qr{\#.*CVS.*Revision}i;
+our $headerPattern = qr{\#.*reformatt?ed by}i;
+our $TidyLstHeader;
+
+
+sub setFileHeader {
+   my ($header) = @_;
+
+   $TidyLstHeader = $header;
+}
+
 
 my %columnWithNoTag = (
    'ABILITY'           => '000AbilityName', 
-   'ABILITYCATEGORY'   => '000AbilityCategory',
    'ALIGNMENT'         => '000AlignmentName',
    'ARMORPROF'         => '000ArmorName',
    'CLASS Level'       => '000Level',
-   'CLASS'             => '000ClassName',
-   'COMPANIONMOD'      => '000Follower',
    'DEITY'             => '000DeityName',
    'DOMAIN'            => '000DomainName',
    'EQUIPMENT'         => '000EquipmentName',
@@ -108,7 +120,6 @@ my %columnWithNoTag = (
    'FEAT'              => '000FeatName',
    'GLOBALMODIFIER'    => '000GlobalmodName',
    'LANGUAGE'          => '000LanguageName',
-   'MASTERBONUSRACE'   => '000MasterBonusRace',
    'RACE'              => '000RaceName',
    'SAVE'              => '000SaveName',
    'SHIELDPROF'        => '000ShieldName',
@@ -116,8 +127,6 @@ my %columnWithNoTag = (
    'SKILL'             => '000SkillName',
    'SPELL'             => '000SpellName',
    'STAT'              => '000StatName',
-   'SUBCLASS'          => '000SubClassName',
-   'SUBSTITUTIONCLASS' => '000SubstitutionClassName',
    'TEMPLATE'          => '000TemplateName',
    'VARIABLE'          => '000VariableName',
    'WEAPONPROF'        => '000WeaponName',
@@ -290,6 +299,8 @@ my @PreTags = (
    '!PREFEAT',
    'PREFACT:*',
    '!PREFACT',
+   'PREFACTSET:*',
+   '!PREFACTSET',
    'PREGENDER',
    '!PREGENDER',
    'PREHANDSEQ',
@@ -600,7 +611,7 @@ our %masterOrder = (
    ],
 
    'ABILITYCATEGORY' => [
-      '000AbilityCategory',
+      'ABILITYCATEGORY',
       'VISIBLE',
       'EDITABLE',
       'EDITPOOL',
@@ -662,7 +673,7 @@ our %masterOrder = (
    ],
 
    'CLASS' => [
-      '000ClassName',
+      'CLASS',
       'SORTKEY',
       'KEY',
       'NAMEISPI',
@@ -704,6 +715,7 @@ our %masterOrder = (
       'PROHIBITED',
       'PROHIBITSPELL:*',
       'LEVELSPERFEAT',
+      'EXCHANGELEVEL',
       'ABILITY:*',
       'VFEAT:*',
       'MULTIPREREQS',
@@ -854,56 +866,6 @@ our %masterOrder = (
       'VFEAT:*',                       # Deprecated 6.05.01
    ],
 
-   'COMPANIONMOD' => [
-      '000Follower',
-      'SORTKEY',
-      'KEY',
-      'FOLLOWER',
-      'GROUP:*',
-      'TYPE:.CLEAR',
-      'TYPE:*',
-      'HD',
-      'DR',
-      'SR',
-      'ABILITY:.CLEAR',
-      'ABILITY:*',
-      'COPYMASTERBAB',
-      'COPYMASTERCHECK',
-      'COPYMASTERHP',
-      'USEMASTERSKILL',
-      'GENDER',
-      'PRERACE',
-      '!PRERACE',
-      'PREABILITY:*',
-      '!PREABILITY:*',
-      'MOVE',
-      'KIT',
-      'AUTO:ARMORPROF:*',
-      'SAB:.CLEAR',
-      'SAB:*',
-      'ADD:LANGUAGE',
-      'DEFINE:*',
-      'DEFINESTAT:*',
-      @globalBONUSTags,
-      'RACETYPE',
-      'SWITCHRACE:*',
-      'TEMPLATE:*',
-      'STACK',
-      'MULT',
-      'CHOOSE',
-      'SELECT',
-      'DESC:.CLEAR',
-      'DESC:*',
-
-      'AUTO:FEAT:*',                   # Deprecated 6.05.01
-      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
-      'FEAT:*',                        # Deprecated 6.05.01
-      'FEAT:.CLEAR',                   # Deprecated 6.05.01
-      'SA:.CLEAR',                     # Deprecated 6.05.01
-      'SA:*',                          # Deprecated 6.05.01
-      'VFEAT:*',                       # Deprecated 6.05.01
-   ],
-
    'DATACONTROL DEFAULTVARIABLEVALUE' => [
       'DEFAULTVARIABLEVALUE',
    ],
@@ -959,6 +921,7 @@ our %masterOrder = (
       'ABILITY:*',
       'UNENCUMBEREDMOVE',
       'GROUP',
+      'TYPE:*',
       'FACT:Article',
       'FACT:Symbol',
       'FACTSET:Pantheon',
@@ -1042,6 +1005,7 @@ our %masterOrder = (
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
+      'CHANGEPROF',
       'PROFICIENCY:WEAPON',
       'PROFICIENCY:ARMOR',
       'PROFICIENCY:SHIELD',
@@ -1099,6 +1063,7 @@ our %masterOrder = (
       'ADD:SPELLCASTER:*',
       'ADD:TEMPLATE:*',
       'ABILITY:*',
+      'KIT:*',
       'VISION',
       'SR',
       'DR',
@@ -1302,6 +1267,57 @@ our %masterOrder = (
       'SA:*',                          # Deprecated 6.05.01
    ],
 
+   'FOLLOWER' => [
+      'FOLLOWER',
+      'SORTKEY',
+      'KEY',
+      'GROUP:*',
+      'TYPE:.CLEAR',
+      'TYPE:*',
+      'HD',
+      'DR',
+      'SR',
+      'ABILITY:.CLEAR',
+      'ABILITY:*',
+      'COPYMASTERBAB',
+      'COPYMASTERCHECK',
+      'COPYMASTERHP',
+      'USEMASTERSKILL',
+      'GENDER',
+      'PRERACE',
+      '!PRERACE',
+      'PREABILITY:*',
+      '!PREABILITY:*',
+      'MOVE',
+      'KIT',
+      'AUTO:ARMORPROF:*',
+      'SAB:.CLEAR',
+      'SAB:*',
+      'ADD:LANGUAGE',
+      'DEFINE:*',
+      'DEFINESTAT:*',
+      @globalBONUSTags,
+      'RACETYPE',
+      'SWITCHRACE:*',
+      'TEMPLATE:*',
+      'STACK',
+      'MULT',
+      'CHOOSE',
+      'SELECT',
+      'DESC:.CLEAR',
+      'DESC:*',
+      'AUTO:LANG:*',
+      'AUTO:WEAPONPROF:*',
+
+      'AUTO:FEAT:*',                   # Deprecated 6.05.01
+      'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
+      'FEAT:*',                        # Deprecated 6.05.01
+      'FEAT:.CLEAR',                   # Deprecated 6.05.01
+      'SA:.CLEAR',                     # Deprecated 6.05.01
+      'SA:*',                          # Deprecated 6.05.01
+      'VFEAT:*',                       # Deprecated 6.05.01
+   ],
+
    'GLOBALMODIFIER' => [
       '000GlobalmonName',
       'EXPLANATION',
@@ -1439,6 +1455,7 @@ our %masterOrder = (
 
    'KIT STARTPACK' => [
       'STARTPACK',
+      'SORTKEY',
       'NAMEISPI',
       'GROUP:*',
       'TYPE:.CLEAR',
@@ -1484,7 +1501,7 @@ our %masterOrder = (
    ],
 
    'MASTERBONUSRACE' => [
-      '000MasterBonusRace',
+      'MASTERBONUSRACE',
       'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
@@ -1688,6 +1705,7 @@ our %masterOrder = (
       'SPELLLEVEL:CLASS:*',
       'SPELLLEVEL:DOMAIN:*',
       'KIT',
+      'DESC:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -1706,6 +1724,7 @@ our %masterOrder = (
       'SORTKEY',
       'KEY',
       @globalBONUSTags,
+      'DESC:*',
    ],
 
    'SHIELDPROF' => [
@@ -1737,9 +1756,12 @@ our %masterOrder = (
       'BONUS:ITEMWEIGHT:*',
       'BONUS:LOADMULT',
       'BONUS:SKILL:*',
+      'BONUS:STAT:*',
       'DISPLAYNAME',
+      'ISDEFAULTSIZE',
       'MODIFY:*',
       'SIZENUM',
+      'DESC:*',
    ],
 
    'SKILL' => [
@@ -1888,10 +1910,11 @@ our %masterOrder = (
       'ABILITY',
       'BONUS:LANG:*',
       'BONUS:MODSKILLPOINTS:*',
+      'DESC:*',
    ],
 
    'SUBCLASS' => [
-      '000SubClassName',
+      'SUBCLASS',
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
@@ -1956,7 +1979,7 @@ our %masterOrder = (
    ],
 
    'SUBSTITUTIONCLASS' => [
-      '000SubstitutionClassName',
+      'SUBSTITUTIONCLASS',
       'KEY',
       'NAMEISPI',
       'OUTPUTNAME',
@@ -2297,6 +2320,7 @@ our %masterOrder = (
       @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+      'DESC:*',
 
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
@@ -2364,7 +2388,7 @@ my %tagFixValue = (
    APPLY                => { map { $_ => 1 } qw( INSTANT PERMANENT ) },
    FORMATCAT            => { map { $_ => 1 } qw( FRONT MIDDLE PARENS ) },
    MODS                 => { map { $_ => 1 } qw( YES NO REQUIRED ) },
-   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charges ) },
+   TIMEUNIT             => { map { $_ => 1 } qw( Year Month Week Day Hour Minute Round Encounter Charge Charges ) },
    VISIBLE              => { map { $_ => 1 } qw( YES NO EXPORT DISPLAY QUALIFY CSHEET GUI ALWAYS ) },
 
    # See updateValidity for the values of these keys
@@ -2646,6 +2670,10 @@ my %tokenHeader = (
       'PREEQUIP'                          => 'Req. Equipement',
       'PREEQMOD'                          => 'Req. Equipment Mod.',
       '!PREEQMOD'                         => 'Prohibited Equipment Mod.',
+      'PREFACT'                           => 'Required Fact',
+      '!PREFACT'                          => 'Prohibited Fact',
+      'PREFACTSET'                        => 'Required Factset',
+      '!PREFACTSET'                       => 'Prohibited Factset',
       'PREFEAT'                           => 'Required Feat',
       '!PREFEAT'                          => 'Prohibited Feat',
       'PREGENDER'                         => 'Required Gender',
@@ -2842,7 +2870,7 @@ my %tokenHeader = (
    },
 
    ABILITYCATEGORY => {
-      '000AbilityCategory'       => '# Ability Category',
+      'ABILITYCATEGORY'          => '# Ability Category',
       'CATEGORY'                 => 'Category of Object',
       'DISPLAYLOCATION'          => 'Display Location',
       'DISPLAYNAME'              => 'Display where?',
@@ -2873,7 +2901,7 @@ my %tokenHeader = (
    },
 
    CLASS => {
-      '000ClassName'             => '# Class Name',
+      'CLASS'                    => '# Class Name',
       'FACT:CLASSTYPE'           => 'Class Type',
       'CLASSTYPE'                => 'Class Type',
       'FACT:Abb'                 => 'Abbreviation',
@@ -2891,17 +2919,6 @@ my %tokenHeader = (
 
    'CLASS Level' => {
       '000Level'                 => '# Level',
-   },
-
-   COMPANIONMOD => {
-      '000Follower'              => '# Class of the Master',
-      '000MasterBonusRace'       => '# Race of familiar',
-      'COPYMASTERBAB'            => 'Copy Masters BAB',
-      'COPYMASTERCHECK'          => 'Copy Masters Checks',
-      'COPYMASTERHP'             => 'HP formula based on Master',
-      'FOLLOWER'                 => 'Added Value',
-      'SWITCHRACE'               => 'Change Racetype',
-      'USEMASTERSKILL'           => 'Use Masters skills?',
    },
    
    'DATACONTROL FACTDEF' => {
@@ -2979,6 +2996,15 @@ my %tokenHeader = (
       '000FeatName'                       => '# Feat Name',
    },
 
+   FOLLOWER => {
+      'FOLLOWER'                 => '# Class of the Master',
+      'COPYMASTERBAB'            => 'Copy Masters BAB',
+      'COPYMASTERCHECK'          => 'Copy Masters Checks',
+      'COPYMASTERHP'             => 'HP formula based on Master',
+      'SWITCHRACE'               => 'Change Racetype',
+      'USEMASTERSKILL'           => 'Use Masters skills?',
+   },
+
    GLOBALMODIFIER => {
       '000GlobalmodName'         => '# Name',
       'EXPLANATION'              => 'Explanation',
@@ -3036,7 +3062,7 @@ my %tokenHeader = (
    },
 
    MASTERBONUSRACE => {
-      '000MasterBonusRace'       => '# Race of familiar',
+      'MASTERBONUSRACE'          => '# Race of familiar',
    },
 
    RACE => {
@@ -3072,11 +3098,11 @@ my %tokenHeader = (
    },
 
    SUBCLASS => {
-      '000SubClassName'          => '# Subclass',
+      'SUBCLASS'                 => '# Subclass',
    },
 
    SUBSTITUTIONCLASS => {
-      '000SubstitutionClassName' => '# Substitution Class',
+      'SUBSTITUTIONCLASS'        => '# Substitution Class',
    },
 
    TEMPLATE => {
@@ -3281,9 +3307,11 @@ our @xcheck_to_process;
 
 sub addSourceToken {
 
-   my ($path, $token) = @_;
+   my ($input, $token) = @_;
 
-   $sourceTokens{File::Basename::dirname($path)}{$token->tag} = $token;
+   my ($file, $path) = fileparse($input);
+
+   $sourceTokens{$path}{$token->tag} = $token;
 }
 
 
@@ -3299,12 +3327,12 @@ sub addTagsForConversions {
    if ( isConversionActive('ALL:Convert ADD:SA to ADD:SAB') ) {
       push @{ $masterOrder{'CLASS'} },          'ADD:SA';
       push @{ $masterOrder{'CLASS Level'} },    'ADD:SA';
-      push @{ $masterOrder{'COMPANIONMOD'} },   'ADD:SA';
       push @{ $masterOrder{'DEITY'} },          'ADD:SA';
       push @{ $masterOrder{'DOMAIN'} },         'ADD:SA';
       push @{ $masterOrder{'EQUIPMENT'} },      'ADD:SA';
       push @{ $masterOrder{'EQUIPMOD'} },       'ADD:SA';
       push @{ $masterOrder{'FEAT'} },           'ADD:SA';
+      push @{ $masterOrder{'FOLLOWER'} },       'ADD:SA';
       push @{ $masterOrder{'RACE'} },           'ADD:SA';
       push @{ $masterOrder{'SKILL'} },          'ADD:SA';
       push @{ $masterOrder{'SUBCLASSLEVEL'} },  'ADD:SA';
@@ -3326,12 +3354,12 @@ sub addTagsForConversions {
    if ( isConversionActive('ALL:BONUS:MOVE conversion') ) {
       push @{ $masterOrder{'CLASS'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'CLASS Level'} },    'BONUS:MOVE:*';
-      push @{ $masterOrder{'COMPANIONMOD'} },   'BONUS:MOVE:*';
       push @{ $masterOrder{'DEITY'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'DOMAIN'} },         'BONUS:MOVE:*';
       push @{ $masterOrder{'EQUIPMENT'} },      'BONUS:MOVE:*';
       push @{ $masterOrder{'EQUIPMOD'} },       'BONUS:MOVE:*';
       push @{ $masterOrder{'FEAT'} },           'BONUS:MOVE:*';
+      push @{ $masterOrder{'FOLLOWER'} },       'BONUS:MOVE:*';
       push @{ $masterOrder{'RACE'} },           'BONUS:MOVE:*';
       push @{ $masterOrder{'SKILL'} },          'BONUS:MOVE:*';
       push @{ $masterOrder{'SUBCLASSLEVEL'} },  'BONUS:MOVE:*';
@@ -3438,14 +3466,17 @@ sub constructValidTags {
 
 sub dirHasSourceTags {
 
-   my ($file) = @_;
-   exists $sourceTokens{ File::Basename::dirname($file) };
+   my ($input) = @_;
+
+   my ($file, $path) = fileparse($input);
+
+   exists $sourceTokens{ $path };
 }
 
 
 sub dumpValidEntities {
 
-   print STDERR Dumper %validEntities;
+   print STDERR Dump %validEntities;
 
 }
 
@@ -3480,8 +3511,11 @@ sub getCrossCheckData {
 
 sub getDirSourceTags {
 
-   my ($file) = @_;
-   $sourceTokens{ File::Basename::dirname($file) };
+   my ($input) = @_;
+
+   my ($file, $path) = fileparse($input);
+
+   $sourceTokens{ $path };
 }
 
 
@@ -3489,7 +3523,7 @@ sub getDirSourceTags {
 
    C<getEntityFirstTag($lineType)>
 
-   Get the name of the first column of a line. Similar to getEntityNameTag, but
+   Get the name of the first column of a line. Similar to getTaglessColumn, but
    this one works even when the first token on the line does have a tag, 
    i.e. not a pretend tag that starts 000
 
@@ -3528,13 +3562,13 @@ sub getEntityName {
 }
 
 
-=head2 getEntityNameTag
+=head2 getTaglessColumn
 
    Get the name of the first column of a line that does not start with a tag.
 
 =cut
 
-sub getEntityNameTag {
+sub getTaglessColumn {
 
    my ($entity) = @_;
    $columnWithNoTag{$entity};
@@ -3944,9 +3978,11 @@ sub searchRace {
 
 sub seenSourceToken {
 
-   my ($path, $token) = @_;
+   my ($input, $token) = @_;
 
-   exists $sourceTokens{File::Basename::dirname($path)}{$token->tag};
+   my ($file, $path) = fileparse($input);
+
+   exists $sourceTokens{$path}{$token->tag};
 }
 
 

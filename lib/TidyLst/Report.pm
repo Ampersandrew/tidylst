@@ -11,6 +11,7 @@ our @EXPORT_OK = qw(
    add_to_xcheck_tables
    closeExportListFileHandles
    doXCheck
+   makeExportListString
    openExportListFileHandles
    printToExportList
    registerReferrer
@@ -36,7 +37,6 @@ use TidyLst::Data qw(
 
 use TidyLst::LogFactory qw(getLogger);
 use TidyLst::Options qw(getOption isConversionActive);
-# use TidyLst::Validate qw();
 
 # predeclare this so we can call it without & or trailing () like a builtin
 sub reportTagSort;
@@ -121,7 +121,17 @@ sub closeExportListFileHandles {
 }
 
 
+=head2 makeExportListString
 
+   Join the arguments into a string suitable for passing to export lists.
+
+=cut
+
+sub makeExportListString {
+
+   my $guts = join qq{","}, @_;
+   qq{"${guts}\n"};
+}
 
 
 =head2 openExportListFileHandles
@@ -375,7 +385,7 @@ sub add_to_xcheck_tables {
    # We remove the empty elements in the list
    @list = grep { defined $_ && $_ ne "" } @list;
 
-   # If the list of entry is empty, we retrun immediately
+   # If the list of entries is empty, we return immediately
    return if scalar @list == 0;
 
    # We set $tagName properly for the substitution
@@ -897,7 +907,7 @@ sub doXCheck {
 
             # Special case for EQUIPMOD Key
             # -----------------------------
-            # If an EQUIPMOD Key entry doesn't exists, we can use the EQUIPMOD
+            # If an EQUIPMOD Key entry doesn't exist we can use the EQUIPMOD
             # name 
             $message =   ($linetype ne 'EQUIPMOD Key' )      ? $linetype
                        : (isValidEntity('EQUIPMOD', $entry)) ? 'EQUIPMOD Key' 

@@ -26,7 +26,6 @@ use TidyLst::Data qw(
    mungKey
    registerXCheck 
    searchRace
-   setEntityValid
    tagTakesFixedValues
    );
 
@@ -82,6 +81,17 @@ has 'line' => (
 has 'noMoreErrors' => (
    is     => 'rw',
    isa    => 'Bool',
+);
+
+has 'entityLabel' => (
+   is       => 'rw',
+   isa      => 'Str',
+   predicate => 'hasEntityLabel',
+);
+
+has 'entityValue' => (
+   is       => 'rw',
+   isa      => 'Str',
 );
 
 around 'BUILDARGS' => sub {
@@ -202,7 +212,7 @@ my %tagProcessor = (
 
 sub process {
 
-   my ($token) = @_;
+   my ($self) = @_;
 
    my $log = getLogger();
 
@@ -211,71 +221,70 @@ sub process {
    # exception to this rule is LICENSE that can be used without a value to
    # display an empty line.
 
-   if ( (!defined $token->value || $token->value eq q{}) && $token->fullToken ne 'LICENSE:') {
+   if ( (!defined $self->value || $self->value eq q{}) && $self->fullToken ne 'LICENSE:') {
       $log->warning(
-         qq(The tag "} . $token->fullToken . q{" is missing a value (or you forgot a : somewhere)),
-         $token->file,
-         $token->line
+         qq(The tag ") . $self->fullToken . q(" is missing a value (or you forgot a : somewhere)),
+         $self->file,
+         $self->line
       );
 
       # We set the value to prevent further errors
-      $token->value(q{});
+      $self->value(q{});
    }
 
-   if ($token->tag eq 'ADD') {
-      TidyLst::Convert::convertAddTokens($token);
+   if ($self->tag eq 'ADD') {
+      TidyLst::Convert::convertAddTokens($self);
    }
 
    # Special cases like BONUS:..., FACT:..., etc.
    #
    # These are converted from e.g. FACT  BaseSize|M  to  FACT:BaseSize  |M
    
-   if (exists $tagProcessor{$token->tag}) {
+   if (exists $tagProcessor{$self->tag}) {
 
-      my $processor = $tagProcessor{$token->tag};
+      my $processor = $tagProcessor{$self->tag};
 
       if ( ref ($processor) eq "CODE" ) {
-         &{ $processor }($token);
+         &{ $processor }($self);
       }
    }
 
-   if ( defined $token->value && $token->value =~ /^.CLEAR/i ) {
-      $token->_clear();
+   if ( defined $self->value && $self->value =~ /^.CLEAR/i ) {
+      $self->_clear();
    }
 
    # The tag is invalid and it's not a commnet.
-   if ( ! isValidTag($token->lineType, $token->tag) && index( $token->fullToken, '#' ) != 0 ) {
+   if ( ! isValidTag($self->lineType, $self->tag) && index( $self->fullToken, '#' ) != 0 ) {
 
-      $token->_invalid();
+      $self->_invalid();
 
-   } elsif (isValidTag($token->lineType, $token->tag)) {
+   } elsif (isValidTag($self->lineType, $self->tag)) {
 
       # Statistic gathering
-      incCountValidTags($token->lineType, $token->realTag);
+      incCountValidTags($self->lineType, $self->realTag);
    }
 
    # Check and reformat the values for the tags with only a limited number of
    # values.
-   if (tagTakesFixedValues($token->tag)) {
-      $token->_limited();
+   if (tagTakesFixedValues($self->tag)) {
+      $self->_limited();
    }
 
    ############################################################
    ######################## Conversion ########################
    # We manipulate the tag here
-   doTokenConversions($token);
+   doTokenConversions($self);
 
    ############################################################
    # We call the validating function if needed
    if (getOption('xcheck')) {
-      $token->_validate()
+      $self->_validate()
    };
 
-   if ($token->value eq q{}) {
-      $log->debug(qq{process: } . $token->fullToken, $token->file, $token->line)
+   if ($self->value eq q{}) {
+      $log->debug(qq{process: } . $self->fullToken, $self->file, $self->line)
    };
 }
-
 
 
 #################################################################################################
@@ -438,6 +447,7 @@ my %validSubTags = (
 
    BONUS => {
       'ABILITYPOOL'           => 1,
+      'ACVALUE'               => 1,
       'CASTERLEVEL'           => 1,
       'COMBAT'                => 1,
       'CONCENTRATION'         => 1,
@@ -450,7 +460,9 @@ my %validSubTags = (
       'FOLLOWERS'             => 1,
       'HD'                    => 1,
       'HP'                    => 1,
+      'ITEMCAPACITY'          => 1,
       'ITEMCOST'              => 1,
+      'ITEMWEIGHT'            => 1,
       'LANG'                  => 1,
       'LOADMULT'              => 1,
       'MISC'                  => 1,
@@ -1074,7 +1086,7 @@ sub _bonusVar {
 
    # First we store the DEFINE variable name
    for my $varName ( split ',', $varNameList ) {
-      if ( $varName =~ /^[a-z][a-z0-9_\s]*$/i ) {
+      if ( $varName =~ /^[a-z][ a-z0-9_\s]*$/i || $varName eq '%LIST' ) {
 
          # LIST is filtered out as it may not be valid for the
          # other places were a variable name is used.
@@ -1298,7 +1310,7 @@ sub _classesOnSpell {
 
    # First we find all the classes used
    for my $level ( split '\|', $self->value ) {
-      if ( $level =~ /(.*)=(\d+)/ ) {
+      if ( $level =~ /(.*?)=(\d+)/ ) {
          for my $entity ( split ',', $1 ) {
 
             # [ 849365 ] CLASSES:ALL
@@ -1389,8 +1401,10 @@ sub _define {
 
    # First we store the DEFINE variable name
    if ($var_name) {
-      if ( $var_name =~ /^[a-z][a-z0-9_]*$/i ) {
-         setEntityValid('DEFINE Variable', $var_name);
+      if ( $var_name =~ /^[a-z][ a-z0-9_]*$/i || $var_name eq '%LIST' ) {
+
+         $self->entityLabel('DEFINE Variable');
+         $self->entityValue($var_name);
 
          #####################################################
          # Export a list of variable names if requested
@@ -1402,7 +1416,7 @@ sub _define {
             TidyLst::Report::printToExportList('VARIABLE', qq{"$var_name","$self->line","$file"\n});
          }
 
-         # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
+      # LOCK.xxx and BASE.xxx are not error (even if they are very ugly)
       } elsif ( $var_name !~ /(BASE|LOCK)\.(STR|DEX|CON|INT|WIS|CHA|DVR)/ ) {
          $log->notice(
             qq{Invalid variable name "$var_name" in "} . $self->fullToken . q{"},
@@ -1494,6 +1508,8 @@ sub _domainsOnDeity {
    if ($self->value =~ /\|/ ) {
       $value = substr($self->value, 0, rindex($self->value, "\|"));
    }
+
+   return unless defined $value;
 
    DOMAIN_FOR_DEITY:
    for my $domain ( split ',', $value ) {
@@ -1689,13 +1705,12 @@ sub _eqmod {
 
    my ($self) = @_;
 
-   # The higher level for the EQMOD is the . (who's the genius who
-   # dreamed that up...
-   my @key_list = split '\.', $self->value;
+   # Split the value on . and extract the part before the | this is the key
+   my @keyList = map {my @vals = split '\|', $_; shift @vals} split '\.', $self->value;
 
-   # The key name is everything found before the first |
-   for $_ (@key_list) {
-      my ($key) = (/^([^|]*)/);
+   for my $key (@keyList) {
+
+      # my ($key) = (/^([^|]*)/);
 
       if ($key) {
 
@@ -1825,7 +1840,7 @@ sub _genericPRE {
 }
 
 
-# This is part of EQUIPMED processing, queue up for cross checking
+# This is part of EQUIPMOD processing, queue up for cross checking
 
 sub _ignores {
 
@@ -2024,8 +2039,8 @@ sub _limitedAlign {
       # Is it a number?
       my ($number) = $align =~ / \A (\d+) \z /xms;
 
-      if ( defined $number && $number >= 0 && $number < scalar @{getValidSystemArr('alignments')}) {
-         $align = ${getValidSystemArr('alignments')}[$number];
+      if ( defined $number && $number >= 0 && $number < scalar getValidSystemArr('alignments')) {
+         $align = (getValidSystemArr('alignments'))[$number];
          $newvalue =~ s{ (?<! \d ) ($number) (?! \d ) }{$align}xms;
       }
 
@@ -2138,7 +2153,8 @@ sub _move {
       else {
 
          # We keep the move type for future validation
-         setEntityValid('MOVE Type', $type);
+         $self->entityLabel('MOVE Type');
+         $self->entityValue($type);
       }
 
       unless ( $value =~ /^\d+$/ ) {
@@ -2311,7 +2327,7 @@ sub _nonKitSpells {
          }
 
          # Embeded PRExxx tags
-      } elsif ( $param =~ /^(PRE[A-Z]+):(.*)/ ) {
+      } elsif ( $param =~ /^!?(PRE[A-Z]+):(.*)/ ) {
 
          my $preToken = $self->clone(tag => $1, value => $2);
          $preToken->_preToken($self->fullRealToken);
@@ -2432,6 +2448,37 @@ sub _numeric {
       $self->_variables($self->value) );
 }
 
+# Adds the category to the front of the ABILITY before sending it for cross
+# check.
+
+sub _preAbility {
+
+   my ($self, $enclosingToken) = @_;
+
+   # PRECHECK:<number>,<check equal value list>
+   # PRECHECKBASE:<number>,<check equal value list>
+   # <check equal value list> := <check name> "=" <number>
+   my ($valid, @values) = $self->_checkFirstValue;
+
+   # The PREtag doesn't begin with a number
+   if ( not $valid ) {
+      $self->_warnDeprecate($enclosingToken);
+   }
+
+   my $category = shift @values;
+
+   if (scalar @values) {
+
+      my @processed = map { "${category}|${_}" } @values;
+
+      registerXCheck(
+         'ABILITY', 
+         $self->tag, 
+         $self->file, 
+         $self->line, 
+         @processed);
+   }
+}
 
 
 # Ensures that a PRECHECK token's value start with a number.
@@ -2477,6 +2524,48 @@ sub _precheck {
    }
 }
 
+
+
+# Ensures that a PRECLASS token's value starts with a number.
+# and that it references valid classes.
+
+sub _preclass {
+
+   my ($self, $enclosingToken) = @_;
+
+   # PRECLASS<number>,<check equal value list>
+   # <check equal value list> := <class name> "=" <number>
+   my ($valid, @values) = $self->_checkFirstValue;
+
+   # The PREtag doesn't begin with a number
+   if ( not $valid ) {
+      $self->_warnDeprecate($enclosingToken);
+   }
+
+   # Get the logger once outside the loop
+   my $log = getLogger();
+
+   for my $item ( @values ) {
+
+      # Extract the check name
+      if ( my ($className, $value) = ( $item =~ / \A ( \w+ ) = ( \d+ ) \z /xms ) ) {
+
+         registerXCheck(
+            'CLASS', 
+            $self->tag, 
+            $self->file, 
+            $self->line, 
+            $className );
+
+      } else {
+         $log->notice(
+            $self->tag . qq{ syntax error in "$item" found in "} . $self->fullRealValue . q{"},
+            $self->file,
+            $self->line
+         );
+      }
+   }
+}
 
 
 
@@ -2774,6 +2863,10 @@ sub _preToken {
 
       $self->_precheck($enclosingToken);
 
+   } elsif ( $self->tag eq 'PRECLASS') {
+
+      $self->_preclass($enclosingToken);
+
    } elsif ( $self->tag eq 'PRECSKILL' ) {
 
       $self->_genericPRE('SKILL', $enclosingToken);
@@ -2792,7 +2885,7 @@ sub _preToken {
 
    } elsif ( $self->tag eq 'PREABILITY' ) {
 
-      $self->_genericPRE('ABILITY', $enclosingToken);
+      $self->_preAbility('ABILITY', $enclosingToken);
 
    } elsif ( $self->tag eq 'PREITEM' ) {
 
@@ -2966,8 +3059,8 @@ sub _raceSubType {
                $race_subtype, );
 
          } else {
-
-            setEntityValid('RACESUBTYPE', $race_subtype);
+            $self->entityLabel('RACESUBTYPE');
+            $self->entityValue($race_subtype);
          }
 
       } else {
@@ -3011,7 +3104,8 @@ sub _raceType {
                $race_type, );
 
          } else {
-            setEntityValid('RACETYPE', $race_type);
+            $self->entityLabel('RACETYPE');
+            $self->entityValue($race_type);
          }
 
       } else {
@@ -3110,14 +3204,20 @@ sub _spellLevelClass {
    # Work with a copy because we do not want to change the original
    my $tag_line = $self->value;
 
-   $tag_line =~ s/\|PRE\w+\:.+$//;
+   my @subTags = grep {$_ !~ m/^!?PRE/} split '\|', $tag_line; 
+
+   # Throw away the CLASS
+   shift @subTags;
 
    # We extract the classes and the spell names
-   if ( my $working_value = $tag_line ) {
-      while ($working_value) {
-         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-            my $class  = $1;
-            my $spells = $2;
+   if ( scalar @subTags ) {
+
+      while (scalar @subTags) {
+
+         my $class  = shift @subTags;
+         my $spells = shift @subTags;
+
+         if ( defined $spells ) {
 
             # The CLASS
             if ( $class =~ /([^=]+)\=(\d+)/ ) {
@@ -3158,7 +3258,6 @@ sub _spellLevelClass {
                $self->file,
                $self->line
             );
-            $working_value = "";
          }
       }
 
@@ -3191,11 +3290,22 @@ sub _spellLevelDomain {
    # ex. SPELLLEVEL:DOMAIN|Air=1|Obscuring Mist|Animal=4|Repel Vermin
 
    # We extract the classes and the spell names
-   if ( my $working_value = $self->value ) {
-      while ($working_value) {
-         if ( $working_value =~ s/\|([^|]+)\|([^|]+)// ) {
-            my $domain = $1;
-            my $spells = $2;
+   my $tag_line = $self->value;
+
+   my @subTags = grep {$_ !~ m/^!?PRE/} split '\|', $tag_line; 
+
+   # Throw away the CLASS
+   shift @subTags;
+
+   # We extract the classes and the spell names
+   if ( scalar @subTags ) {
+
+      while (scalar @subTags) {
+
+         my $domain = shift @subTags;
+         my $spells = shift @subTags;
+
+         if (defined $spells) {
 
             # The DOMAIN
             if ( $domain =~ /([^=]+)\=(\d+)/ ) {
@@ -3230,7 +3340,6 @@ sub _spellLevelDomain {
                $self->file,
                $self->line
             );
-            $working_value = "";
          }
       }
 
@@ -3268,8 +3377,8 @@ sub _startPack {
    my ($self) = @_;
 
    my $value = $self->value;
-   setEntityValid('KIT STARTPACK', "KIT:$value");
-   setEntityValid('KIT STARTPACK', "$value");
+   $self->entityLabel('KIT STARTPACK');
+   $self->entityValue($self->value);
 }
 
 
