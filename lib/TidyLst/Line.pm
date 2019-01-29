@@ -174,7 +174,7 @@ sub columnLength {
 
    if ($self->hasColumn($key)) {
 
-      # Anything with a faux tag only hads the legnth of the value of its first column
+      # Anything with a faux tag only has the legnth of the value of its first column
       if (isFauxTag($key)) {
 
          my $value = $self->valueInFirstTokenInColumn($key);
@@ -185,19 +185,30 @@ sub columnLength {
          my @column = @{ $self->column($key) };
          my $final  = pop @column;
 
-         # The final item is not rounded to the tab length
-         $length = defined $final ? length $final->fullRealToken : 0;
-
-         # All other elements must be rounded to the next tab
+         # All elements except the last must be rounded to the next tab
          for my $token ( @column ) {
-            $length += ( int( length($token->fullRealToken) / $tabLength ) + 1 ) * $tabLength;
+
+            my $tokLength = length $token->fullRealToken;
+            my $rndLength = roundUpToLength($tokLength, $tabLength);
+
+            # If the token is already a multiple of the tab lenght, add room
+            # for a separator
+            if ($tokLength == $rndLength) {
+               $tokLength += $tabLength;
+            } else {
+               $tokLength = $rndLength;
+            }
+
+            $length += $tokLength;
          }
+
+         # The final item is not rounded to the tab length
+         $length += length $final->fullRealToken;
       }
    }
 
    $length;
 }
-
 
 
 =head2 checkClear
@@ -581,6 +592,18 @@ sub mergeLines {
       }
    }
 }
+
+=head2 roundUpToLength
+
+   Round this length to the smallest multiple of length passed in that can hold it.
+
+=cut
+
+sub roundUpToLength {
+   my ($length, $tabLength) = @_;
+
+   int (($length + $tabLength - 1) / $tabLength) * $tabLength;
+} 
 
 
 =head2 replaceTag

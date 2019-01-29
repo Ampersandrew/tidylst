@@ -715,6 +715,7 @@ our %masterOrder = (
       'PROHIBITED',
       'PROHIBITSPELL:*',
       'LEVELSPERFEAT',
+      'EXCHANGELEVEL',
       'ABILITY:*',
       'VFEAT:*',
       'MULTIPREREQS',
@@ -1454,6 +1455,7 @@ our %masterOrder = (
 
    'KIT STARTPACK' => [
       'STARTPACK',
+      'SORTKEY',
       'NAMEISPI',
       'GROUP:*',
       'TYPE:.CLEAR',
@@ -1754,6 +1756,7 @@ our %masterOrder = (
       'BONUS:ITEMWEIGHT:*',
       'BONUS:LOADMULT',
       'BONUS:SKILL:*',
+      'BONUS:STAT:*',
       'DISPLAYNAME',
       'ISDEFAULTSIZE',
       'MODIFY:*',

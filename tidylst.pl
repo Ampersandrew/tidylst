@@ -5,8 +5,8 @@ use warnings;
 use Fatal qw( open close );             # Force some built-ins to die on error
 use English qw( -no_match_vars );       # No more funky punctuation variables
 
-my $VERSION        = "1.02.00";
-my $VERSION_DATE   = "2019-01-18";
+my $VERSION        = "1.03.00";
+my $VERSION_DATE   = "2019-01-29";
 my ($PROGRAM_NAME) = "TidyLst";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 $SCRIPTNAME        = "PCGen " . $SCRIPTNAME;

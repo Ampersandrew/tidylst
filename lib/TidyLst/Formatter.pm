@@ -145,7 +145,7 @@ sub constructFirstColumnLine {
 
       if (! $fileLine) {
 
-         my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
+         my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
          
          # Make sure there is a tab between the widest value in this column and
          # the next column (if it happens to be a multiple of tablength).
@@ -160,7 +160,7 @@ sub constructFirstColumnLine {
          $column = defined $column ? $column : "";
 
          my $padding = $columnLength - length $column;
-         my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
+         my $roundedPadding = roundUpToLength($padding, $self->tabLength);
 
          $toAdd = int($roundedPadding / $self->tabLength);
 
@@ -205,7 +205,7 @@ sub constructHeaderLine {
    # Do the defined columns first
    for my $col ($self->order) {
 
-      my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
+      my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
 
       # Make sure there is a tab between the widest value in this column and
       # the next column (if it happens to be a multiple of tablength).
@@ -215,7 +215,7 @@ sub constructHeaderLine {
 
       my $header         = getHeader($col, $self->type);
       my $padding        = $columnLength - length $header;
-      my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
+      my $roundedPadding = roundUpToLength($padding, $self->tabLength);
 
       my $toAdd  = int($roundedPadding / $self->tabLength);
 
@@ -250,7 +250,7 @@ sub constructLine {
    ALL_COLUMNS:
    for my $col ($self->order) {
       
-      my $columnLength = roundUpToTabLength($self->column($col), $self->tabLength);
+      my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
 
       # Make sure there is a tab between the widest value in this column and
       # the next column (if it happens to be a multiple of tablength).
@@ -265,8 +265,8 @@ sub constructLine {
 
       $column //= "";
 
-      my $padding = $columnLength - length $column;
-      my $roundedPadding = roundUpToTabLength($padding, $self->tabLength);
+      my $padding = $columnLength - $line->columnLength($col, $self->tabLength);
+      my $roundedPadding = roundUpToLength($padding, $self->tabLength);
 
       my $toAdd  = int($roundedPadding / $self->tabLength);
 
@@ -311,13 +311,13 @@ sub orderColumns {
    }
 }
 
-=head2 roundUpToTabLength
+=head2 roundUpToLength
 
-   Round this length to the smallest multiple of tabLength that can hold it.
+   Round this length to the smallest multiple of length passed in that can hold it.
 
 =cut
 
-sub roundUpToTabLength {
+sub roundUpToLength {
    my ($length, $tabLength) = @_;
 
    int (($length + $tabLength - 1) / $tabLength) * $tabLength;
