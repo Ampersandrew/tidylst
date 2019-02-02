@@ -20,7 +20,6 @@ our @EXPORT_OK = qw(
    );
 
 use Carp;
-use YAML;
 
 # expand library path so we can find TidyLst modules
 use File::Basename qw(dirname fileparse);

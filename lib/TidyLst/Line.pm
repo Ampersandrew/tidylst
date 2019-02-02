@@ -5,7 +5,6 @@ use warnings;
 
 use Mouse;
 use Carp;
-use YAML;
 
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);

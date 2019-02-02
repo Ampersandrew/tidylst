@@ -10,8 +10,6 @@ our @EXPORT_OK = qw(
    reformatFile
    );
 
-use YAML;
-
 use File::Basename qw(dirname);
 use Cwd  qw(abs_path);
 use lib dirname(dirname abs_path $0);

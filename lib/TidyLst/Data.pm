@@ -5,7 +5,6 @@ use warnings;
 
 use Data::Dumper;
 use Scalar::Util;
-use YAML qw(Dump);
 
 use Carp;
 
@@ -3476,7 +3475,7 @@ sub dirHasSourceTags {
 
 sub dumpValidEntities {
 
-   print STDERR Dump %validEntities;
+   print STDERR Dumper %validEntities;
 
 }
 
