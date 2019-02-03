@@ -16,6 +16,8 @@ use TidyLst::Data qw(
    isFauxTag
    );
 
+use TidyLst::LogFactory qw(getLogger);
+
 has 'columns' => (
    traits   => ['Hash'],
 #   is       => 'ro',
@@ -52,6 +54,12 @@ has 'tabLength' => (
    is       => 'ro',
    isa      => 'Int',
    required => 1,
+);
+
+has 'firstColumnLength' => (
+   is       => 'ro',
+   isa      => 'Int',
+   predicate => 'hasFirstColumnLength',
 );
 
 
@@ -104,7 +112,12 @@ sub adjustLengths {
 
    for my $col ($line->columns) {
 
-      my $len = $line->columnLength($col, $self->tabLength);
+      my $len;
+      if (isFauxTag($col)) {
+         $len = length $line->valueInFirstTokenInColumn($col)
+      } else {
+         $len = $line->columnLength($col, $self->tabLength);
+      }
 
       if ($self->hasColumn($col)) {
          if($self->column($col) < $len) {
@@ -145,34 +158,29 @@ sub constructFirstColumnLine {
 
       if (! $fileLine) {
 
-         my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
-         
-         # Make sure there is a tab between the widest value in this column and
-         # the next column (if it happens to be a multiple of tablength).
-         if ($columnLength == $self->column($col)) {
-            $columnLength += $self->tabLength;
+         if (isFauxTag($col)) {
+            $column = $line->valueInFirstTokenInColumn($col)
+         } else {
+            my $token = $line->firstTokenInColumn($col);
+            $column   = $token->fullRealToken();
          }
-
-         $column = isFauxTag($col)
-            ? $line->valueInFirstTokenInColumn($col)
-            : $line->joinWith($col, "\t");
 
          $column = defined $column ? $column : "";
 
-         my $padding = $columnLength - length $column;
-         my $roundedPadding = roundUpToLength($padding, $self->tabLength);
+         my $dataLength = length $column;
 
-         $toAdd = int($roundedPadding / $self->tabLength);
+         my $toFitIn = 
+            $self->hasFirstColumnLength ? 
+               $self->firstColumnLength : 
+               $self->column($col);
+
+         $toAdd = $self->getPadding($dataLength, $toFitIn);
 
       } else {
 
          $toAdd  = 1;
          $column = $line->hasColumn($col) ? $line->joinWith($col, "\t") : "";
 
-      }
-
-      if (!defined $column) {
-         $column = "";
       }
 
       $fileLine .= $column . "\t" x $toAdd;
@@ -205,19 +213,11 @@ sub constructHeaderLine {
    # Do the defined columns first
    for my $col ($self->order) {
 
-      my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
+      my $header = getHeader($col, $self->type);
 
-      # Make sure there is a tab between the widest value in this column and
-      # the next column (if it happens to be a multiple of tablength).
-      if ($columnLength == $self->column($col)) {
-         $columnLength += $self->tabLength;
-      }
+      my $dataLength = length $header;
 
-      my $header         = getHeader($col, $self->type);
-      my $padding        = $columnLength - length $header;
-      my $roundedPadding = roundUpToLength($padding, $self->tabLength);
-
-      my $toAdd  = int($roundedPadding / $self->tabLength);
+      my $toAdd  = $self->getPadding($dataLength, $self->column($col));
 
       $headerLine .= $header . "\t" x $toAdd;
    }
@@ -249,26 +249,23 @@ sub constructLine {
 
    ALL_COLUMNS:
    for my $col ($self->order) {
-      
-      my $columnLength = roundUpToLength($self->column($col), $self->tabLength);
 
-      # Make sure there is a tab between the widest value in this column and
-      # the next column (if it happens to be a multiple of tablength).
-      if ($columnLength == $self->column($col)) {
-         $columnLength += $self->tabLength;
+      my $column;
+      my $dataLength;
+
+      if (isFauxTag($col)) {
+         $column     = $line->valueInFirstTokenInColumn($col);
+         $dataLength = length $column;
+      } else {
+         $column     = $line->joinWith($col, "\t");
+         $dataLength = $line->columnLength($col, $self->tabLength);
       }
 
-      my $column = isFauxTag($col)
-         ? $line->valueInFirstTokenInColumn($col)
-         : $line->joinWith($col, "\t");
-
-
-      $column //= "";
-
-      my $padding = $columnLength - $line->columnLength($col, $self->tabLength);
-      my $roundedPadding = roundUpToLength($padding, $self->tabLength);
-
-      my $toAdd  = int($roundedPadding / $self->tabLength);
+      if (!defined $column) {
+         $column = "";
+      }
+      
+      my $toAdd = $self->getPadding($dataLength, $self->column($col));
 
       $fileLine .= $column . "\t" x $toAdd;
    }
@@ -277,6 +274,37 @@ sub constructLine {
    $fileLine =~ s/\t+$//;
 
    $fileLine;
+}
+
+
+=head2 getPadding
+
+   Get the integer number of padding tabs necessary to make the column
+   following this one line up.
+
+=cut
+
+sub getPadding  {
+
+   my ($self, $dataLength, $colLength) = @_;
+
+   # If trying to fit this into a column where it doesn't fit
+   if ($colLength < $dataLength) {
+      $colLength = $dataLength
+   }
+
+   my $columnLength = roundUpToLength($colLength, $self->tabLength);
+
+   # Make sure there is a tab between the widest value in this column and
+   # the next column (if it happens to be a multiple of tablength).
+   if ($columnLength == $colLength) {
+      $columnLength += $self->tabLength;
+   }
+
+   my $padding = $columnLength - $dataLength;
+   my $roundedPadding = roundUpToLength($padding, $self->tabLength);
+
+   return int($roundedPadding / $self->tabLength);
 }
 
 

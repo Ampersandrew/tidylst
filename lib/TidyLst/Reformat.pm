@@ -33,6 +33,22 @@ sub reformatFile {
    my @oldLines = @{ $lines };
    my @newLines;
 
+   my $maxFirstColumnLength = 0;
+
+   FIND_MAX_LENGTH:
+   for my $line (@oldLines) {
+
+      if ($line->type =~ $TidyLst::Convert::tokenlessRegex) {
+         next FIND_MAX_LENGTH;
+      }
+
+      my $token = $line->entityToken;
+
+      if (length $token->fullRealToken() > $maxFirstColumnLength) {
+         $maxFirstColumnLength = length $token->fullRealToken();
+      }
+   }
+
    my $lastInBlock;
    my $tabLength = getOption('tabLength');
 
@@ -63,8 +79,9 @@ sub reformatFile {
       if ($line->mode == SINGLE || $line->format == LINE) {
 
          my $formatter = TidyLst::Formatter->new(
-            type      => $line->type,
-            tabLength => $tabLength,
+            type              => $line->type,
+            tabLength         => $tabLength,
+            firstColumnLength => $maxFirstColumnLength,
          );
          $formatter->adjustLengths($line);
 
@@ -158,7 +175,8 @@ sub reformatFile {
                # If a '###Block' comment is found or the line_type changes, we
                # are out of the block
                if ($this->type eq 'BLOCK_COMMENT' ||
-                  ($this->mode == MAIN && $this->type ne $line->type)) {
+                  $this->mode != MAIN || 
+                  $this->type ne $line->type) {
 
                   # type has changed, don't include this line in the block
                   $lastInBlock--;
@@ -239,17 +257,29 @@ sub reformatFile {
             die "SUB must not have a header";
          }
 
-         if ( $line->format == BLOCK || $line->format == FIRST_COLUMN ) {
+         my $formatter = TidyLst::Formatter->new(
+            type              => $line->type,
+            tabLength         => $tabLength,
+            firstColumnLength => $maxFirstColumnLength,
+         );
 
-            my $formatter = TidyLst::Formatter->new(
-               type      => $line->type,
-               tabLength => $tabLength,
-            );
+         $lastInBlock = $index;
+
+         if ( $line->format == FIRST_COLUMN ) {
+
+            my $this = $oldLines[$index];
+               
+            $formatter->adjustLengths($this);
+
+            # reformat the unsplit version of this line and push it onto new
+            # lines
+            $this->unsplit($formatter->constructFirstColumnLine($this));
+            push @newLines, $this;
+
+         } elsif ( $line->format == BLOCK ) {
 
             # All the sub lines must be found up until a different sub line
             # type, a main line type, or a ###Block comment is encountered.
-
-            $lastInBlock = $index;
 
             BLOCK_LINE:
             for ( ; $lastInBlock < @oldLines; $lastInBlock++) {
@@ -285,53 +315,26 @@ sub reformatFile {
                $lastInBlock = $#oldLines;
             }
 
-            if ( $line->format == BLOCK) {
+            BLOCK_LINE:
+            for my $inx ($index .. $lastInBlock) {
 
-               BLOCK_LINE:
-               for my $inx ($index .. $lastInBlock) {
+               # When $inx is 0, previous is the last line of the file. This is
+               # unlikely to create problems since neither the first nor the
+               # last line will be a header. Previous is only used to decide
+               # whether to add a header before $this.
+               my $this = $oldLines[$inx];
 
-                  # When $inx is 0, previous is the last line of the file. This is
-                  # unlikely to create problems since neither the first nor the
-                  # last line will be a header. Previous is only used to decide
-                  # whether to add a header before $this.
-                  my $this = $oldLines[$inx];
-
-                  # At this point Comments, block comments and blanks, push them
-                  # unmodified.
-                  if ($this->type =~ $TidyLst::Convert::tokenlessRegex) {
-                     push @newLines, $this;
-                     next BLOCK_LINE;
-                  }
-
-                  # reformat the unsplit version of this line and push it onto new
-                  # lines
-                  $this->unsplit($formatter->constructLine($this));
+               # At this point Comments, block comments and blanks, push them
+               # unmodified.
+               if ($this->type =~ $TidyLst::Convert::tokenlessRegex) {
                   push @newLines, $this;
+                  next BLOCK_LINE;
                }
 
-            } else {
-
-               BLOCK_LINE:
-               for my $inx ($index .. $lastInBlock) {
-
-                  # When $inx is 0, previous is the last line of the file. This is
-                  # unlikely to create problems since neither the first nor the
-                  # last line will be a header. Previous is only used to decide
-                  # whether to add a header before $this.
-                  my $this = $oldLines[$inx];
-
-                  # At this point Comments, block comments and blanks, push them
-                  # unmodified.
-                  if ($this->type =~ $TidyLst::Convert::tokenlessRegex) {
-                     push @newLines, $this;
-                     next BLOCK_LINE;
-                  }
-
-                  # reformat the unsplit version of this line and push it onto new
-                  # lines
-                  $this->unsplit($formatter->constructFirstColumnLine($this));
-                  push @newLines, $this;
-               }
+               # reformat the unsplit version of this line and push it onto new
+               # lines
+               $this->unsplit($formatter->constructLine($this));
+               push @newLines, $this;
             }
          }
       }
