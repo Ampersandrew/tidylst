@@ -1318,7 +1318,7 @@ our %masterOrder = (
    ],
 
    'GLOBALMODIFIER' => [
-      '000GlobalmonName',
+      '000GlobalmodName',
       'EXPLANATION',
    ],
 
