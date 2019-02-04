@@ -1774,6 +1774,11 @@ sub processFile {
          my $outputpath = getOption('outputpath');
          $newfile =~ s/${inputpath}/${outputpath}/i;
 
+         # Oops, don't overwrite the original
+         if ($file eq $newfile) {
+            return 0;
+         }
+
          # Needed to find the full path
          my ($file, $basedir) = fileparse($newfile);
 
