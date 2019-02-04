@@ -1466,6 +1466,7 @@ our %masterOrder = (
       'TOTALCOST',
       @PreTags,
       'SOURCEPAGE',
+      @globalBONUSTags,
    ],
 
    'KIT STAT' => [
