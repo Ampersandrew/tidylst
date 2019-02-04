@@ -1776,6 +1776,7 @@ sub processFile {
 
          # Oops, don't overwrite the original
          if ($file eq $newfile) {
+            $log->error("${newfile} was not redirected to ${outputpath}, abotring without writing.");
             return 0;
          }
 
