@@ -39,6 +39,7 @@ use TidyLst::Data qw(
    setFileHeader
    updateValidity
    );
+use TidyLst::File;
 use TidyLst::Line;
 use TidyLst::Log;
 use TidyLst::LogFactory qw(getLogger);
@@ -377,6 +378,12 @@ if (getOption('inputpath')) {
                # Extract the name of the LST file from the token->value, and
                # store it back into token->value
                $token->value($token->value =~ s/^([^|]*).*/$1/r);
+
+               my $file = TidyLst::File->new(
+                  'originalName' => $token->value,
+                  'type'         => $token->tag,
+                  'pccDirectory' => $currentbasedir,
+               );
 
                my $lstFile = find_full_path($token->value, $currentbasedir);
 
