@@ -5,8 +5,8 @@ use warnings;
 use Fatal qw( open close );             # Force some built-ins to die on error
 use English qw( -no_match_vars );       # No more funky punctuation variables
 
-my $VERSION        = "1.03.00";
-my $VERSION_DATE   = "2019-01-29";
+my $VERSION        = "1.04.00";
+my $VERSION_DATE   = "2019-02-07";
 my ($PROGRAM_NAME) = "TidyLst";
 my ($SCRIPTNAME)   = ( $PROGRAM_NAME =~ m{ ( [^/\\]* ) \z }xms );
 $SCRIPTNAME        = "PCGen " . $SCRIPTNAME;
@@ -63,7 +63,6 @@ use TidyLst::Report qw(
 use TidyLst::Validate qw(scanForDeprecatedTokens validateLine);
 
 # Subroutines
-sub find_full_path;
 sub generate_css;
 
 # Print version information
@@ -306,7 +305,7 @@ if (getOption('inputpath')) {
       my @pccLines       = ();
       my %foundFileType;
       my @gameModes;
-      my @gameModesRef    = \@gameModes;
+      my $gameModesRef = \@gameModes;
 
       PCC_LINE:
       for my $pccLine ( <$pcc_fh> ) {
@@ -380,15 +379,15 @@ if (getOption('inputpath')) {
                $token->value($token->value =~ s/^([^|]*).*/$1/r);
 
                my $file = TidyLst::File->new(
+                  'gameMode'     => $gameModesRef,
                   'originalName' => $token->value,
-                  'type'         => $token->tag,
                   'pccDirectory' => $currentbasedir,
+                  'type'         => $token->tag,
                );
+               
+               my $lstFile = $file->inputName;
 
-               my $lstFile = find_full_path($token->value, $currentbasedir);
-
-               $filesToParse{$lstFile}{'fileType'} = $token->tag;
-               $filesToParse{$lstFile}{'gameMode'} = @gameModesRef;
+               $filesToParse{$lstFile} = $file;
 
                # Check to see if the file exists
                if ( !-e $lstFile ) {
@@ -620,9 +619,6 @@ if (getOption('inputpath')) {
          $log->notice("$file\n", "");
       }
    }
-
-} else {
-   $filesToParse{'STDIN'} = getOption('filetype');
 }
 
 $log->header(TidyLst::LogHeader::get('LST'));
@@ -657,13 +653,13 @@ for my $filetype (qw(ALIGNMENT SAVE STAT CLASS SPELL)) {
 push @filesToParse_sorted, sort keys %temp_filesToParse;
 
 FILE_TO_PARSE:
-for my $file (@filesToParse_sorted) {
+for my $fileName (@filesToParse_sorted) {
 
-   my $modified = processFile($file, $filesToParse{$file});
+   my $modified = processFile($filesToParse{$fileName});
 
    # We keep track of the files we modify
    if ($modified) {
-      push @modifiedFiles, $file;
+      push @modifiedFiles, $fileName;
    }
 }
 
@@ -719,53 +715,6 @@ if ($dumpValidEntities) {
 if (getOption('outputerror')) {
    close STDERR;
    print STDOUT "\cG"; # An audible indication that PL has finished.
-}
-
-# find_full_path
-# --------------
-#
-# Change the @, * and relative paths found in the .lst for the real thing.
-#
-# Parameters: $fileName           File name
-#             $current_base_dir  Current directory
-
-sub find_full_path {
-   my ($fileName, $currentBaseDir) = @_;
-
-   my $basePath  = getOption('basepath');
-
-   # Change all the \ for / in the file name
-   $fileName =~ tr{\\}{/};
-
-   # See if the vendor path replacement is necessary
-   if ($fileName =~ m{ ^[*] }xmsi) {
-
-      # Remove the leading * and / if present
-      $fileName =~ s{ ^[*] [/]? }{}xmsi;
-
-      my $vendorFile = getOption('vendorpath') . $fileName;
-
-      if ( -e $vendorFile ) {
-         $fileName = $vendorFile;
-      } else {
-         $fileName = '@' . $fileName;
-      }
-
-   }
-
-   # Replace @ by the base dir or add the current base dir to the file name.
-   if ($fileName !~ s{ ^[@] [/]? }{$basePath}xmsi) {
-      $fileName = $currentBaseDir =~ qr/\/$/ ? $currentBaseDir . $fileName : "$currentBaseDir/$fileName";
-   }
-
-   # Remove the /xxx/../ for the directory
-   if ($fileName =~ / [.][.] /xms ) {
-      if( $fileName !~ s{ [/] [^/]+ [/]+ [.][.] [/] }{/}xmsg ) {
-         die qq{Cannot deal with the .. directory in "$fileName"};
-      }
-   }
-
-   return $fileName;
 }
 
 
