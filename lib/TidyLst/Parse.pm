@@ -1624,31 +1624,28 @@ sub parseSystemFiles {
 
 sub processFile {
    
-   my ($file, $typeAndGameMode) = @_;
-
-   my $fileType  = $typeAndGameMode->{'fileType'}; 
-   my $gameModes = $typeAndGameMode->{'gameMode'}; 
+   my ($file) = @_;
 
    my $log = getLogger();
 
-   my $numberofcf   = 0;     # Number of extra CF found in the file.
-   my $wasMultiLine = 0;
+   my $numberofcf  = 0;     # Number of extra CF found in the file.
 
    # Will hold all the lines of the file
    my @lines;           
 
-   if ( $file eq "STDIN" ) {
+   if ( $file->inputName eq "STDIN" ) {
 
       local $/ = undef; # read all from buffer
       my $buffer = <>;
 
-      (my $lines, $wasMultiLine) = normaliseFile($buffer);
+      my ($lines, $isMultiLine) = normaliseFile($buffer);
       @lines = @{$lines};
+      $file->isMultiLine($isMultiLine);
 
    } else {
 
       # We read only what we know needs to be processed
-      my $parseable = isParseableFileType($fileType);
+      my $parseable = isParseableFileType($file->type);
 
       if (ref( $parseable ) ne 'CODE') {
          return 0;
@@ -1656,40 +1653,35 @@ sub processFile {
 
       # We try to read the file and continue to the next one even if we
       # encounter problems
-      #
-      # henkslaaf - Multiline parsing
-      #       1) read all to a buffer (files are not so huge that it is a memory hog)
-      #       2) send the buffer to a method that splits based on the type of file
-      #       3) let the method return split and normalized entries
-      #       4) let the method return a variable that says what kind of file it is (multi-line, tab-based)
 
       eval {
 
          local $/ = undef; # read all from buffer
-         open my $lst_fh, '<', $file;
+         open my $lst_fh, '<', $file->inputName;
          my $buffer = <$lst_fh>;
          close $lst_fh;
 
-         (my $lines, $wasMultiLine) = normaliseFile($buffer);
+         my ($lines, $isMultiLine) = normaliseFile($buffer);
          @lines = @{$lines};
+         $file->isMultiLine($isMultiLine);
       };
 
       if ( $EVAL_ERROR ) {
          # There was an error in the eval
-         $log->error( $EVAL_ERROR, $file );
+         $log->error( $EVAL_ERROR, $file->inputName );
          return 0;
       }
    }
 
    # If the file is empty, we skip it
    unless (@lines) {
-      $log->notice("Empty file.", $file);
+      $log->notice("Empty file.", $file->inputName);
       return 0;
    }
 
    # Check to see if we are dealing with a HTML file
    if ( grep /<html>/i, @lines ) {
-      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file );
+      $log->error( "HTML file detected. Maybe you had a problem with your CVS checkout.\n", $file->inputName );
       return 0;
    }
 
@@ -1715,15 +1707,15 @@ sub processFile {
    }
 
    if($numberofcf) {
-      $log->warning( "$numberofcf extra CF found and removed.", $file );
+      $log->warning( "$numberofcf extra CF found and removed.", $file->inputName );
    }
 
-   my $parser = isParseableFileType($fileType);
+   my $parser = isParseableFileType($file->type);
 
    if ( ref($parser) eq "CODE" ) {
 
       # The overwhelming majority of checking, correcting and reformatting happens in this operation
-      my ($newlines_ref) = &{ $parser }( $fileType, \@lines, $file);
+      my ($newlines_ref) = &{ $parser }( $file->type, \@lines, $file->inputName);
 
       # Let's remove any tralling white spaces
       for my $line (@$newlines_ref) {
@@ -1731,12 +1723,12 @@ sub processFile {
       }
 
       # Some file types are never written
-      if ($wasMultiLine) {
-         $log->report("SKIP rewrite for $file because it is a multi-line file");
+      if ($file->isMultiLine) {
+         $log->report("SKIP rewrite for " . $file->inputName . " because it is a multi-line file");
          return 0;
       }
 
-      if (!isWriteableFileType($fileType)) {
+      if (!isWriteableFileType($file->type)) {
          return 0;
       }
 
@@ -1767,31 +1759,19 @@ sub processFile {
 
       my $write_fh;
 
-      if (getOption('outputpath')) {
-
-         my $newfile = $file;
-         my $inputpath  = getOption('inputpath');
-         my $outputpath = getOption('outputpath');
-         $newfile =~ s/${inputpath}/${outputpath}/i;
-
-         # Oops, don't overwrite the original
-         if ($file eq $newfile) {
-            $log->error("${newfile} was not redirected to ${outputpath}, abotring without writing.");
-            return 0;
-         }
+      # Only files actually on the input path will be rewritten
+      if ($file->hasOutputName) {
 
          # Needed to find the full path
-         my ($file, $basedir) = fileparse($newfile);
+         my ($dontNeed, $basedir) = fileparse($file->outputName);
 
          # Create the subdirectory if needed
          create_dir( $basedir, getOption('outputpath') );
 
-         open $write_fh, '>', $newfile;
+         open $write_fh, '>', $file->outputName;
 
       } else {
-
-         # Output to standard output
-         $write_fh = *STDOUT;
+         return 0;
       }
 
       # The first line of the new file will be a comment line.
@@ -1803,14 +1783,12 @@ sub processFile {
       }
 
       # If we opened a filehandle, then close it
-      if (getOption('outputpath')) {
-         close $write_fh;
-      }
+      close $write_fh;
 
       return 1;
 
    } else {
-      warn "Didn't process filetype \"$fileType\".\n";
+      warn qq(Didn't process filetype ") . $file->type . qq(".\n);
       return 0;
    }
 }

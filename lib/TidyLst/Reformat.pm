@@ -44,6 +44,11 @@ sub reformatFile {
 
       my $token = $line->entityToken;
 
+      if (ref $token ne 'TidyLst::Token') {
+         next FIND_MAX_LENGTH;
+      }
+
+
       if (length $token->fullRealToken() > $maxFirstColumnLength) {
          $maxFirstColumnLength = length $token->fullRealToken();
       }
