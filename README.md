@@ -4,7 +4,7 @@ A program to validate and reformat files in PCGen's LST format
 NAME
     tidylist.pl -- Reformat the PCGEN .lst files
 
-    Version: 1.03.00
+    Version: 1.04.00
 
 DESCRIPTION
     tidylst.pl is a script that parses PCGEN .lst files and generates new
