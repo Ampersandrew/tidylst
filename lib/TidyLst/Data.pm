@@ -587,6 +587,7 @@ our %masterOrder = (
       'BENEFIT:.CLEAR',
       'BENEFIT:*',
       'INFO:Special',
+      'INFO:Normal',
       'INFO:*',
       'TEMPDESC',
       'SPELLKNOWN:CLASS:*',
@@ -770,6 +771,8 @@ our %masterOrder = (
       'UNENCUMBEREDMOVE',
       'TEMPBONUS',
       'ROLE',
+      'DESC:*',
+      'INFO:*',
 
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'HASSPELLFORMULA',               # [ 1893279 ] HASSPELLFORMULA Class Line tag  # [ 1973497 ] HASSPELLFORMULA is deprecated
@@ -1829,6 +1832,7 @@ our %masterOrder = (
       'TYPE:*',
       'CLASSES:.CLEARALL',
       'CLASSES:*',
+      'DOMAINS:.CLEARALL',
       'DOMAINS',
       'STAT:*',
       'PPCOST',
@@ -1839,7 +1843,8 @@ our %masterOrder = (
       'DESCRIPTOR:*',
       'VARIANTS:.CLEAR',
       'VARIANTS:*',
-      'COMPS',
+      'COMPS:.CLEAR',
+      'COMPS:*',
       'FACT:CompMaterial',
       'CASTTIME:.CLEAR',
       'CASTTIME:*',
@@ -1895,6 +1900,7 @@ our %masterOrder = (
       'TEMPBONUS:*',
       'TEMPVALUE',
       'FACTSET:*',
+      'INFO:*',
    ],
 
    'STAT' => [
