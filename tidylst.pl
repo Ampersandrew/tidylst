@@ -909,8 +909,7 @@ from there, for instance for debian:
 and for activestate:
 
   ppm install Mouse
-  ppm install MouseX-AttributeHelpers
-
+  ppm install MouseX-NativeTraits    
 
 =head2 Put the script somewhere
 
@@ -1011,6 +1010,12 @@ Apply a filter on the GAMEMODE values and only read and/or reformat the files th
 meet the filter.
 
 e.g. -gamemode=35e
+
+=head2 B<-tablength> or B<-t>
+
+Change the default length of a tab. The default is 8 spaces
+
+e.g. -t=6
 
 =head2 B<-report> or B<-r>
 
