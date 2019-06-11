@@ -180,8 +180,9 @@ sub reformatFile {
                # If a '###Block' comment is found or the line_type changes, we
                # are out of the block
                if ($this->type eq 'BLOCK_COMMENT' ||
-                  $this->mode != MAIN || 
-                  $this->type ne $line->type) {
+                  # $this->mode != MAIN || 
+                   # break for a change of linetype, unless the type is BLANK
+                  (($this->type ne $line->type) && ($this->type ne 'BLANK') && ($this->type ne 'COMMENT'))) {
 
                   # type has changed, don't include this line in the block
                   $lastInBlock--;

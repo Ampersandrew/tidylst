@@ -63,7 +63,10 @@ sub BUILD {
       $name = $self->_maybeSetVendorFile($name);
    }
 
-   $name = $self->_addBaseOrPCC($name);
+   # If we weren't able to set a vendor path
+   if (!$self->hasVendorName) {
+      $name = $self->_addBaseOrPCC($name);
+   }
 
    # Remove /xxx/../ if it exists in the file name
    if ($name =~ / [.][.] /xms ) {
@@ -124,7 +127,7 @@ sub _maybeSetVendorFile {
    # then we're done.
    if ( -e $vendorFile ) {
       $self->vendorName($vendorFile);
-      return  $name;
+      return  $vendorFile;
    }
 
    return '@' . $name;

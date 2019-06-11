@@ -773,7 +773,7 @@ our %masterOrder = (
       'ROLE',
       'DESC:*',
       'INFO:*',
-
+      'FACT:*',
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'HASSPELLFORMULA',               # [ 1893279 ] HASSPELLFORMULA Class Line tag  # [ 1973497 ] HASSPELLFORMULA is deprecated
       'LANGAUTO:.CLEAR',               # Deprecated - 6.0
@@ -852,6 +852,7 @@ our %masterOrder = (
       'SPELLLIST',
       'NATURALATTACKS',
       'UNENCUMBEREDMOVE',
+      'FACT:*',
 
       'ADD:FEAT:*',                    # Deprecated 6.05.01
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
@@ -1017,6 +1018,8 @@ our %masterOrder = (
       'ALTTYPE',
       'VISIBLE',
       'RESIZE',                        # [ 1956719 ] Add RESIZE tag to Equipment file
+      'FACT:RateOfFire',
+      'FACT:*',
       'CONTAINS',
       'NUMPAGES',
       'PAGEUSAGE',
@@ -1140,6 +1143,7 @@ our %masterOrder = (
       'VISION',
       'SR',
       'DR',
+      'FACT:*',
       @globalBONUSTags,
       'BONUS:EQM:*',
       'BONUS:EQMARMOR:*',
@@ -1261,6 +1265,7 @@ our %masterOrder = (
       'SPELLLEVEL:DOMAIN:*',
       'UNENCUMBEREDMOVE',
       'TEMPBONUS',
+      'FACT:*',
 
       'ADD:SPECIAL',                   # Deprecated - Remove 5.16 - Special abilities are now set using hidden feats 0r Abilities.
       'LANGAUTO:.CLEAR',               # Deprecated - 6.0
@@ -1310,6 +1315,7 @@ our %masterOrder = (
       'DESC:*',
       'AUTO:LANG:*',
       'AUTO:WEAPONPROF:*',
+      'FACT:*',
 
       'AUTO:FEAT:*',                   # Deprecated 6.05.01
       'AUTO:FEAT:.CLEAR',              # Deprecated 6.05.01
@@ -1529,6 +1535,7 @@ our %masterOrder = (
       'ABILITY:*',
       'SAB:.CLEAR',
       'SAB:*',
+      'FACT:*',
 
       'SA:.CLEAR',                     # Deprecated 6.05.01
       'SA:*',                          # Deprecated 6.05.01
@@ -1744,6 +1751,7 @@ our %masterOrder = (
       @globalBONUSTags,
       'SAB:.CLEAR',
       'SAB:*',
+      'FACT:*',
 
       'SA:.CLEAR',                     # Deprecated
       'SA:*',                          # Deprecated
@@ -1752,6 +1760,7 @@ our %masterOrder = (
    'SIZE' => [
       '000SizeName',
       'ABB',
+      'FACT:*',
       'BONUS:ACVALUE',
       'BONUS:COMBAT:*',
       'BONUS:ITEMCAPACITY',
@@ -1808,6 +1817,7 @@ our %masterOrder = (
       'DESC',
       'TEMPDESC',
       'TEMPBONUS',
+      'FACT:*',
 
       'SA:.CLEAR:*',                   # Deprecated
       'SA:*',                          # Deprecated
@@ -1901,6 +1911,7 @@ our %masterOrder = (
       'TEMPVALUE',
       'FACTSET:*',
       'INFO:*',
+      'FACT:*',
    ],
 
    'STAT' => [
@@ -1909,6 +1920,7 @@ our %masterOrder = (
       'ABB',
       'KEY',
       'STATMOD',
+      'FACT:*',
       'DEFINE:MAXLEVELSTAT',
       'DEFINE:*',
       'MODIFY:*',
@@ -1930,6 +1942,7 @@ our %masterOrder = (
       'CHOICE',
       'SPELLSTAT',
       'SPELLTYPE',
+      'FACT:*',
       'LANGBONUS:.CLEAR',
       'LANGBONUS:*',
       'BONUS:CASTERLEVEL:*',
@@ -1994,6 +2007,7 @@ our %masterOrder = (
       'CHOICE',
       'SPELLSTAT',
       'SPELLTYPE',
+      'FACT:*',
       'BONUS:ABILITYPOOL:*',           # Substitution Class has a short list of BONUS tags
       'BONUS:CASTERLEVEL:*',
       'BONUS:CHECKS:*',
@@ -2059,6 +2073,7 @@ our %masterOrder = (
       'SPECIALTYKNOWN',
       'KNOWNSPELLS',
       'PROHIBITSPELL:*',
+      'FACT:*',
       'VISION',
       'SR',
       'DR',
@@ -2135,6 +2150,7 @@ our %masterOrder = (
       'SPECIALTYKNOWN',
       'KNOWNSPELLS',
       'PROHIBITSPELL:*',
+      'FACT:*',
       'VISION',
       'SR',
       'DR',
@@ -2202,6 +2218,7 @@ our %masterOrder = (
       'NAMEISPI',
       'OUTPUTNAME',
       'FACT:AppliedName',
+      'FACT:*',
       'HITDIE',
       'HITDICESIZE',
       'CR',
@@ -2320,6 +2337,7 @@ our %masterOrder = (
       'GROUP:*',
       'TYPE:.CLEAR',
       'TYPE:*',
+      'FACT:*',
       'HANDS',
       @PreTags,
       @SOURCETags,
@@ -3085,7 +3103,7 @@ my %tokenHeader = (
       '000SaveName'              => '# Name',
    },
 
-   SHILEDPROF => {
+   SHIELDPROF => {
       '000ShieldName'            => '# Shield Name',
    },
 
